@@ -25,6 +25,7 @@ import {
   BadgeCheck,
   Loader2,
   X,
+  Shield,
 } from "lucide-react";
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -929,26 +930,119 @@ export function Dojo() {
                          )}
                        </div>
 
+                        {/* Installed Skills */}
+                        {installedSkills.size > 0 && (
+                          <div className="space-y-4">
+                            <h3 className="text-[10px] font-bold text-shogun-subdued uppercase tracking-[0.2em] flex items-center gap-2">
+                              <Package className="w-3.5 h-3.5 text-green-400" /> Installed Skills
+                              <span className="ml-auto text-[9px] px-2 py-0.5 bg-green-500/10 text-green-400 rounded-full font-mono">{installedSkills.size}</span>
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {Array.from(installedSkills).map((skillId: string) => {
+                                const skill = skills.find((s: any) => s.id === skillId);
+                                if (!skill) return null;
+                                return (
+                                  <div key={skillId} className="relative overflow-hidden rounded-xl border border-green-500/15 bg-gradient-to-r from-green-500/5 via-[#050508] to-[#050508] transition-all hover:border-green-500/30">
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500/50" />
+                                    <div className="flex items-center gap-3 p-3.5 pl-4">
+                                      <div className="w-8 h-8 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+                                        <Zap className="w-4 h-4 text-green-400" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-shogun-text truncate">{skill.name}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          <span className="text-[8px] px-1.5 py-0.5 bg-shogun-card border border-shogun-border rounded text-shogun-subdued uppercase tracking-wider">{skill.faculty?.replace(/_/g, ' ')}</span>
+                                          <span className="text-[8px] text-shogun-subdued font-mono">v{skill.version}</span>
+                                        </div>
+                                      </div>
+                                      <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Certification Transcript */}
                         {transcript?.test_results?.length > 0 && (
                           <div className="space-y-4">
                             <h3 className="text-[10px] font-bold text-shogun-subdued uppercase tracking-[0.2em] flex items-center gap-2">
                               <GraduationCap className="w-3.5 h-3.5 text-shogun-blue" /> Certification Transcript
                             </h3>
-                            <div className="space-y-2">
-                              {transcript.test_results.map((tr: any, i: number) => (
-                                <div key={tr.id || i} className="flex items-center justify-between p-3 bg-[#050508] border border-shogun-border rounded-xl">
-                                <div>
-                                    <p className="text-xs font-bold text-shogun-text">{tr.skillName || tr.testId || `Test ${i + 1}`}</p>
-                                    <p className="text-[9px] text-shogun-subdued mt-0.5">Score: {tr.score}% · {tr.verificationStatus}{tr.modelId ? <> · Model: <span className="font-mono font-bold text-shogun-text">{tr.modelId}</span></> : ''}{tr.agentName ? <> · Agent: {tr.agentName}</> : ''}</p>
+                            <div className="space-y-3">
+                              {transcript.test_results.map((tr: any, i: number) => {
+                                const passed = tr.verificationStatus === 'approved' || tr.score >= 85;
+                                const skillName = skills.find((s: any) => s.id === tr.skillId)?.name || tr.skillName || tr.testId;
+                                const passDate = tr.passedAt ? new Date(tr.passedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+                                return (
+                                  <div key={tr.id || i} className={cn(
+                                    "relative overflow-hidden rounded-xl border transition-all",
+                                    passed
+                                      ? "bg-gradient-to-r from-green-500/5 via-[#050508] to-[#050508] border-green-500/20"
+                                      : "bg-gradient-to-r from-orange-500/5 via-[#050508] to-[#050508] border-orange-500/20"
+                                  )}>
+                                    {/* Decorative accent */}
+                                    <div className={cn("absolute left-0 top-0 bottom-0 w-1", passed ? "bg-green-500" : "bg-orange-400")} />
+
+                                    <div className="flex items-center gap-4 p-4 pl-5">
+                                      {/* Status icon */}
+                                      <div className={cn(
+                                        "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border",
+                                        passed
+                                          ? "bg-green-500/10 border-green-500/30"
+                                          : "bg-orange-500/10 border-orange-500/30"
+                                      )}>
+                                        {passed ? (
+                                          <BadgeCheck className="w-5 h-5 text-green-400" />
+                                        ) : (
+                                          <AlertCircle className="w-5 h-5 text-orange-400" />
+                                        )}
+                                      </div>
+
+                                      {/* Certification details */}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-shogun-text truncate">{skillName}</p>
+                                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                          {passDate && (
+                                            <span className="text-[9px] text-shogun-subdued flex items-center gap-1">
+                                              <RefreshCw className="w-2.5 h-2.5" /> {passDate}
+                                            </span>
+                                          )}
+                                          {tr.agentName && (
+                                            <span className="text-[9px] text-shogun-subdued flex items-center gap-1">
+                                              <Shield className="w-2.5 h-2.5" /> {tr.agentName}
+                                            </span>
+                                          )}
+                                          {tr.modelId && (
+                                            <span className="text-[9px] text-shogun-subdued flex items-center gap-1">
+                                              <Lock className="w-2.5 h-2.5" /> <span className="font-mono">{tr.modelId}</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Score badge */}
+                                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                        <span className={cn(
+                                          "text-lg font-black font-mono",
+                                          passed ? "text-green-400" : "text-orange-400"
+                                        )}>
+                                          {tr.score}%
+                                        </span>
+                                        <span className={cn(
+                                          "text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full",
+                                          passed
+                                            ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                                            : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                        )}>
+                                          {passed ? '✓ Certified' : 'Not Passed'}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                  {tr.verificationStatus === 'approved' ? (
-                                    <BadgeCheck className="w-5 h-5 text-green-500" />
-                                  ) : (
-                                    <AlertCircle className="w-5 h-5 text-orange-400" />
-                                  )}
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
