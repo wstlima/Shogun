@@ -1118,51 +1118,100 @@ export function Dojo() {
 
               {/* ── Exam: Result ── */}
               {examMode === 'result' && examResult && (
-                <div className="flex-1 flex flex-col items-center justify-center p-12 gap-8">
-                  <div className={cn(
-                    "w-24 h-24 rounded-full flex items-center justify-center border-4",
-                    (examResult.passed || examResult.verificationStatus === 'approved')
-                      ? "bg-green-500/10 border-green-500 shadow-[0_0_40px_rgba(34,197,94,0.3)]"
-                      : "bg-orange-500/10 border-orange-500"
-                  )}>
-                    {(examResult.passed || examResult.verificationStatus === 'approved') ? (
-                      <BadgeCheck className="w-12 h-12 text-green-400" />
-                    ) : (
-                      <AlertCircle className="w-12 h-12 text-orange-400" />
-                    )}
-                  </div>
-                  <div className="text-center space-y-3">
-                    <h3 className={cn(
-                      "text-2xl font-bold",
-                      (examResult.passed || examResult.verificationStatus === 'approved') ? 'text-green-400' : 'text-orange-400'
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  {/* Score Header */}
+                  <div className="p-6 border-b border-shogun-border flex items-center gap-6 flex-shrink-0">
+                    <div className={cn(
+                      "w-16 h-16 rounded-full flex items-center justify-center border-3",
+                      (examResult.passed || examResult.verificationStatus === 'approved')
+                        ? "bg-green-500/10 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+                        : "bg-orange-500/10 border-orange-500"
                     )}>
-                      {(examResult.passed || examResult.verificationStatus === 'approved') ? t('dojo.passed', 'Certified!') : t('dojo.failed', 'Not Passed')}
-                    </h3>
-                    <p className="text-shogun-subdued text-sm">
-                      {examResult.agent_name || registrationStatus?.agent_name || 'Hero-San'} scored {examResult.score}% ({examResult.questions_correct ?? examResult.score}/{examResult.questions_total ?? '?'} correct).
-                      {(examResult.passed || examResult.verificationStatus === 'approved')
-                        ? ' Certification recorded on the transcript.'
-                        : ` Below the ${examResult.pass_threshold ?? 85}% threshold.`
-                      }
-                    </p>
-                    {(examResult.passed || examResult.verificationStatus === 'approved') && (
-                      <div className="flex flex-col items-center gap-2 mt-2">
-                        <div className="flex items-center justify-center gap-2">
-                          <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
-                          <span className="text-[10px] text-shogun-gold font-bold uppercase tracking-widest">OpenClaw Certified · {selectedSkill?.name}</span>
-                          <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
+                      {(examResult.passed || examResult.verificationStatus === 'approved') ? (
+                        <BadgeCheck className="w-8 h-8 text-green-400" />
+                      ) : (
+                        <AlertCircle className="w-8 h-8 text-orange-400" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={cn(
+                        "text-xl font-bold",
+                        (examResult.passed || examResult.verificationStatus === 'approved') ? 'text-green-400' : 'text-orange-400'
+                      )}>
+                        {(examResult.passed || examResult.verificationStatus === 'approved') ? t('dojo.passed', 'Certified!') : t('dojo.failed', 'Not Passed')}
+                      </h3>
+                      <p className="text-shogun-subdued text-xs mt-1">
+                        {examResult.agent_name || registrationStatus?.agent_name || 'Hero-San'} scored <span className="font-bold text-shogun-text">{examResult.score}%</span> ({examResult.questions_correct ?? '?'}/{examResult.questions_total ?? '?'} correct)
+                      </p>
+                      {(examResult.passed || examResult.verificationStatus === 'approved') && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Sparkles className="w-3 h-3 text-shogun-gold animate-pulse" />
+                          <span className="text-[9px] text-shogun-gold font-bold uppercase tracking-widest">OpenClaw Certified · {selectedSkill?.name}</span>
+                          {examResult.model_id && (
+                            <>
+                              <span className="text-[9px] text-shogun-subdued">·</span>
+                              <Lock className="w-3 h-3 text-shogun-subdued" />
+                              <span className="text-[9px] text-shogun-subdued font-mono">{examResult.model_id}</span>
+                            </>
+                          )}
                         </div>
-                        {examResult.model_id && (
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#050508] border border-shogun-border rounded-lg">
-                            <Lock className="w-3 h-3 text-shogun-subdued" />
-                            <span className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold">Locked to model:</span>
-                            <span className="text-[10px] text-shogun-text font-mono font-bold">{examResult.model_id}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-3xl font-black font-mono", (examResult.passed || examResult.verificationStatus === 'approved') ? 'text-green-400' : 'text-orange-400')}>
+                        {examResult.score}%
+                      </p>
+                      <p className="text-[9px] text-shogun-subdued uppercase tracking-widest">Pass: {examResult.pass_threshold ?? 85}%</p>
+                    </div>
                   </div>
-                  <div className="flex gap-3 w-full max-w-sm">
+
+                  {/* Q&A Review */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    <h4 className="text-[10px] font-bold text-shogun-subdued uppercase tracking-[0.2em] flex items-center gap-2 sticky top-0 bg-shogun-bg py-2 z-10">
+                      <GraduationCap className="w-3.5 h-3.5 text-shogun-gold" /> Exam Review — {examResult.questions_total} Questions
+                    </h4>
+                    {(examResult.questions_review || []).map((q: any, idx: number) => (
+                      <div key={q.id || idx} className={cn(
+                        "p-4 rounded-xl border transition-all",
+                        q.isCorrect
+                          ? "bg-green-500/5 border-green-500/20"
+                          : "bg-red-500/5 border-red-500/20"
+                      )}>
+                        <p className="text-xs text-shogun-text font-medium leading-relaxed mb-3">
+                          <span className="text-[10px] text-shogun-subdued font-mono mr-2">{idx + 1}.</span>
+                          {q.text?.replace(/^\d+\.\s*/, '')}
+                        </p>
+                        <div className="grid grid-cols-1 gap-1.5 pl-4">
+                          {(q.options || []).map((opt: string, oIdx: number) => {
+                            const isCorrectAnswer = opt === q.correctAnswer;
+                            const isAgentPick = opt === q.agentAnswer;
+                            const isWrongPick = isAgentPick && !q.isCorrect;
+                            return (
+                              <div
+                                key={oIdx}
+                                className={cn(
+                                  "text-xs px-3 py-2 rounded-lg border flex items-center gap-2",
+                                  isCorrectAnswer
+                                    ? "bg-green-500/10 border-green-500/40 text-green-400 font-bold"
+                                    : isWrongPick
+                                    ? "bg-red-500/10 border-red-500/40 text-red-400 font-bold"
+                                    : "bg-[#050508] border-shogun-border/30 text-shogun-subdued/60"
+                                )}
+                              >
+                                <span className="font-mono text-[10px] opacity-60 w-4">{String.fromCharCode(65 + oIdx)}.</span>
+                                <span className="flex-1">{opt}</span>
+                                {isCorrectAnswer && <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
+                                {isWrongPick && <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer Buttons */}
+                  <div className="p-4 border-t border-shogun-border flex items-center gap-3 flex-shrink-0">
                     <button onClick={handleCloseExam} className="flex-1 py-3 bg-shogun-card border border-shogun-border text-shogun-subdued text-xs font-bold uppercase tracking-widest rounded-xl hover:border-shogun-text transition-colors">
                       Close
                     </button>

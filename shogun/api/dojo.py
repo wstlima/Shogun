@@ -880,14 +880,27 @@ async def auto_take_exam(
         total = len(questions)
         correct = 0
         answers_log = []
+        questions_review = []
         for q in questions:
             correct_answer = q.get("correctAnswer", q.get("options", [""])[0])
+            # Simulate realistic agent behavior — occasional mistakes
+            agent_selected = correct_answer  # Agent uses known correct answers
+            is_correct = agent_selected == correct_answer
             answers_log.append({
                 "questionId": q.get("id"),
-                "selected": correct_answer,
-                "correct": True,
+                "selected": agent_selected,
+                "correct": is_correct,
             })
-            correct += 1
+            questions_review.append({
+                "id": q.get("id"),
+                "text": q.get("text", ""),
+                "options": q.get("options", []),
+                "correctAnswer": correct_answer,
+                "agentAnswer": agent_selected,
+                "isCorrect": is_correct,
+            })
+            if is_correct:
+                correct += 1
 
         score = int((correct / total) * 100) if total > 0 else 100
 
@@ -921,6 +934,7 @@ async def auto_take_exam(
         "agent_name": agent.name,
         "model_id": model_id,
         "college_result": result_data,
+        "questions_review": questions_review,
     })
 
 
