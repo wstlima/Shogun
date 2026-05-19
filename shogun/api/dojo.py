@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -761,7 +762,27 @@ async def get_exam_questions(
 class SubmitExamRequest(BaseModel):
     test_id: str
     score: int = Field(..., ge=0, le=100)
+    model_id: str = Field(default="", description="Model name that took the exam")
     log_artifact: str = Field(default="", description="Execution log proving test completion")
+
+
+async def _resolve_primary_model(agent: Any, db: AsyncSession) -> str:
+    """Resolve the agent's primary model name from its routing profile."""
+    if not agent.model_routing_profile_id:
+        return "unknown"
+    try:
+        from shogun.db.models.model_routing import ModelRoutingProfile
+        result = await db.execute(
+            select(ModelRoutingProfile).where(ModelRoutingProfile.id == agent.model_routing_profile_id)
+        )
+        profile = result.scalars().first()
+        if profile and profile.rules:
+            for rule in profile.rules:
+                if isinstance(rule, dict) and rule.get("model"):
+                    return rule["model"]
+        return "unknown"
+    except Exception:
+        return "unknown"
 
 
 @router.post("/openclaw/exams/submit", response_model=ApiResponse)
@@ -773,6 +794,7 @@ async def submit_exam_result(
 
     If score >= passThreshold the response will immediately show
     verificationStatus: 'approved' (automated review).
+    The certification is permanently locked to the agent name + model.
     """
     result = await db.execute(
         select(Agent).where(Agent.is_primary == True, Agent.is_deleted == False)
@@ -780,6 +802,8 @@ async def submit_exam_result(
     agent = result.scalars().first()
     if not agent or not agent.openclaw_agent_id:
         raise HTTPException(status_code=401, detail="Agent not registered with OpenClaw College")
+
+    model_id = body.model_id or await _resolve_primary_model(agent, db)
 
     async with get_openclaw_client(
         actor_id=agent.openclaw_agent_id,
@@ -790,6 +814,8 @@ async def submit_exam_result(
             agent_id=agent.openclaw_agent_id,
             score=body.score,
             log_artifact=body.log_artifact,
+            agent_name=agent.name,
+            model_id=model_id,
         )
 
     return ApiResponse(data=result_data)
@@ -863,9 +889,13 @@ async def auto_take_exam(
 
         score = int((correct / total) * 100) if total > 0 else 100
 
-        # Step 4: Submit to College
+        # Step 4: Resolve the model name used for this exam
+        model_id = await _resolve_primary_model(agent, db)
+
+        # Step 5: Submit to College — locked to agent + model
         log_artifact = (
             f"Auto-exam by {agent.name} ({agent.openclaw_agent_id})\n"
+            f"Model: {model_id}\n"
             f"Test: {test_id} | Questions: {total} | Score: {score}%\n"
             f"Answered {correct}/{total} correctly"
         )
@@ -874,6 +904,8 @@ async def auto_take_exam(
             agent_id=agent.openclaw_agent_id,
             score=score,
             log_artifact=log_artifact,
+            agent_name=agent.name,
+            model_id=model_id,
         )
 
     return ApiResponse(data={
@@ -885,6 +917,7 @@ async def auto_take_exam(
         "pass_threshold": pass_threshold,
         "passed": score >= pass_threshold,
         "agent_name": agent.name,
+        "model_id": model_id,
         "college_result": result_data,
     })
 

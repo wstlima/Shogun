@@ -938,9 +938,9 @@ export function Dojo() {
                             <div className="space-y-2">
                               {transcript.test_results.map((tr: any, i: number) => (
                                 <div key={tr.id || i} className="flex items-center justify-between p-3 bg-[#050508] border border-shogun-border rounded-xl">
-                                  <div>
+                                <div>
                                     <p className="text-xs font-bold text-shogun-text">{tr.skillName || tr.testId || `Test ${i + 1}`}</p>
-                                    <p className="text-[9px] text-shogun-subdued mt-0.5">Score: {tr.score}% · {tr.verificationStatus}</p>
+                                    <p className="text-[9px] text-shogun-subdued mt-0.5">Score: {tr.score}% · {tr.verificationStatus}{tr.modelId ? <> · Model: <span className="font-mono font-bold text-shogun-text">{tr.modelId}</span></> : ''}{tr.agentName ? <> · Agent: {tr.agentName}</> : ''}</p>
                                   </div>
                                   {tr.verificationStatus === 'approved' ? (
                                     <BadgeCheck className="w-5 h-5 text-green-500" />
@@ -1146,10 +1146,19 @@ export function Dojo() {
                       }
                     </p>
                     {(examResult.passed || examResult.verificationStatus === 'approved') && (
-                      <div className="flex items-center justify-center gap-2 mt-2">
-                        <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
-                        <span className="text-[10px] text-shogun-gold font-bold uppercase tracking-widest">OpenClaw Certified · {selectedSkill?.name}</span>
-                        <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
+                      <div className="flex flex-col items-center gap-2 mt-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
+                          <span className="text-[10px] text-shogun-gold font-bold uppercase tracking-widest">OpenClaw Certified · {selectedSkill?.name}</span>
+                          <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
+                        </div>
+                        {examResult.model_id && (
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#050508] border border-shogun-border rounded-lg">
+                            <Lock className="w-3 h-3 text-shogun-subdued" />
+                            <span className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold">Locked to model:</span>
+                            <span className="text-[10px] text-shogun-text font-mono font-bold">{examResult.model_id}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

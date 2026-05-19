@@ -487,17 +487,26 @@ class OpenClawClient:
         agent_id: str,
         score: int,
         log_artifact: str = "",
+        agent_name: str | None = None,
+        model_id: str | None = None,
     ) -> dict[str, Any]:
         """Submit test results to the College.
 
         POST /api/v1/tests/:id/results
         If score >= passThreshold, verificationStatus will be 'approved' immediately.
+
+        The ``agent_name`` and ``model_id`` are permanently recorded on the
+        certification so it is locked to the specific agent+model that passed.
         """
         payload = {
             "agentId": agent_id,
             "score": score,
             "logArtifact": log_artifact,
         }
+        if agent_name:
+            payload["agentName"] = agent_name
+        if model_id:
+            payload["modelId"] = model_id
         resp = await self.client.post(
             f"{self.base_url}/v1/tests/{test_id}/results",
             json=payload,
