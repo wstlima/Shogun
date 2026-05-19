@@ -56,6 +56,20 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
     """Pipe an incoming message into the Shogun AI engine, capturing its SSE streaming output."""
     logger.info(f"[Telegram] Received: '{user_msg[:50]}...' from {chat_id}")
     
+    # ── Posture enforcement: kill switch gate ──────────────────
+    try:
+        from shogun.api.security import _get_agent_posture
+        posture = await _get_agent_posture()
+        if posture.get("kill_switch_active", False):
+            logger.warning("[Telegram] Kill switch active — blocking message from %s", chat_id)
+            await send_telegram_message(bot_token, chat_id,
+                "⛩️ Shogun is in emergency lockdown mode (HARAKIRI). "
+                "All AI operations are suspended. Deactivate the kill switch "
+                "in the Torii to resume.")
+            return
+    except Exception as e:
+        logger.debug("[Telegram] Posture check failed: %s", e)
+
     try:
         # Fire up a scoped AgentService session
         async with async_session_factory() as session:

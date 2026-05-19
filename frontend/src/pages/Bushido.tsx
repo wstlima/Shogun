@@ -20,7 +20,7 @@ import {
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
-const API = 'http://localhost:8000/api/v1/bushido';
+const API = '/api/v1/bushido';
 
 interface BushidoStats {
   fit_quality: number;

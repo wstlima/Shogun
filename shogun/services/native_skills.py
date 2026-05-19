@@ -73,6 +73,36 @@ NATIVE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "store_memory",
+            "description": "Store important information in your persistent Archives memory system. Use this when the user shares personal details (e.g. their name), preferences, facts, or anything worth remembering across sessions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short descriptive title for this memory (e.g. 'Operator name is Michael').",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The full content to remember. Be detailed and specific.",
+                    },
+                    "memory_type": {
+                        "type": "string",
+                        "enum": ["episodic", "semantic", "procedural", "persona"],
+                        "description": "Type: 'persona' for identity/preferences/personal info, 'semantic' for facts/knowledge, 'episodic' for events, 'procedural' for how-to patterns.",
+                    },
+                    "importance": {
+                        "type": "number",
+                        "description": "How important this is (0.0-1.0). Use 0.9+ for identity/preferences, 0.5-0.8 for general facts.",
+                    },
+                },
+                "required": ["title", "content", "memory_type", "importance"],
+            },
+        },
+    },
 ]
 
 async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> str:
@@ -81,10 +111,26 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
     
     try:
         if name == "spawn_samurai":
+            # ── Posture enforcement: kill switch + subagent limit ──
+            from shogun.services.posture_guard import check_kill_switch, check_subagent_limit_soft
+            try:
+                from shogun.api.security import _get_agent_posture
+                posture = await _get_agent_posture()
+                if posture.get("kill_switch_active", False):
+                    return json.dumps({
+                        "status": "error",
+                        "message": "⛩️ HARAKIRI is active — all AI operations are suspended. Cannot spawn agents."
+                    })
+            except Exception:
+                pass
+            limit_error = await check_subagent_limit_soft()
+            if limit_error:
+                return json.dumps({"status": "error", "message": limit_error})
+
             from shogun.services.agent_service import AgentService
             svc = AgentService(db_session)
             # Create the agent via service directly
-            await svc.create(
+            new_agent = await svc.create(
                 agent_type="samurai",
                 name=args["name"],
                 slug=args["name"].lower().replace(" ", "-"),
@@ -92,6 +138,17 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 status="active",
                 spawn_policy="manual" # Or derived...
             )
+
+            # ── Inject Kaizen governance into the new agent ──────────
+            try:
+                from shogun.api.kaizen import build_governance_prompt_block
+                governance_block = build_governance_prompt_block()
+                bs = dict(new_agent.bushido_settings) if new_agent.bushido_settings else {}
+                bs["governance_prompt"] = governance_block
+                new_agent.bushido_settings = bs
+            except Exception as gov_err:
+                logger.warning("Failed to inject governance into spawned Samurai: %s", gov_err)
+
             # Update cache context so next stream shows +1 agent
             import time
             from shogun.api.agents import _CTX_CACHE
@@ -101,7 +158,7 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             
             return json.dumps({
                 "status": "success", 
-                "message": f"Samurai '{args['name']}' successfully spawned at tier '{args['security_tier']}'."
+                "message": f"Samurai '{args['name']}' successfully spawned at tier '{args['security_tier']}' with Kaizen governance applied."
             })
             
         elif name == "list_available_models":
@@ -152,7 +209,50 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 "status": "success", 
                 "message": f"Successfully updated primary model to {args['primary_model']}."
             })
-            
+
+        elif name == "store_memory":
+            from shogun.services.memory_service import MemoryService
+            from shogun.db.models.agent import Agent
+            from sqlalchemy import select
+
+            # Get the primary Shogun agent ID to associate the memory with
+            shogun_res = await db_session.execute(
+                select(Agent).where(
+                    Agent.agent_type == "shogun",
+                    Agent.is_primary == True,
+                    Agent.is_deleted == False
+                ).limit(1)
+            )
+            shogun = shogun_res.scalar_one_or_none()
+            if not shogun:
+                return json.dumps({"status": "error", "message": "Primary Shogun not found."})
+
+            mem_svc = MemoryService(db_session)
+            importance = float(args.get("importance", 0.7))
+            is_pinned = importance >= 0.85  # High-importance memories get auto-pinned
+            decay = "slow" if importance >= 0.7 else "medium"
+            if is_pinned:
+                decay = "pinned"
+
+            record = await mem_svc.create_memory(
+                memory_type=args["memory_type"],
+                agent_id=shogun.id,
+                title=args["title"],
+                content=args["content"],
+                importance_score=importance,
+                relevance_score=0.9,
+                confidence_score=0.8,
+                decay_class=decay,
+                is_pinned=is_pinned,
+            )
+            await db_session.commit()
+
+            return json.dumps({
+                "status": "success",
+                "message": f"Memory '{args['title']}' stored in Archives (type={args['memory_type']}, importance={importance}, pinned={is_pinned}).",
+                "memory_id": str(record.id),
+            })
+
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
             

@@ -291,6 +291,65 @@ export const ShogunProfile = () => {
     }
   };
 
+  const handleSaveCustomPolicy = async () => {
+    if (!customPolicyName.trim() || !customPermissions) return;
+    setSaving(true);
+    setStatusMessage(null);
+    try {
+      // Determine the tier from the base policy, defaulting to 'tactical'
+      const basePolicy = securityPolicies.find((p: any) => p.id === shogunData.security_policy_id);
+      const tier = basePolicy?.tier || 'tactical';
+
+      // 1. Create the new policy in the Torii registry
+      const createRes = await axios.post('/api/v1/security/policies', {
+        name: customPolicyName.trim(),
+        tier,
+        description: `Custom policy derived from ${basePolicy?.name || 'base policy'}`,
+        permissions: customPermissions,
+        kill_switch_enabled: true,
+        dry_run_supported: true,
+      });
+
+      const newPolicyId = createRes.data?.data?.id;
+      if (!newPolicyId) throw new Error('Policy creation returned no ID');
+
+      // 2. Assign the new policy to the Shogun agent and clear the custom overrides
+      const updatedBushido = {
+        ...(shogunData.bushido_settings || {}),
+        primary_model: primaryModel,
+        fallback_models: fallbackModels,
+        custom_permissions: null, // Clear overrides — they're now in the policy
+      };
+      await axios.patch(`/api/v1/agents/${(shogunData as any).id}`, {
+        security_policy_id: newPolicyId,
+        bushido_settings: updatedBushido,
+      });
+
+      // 3. Refresh local state
+      setCustomPermissions(null);
+      setCustomPolicyName('');
+      setShogunData((prev: any) => ({
+        ...prev,
+        security_policy_id: newPolicyId,
+        bushido_settings: updatedBushido,
+      }));
+
+      // 4. Refresh the policies list so the dropdown includes the new one
+      try {
+        const policiesRes = await axios.get('/api/v1/security/policies');
+        if (policiesRes.data?.data) setSecurityPolicies(policiesRes.data.data);
+      } catch { /* non-fatal */ }
+
+      setStatusMessage({ type: 'success', text: `Custom policy "${customPolicyName.trim()}" created and assigned.` });
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || 'Failed to create custom policy.';
+      setStatusMessage({ type: 'error', text: detail });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setStatusMessage(null), 4000);
+    }
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarClick = () => {
@@ -897,8 +956,12 @@ delegation_rules:
                         placeholder="e.g. Project Alpha — Relaxed"
                         className="flex-1 bg-[#050508] border border-shogun-border rounded-lg p-2 text-xs focus:border-shogun-blue transition-colors"
                       />
-                      <button className="px-4 py-2 bg-shogun-blue/20 border border-shogun-blue/30 rounded-lg text-[10px] font-bold text-shogun-blue uppercase tracking-widest hover:bg-shogun-blue/30 transition-all">
-                        {t('common.save', 'Save')}
+                      <button
+                        onClick={handleSaveCustomPolicy}
+                        disabled={saving || !customPolicyName.trim()}
+                        className="px-4 py-2 bg-shogun-blue/20 border border-shogun-blue/30 rounded-lg text-[10px] font-bold text-shogun-blue uppercase tracking-widest hover:bg-shogun-blue/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {saving ? '...' : t('common.save', 'Save')}
                       </button>
                     </div>
                   </div>

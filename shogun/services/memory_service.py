@@ -8,6 +8,7 @@ Wraps the memory record ORM model and integrates:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -127,8 +128,9 @@ class MemoryService(BaseService[MemoryRecord]):
         """
         store = get_vector_store()
 
-        # 1. Vector search in Qdrant
-        qdrant_hits = store.search(
+        # 1. Vector search in Qdrant (runs in thread pool to avoid blocking event loop)
+        qdrant_hits = await asyncio.to_thread(
+            store.search,
             query_text=query,
             memory_types=memory_types,
             agent_id=str(agent_id) if agent_id else None,

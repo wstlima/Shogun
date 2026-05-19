@@ -94,6 +94,14 @@ async def trigger_backup(body: CreateBackupRequest = CreateBackupRequest()):
     result = create_backup(label=body.label)
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Backup failed"))
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_system_event(
+            "system.backup_created", f"Backup created: {result.get('filename', 'unknown')}",
+            detail={"filename": result.get("filename"), "label": body.label},
+        )
+    except Exception:
+        pass
     return result
 
 
@@ -116,4 +124,13 @@ async def restore_from_backup(filename: str):
     result = restore_backup(filename)
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Restore failed"))
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_system_event(
+            "system.backup_restored", f"System restored from backup: {filename}",
+            severity="warn",
+            detail={"filename": filename},
+        )
+    except Exception:
+        pass
     return result

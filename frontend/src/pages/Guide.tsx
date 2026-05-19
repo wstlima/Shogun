@@ -29,6 +29,11 @@ import {
   Star,
   Layers,
   Sparkles,
+  Filter,
+  Link2,
+  FileKey,
+  Shield,
+  Trash2,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -231,7 +236,7 @@ export function Guide() {
                      { name: 'Nexus (Collaboration)', purpose: 'Create Joint Workspaces. Invite other Shogun instances over the network. Exchange typed messages and co-edit a shared whiteboard.', icon: Globe, color: 'text-indigo-400' },
                      { name: 'Backups & Data', purpose: 'Scheduled and manual backups with configurable retention. Export/import your entire database. Manage backup settings and restore from any point.', icon: HardDrive, color: 'text-shogun-gold' },
                      { name: 'Updates', purpose: 'Auto-checks for new Shogun versions every 6 hours. One-click install to download and apply updates. Preserves your data, configs, and environment.', icon: Download, color: 'text-emerald-400' },
-                     { name: 'Logs (Audit Trail)', purpose: 'Timestamped record of every action. Filter by severity. Download as JSON for compliance. Clear when log volume grows too large.', icon: Terminal, color: 'text-shogun-subdued' },
+                     { name: 'Logs (Compliance Dashboard)', purpose: 'NIS2, SOC2, and EU AI Act-compliant event stream. Filter by 11 categories (Decision, Oversight, Risk, Model, Policy, Memory, Tools, Auth, Incident, System). Click trace IDs for full workflow reconstruction. Audit chain verifies tamper-proof integrity.', icon: Terminal, color: 'text-shogun-subdued' },
                    ].map((item) => (
                      <div key={item.name} className="shogun-card flex gap-4 items-start">
                         <div className={`p-2 rounded-lg bg-shogun-bg border border-shogun-border shrink-0`}>
@@ -277,8 +282,8 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">The Mandate (Kaizen → Mandate tab) is injected into every conversation. Use it to set the AI's overall purpose, tone, and special instructions. For example: "You are a senior financial analyst. Always cite sources. Respond in English."</p>
                    </div>
                    <div className="shogun-card space-y-2 border-l-2 border-green-500/40">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-green-500" /> Monitor the Logs</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Check the Logs page periodically. It records every action taken by every agent. If something goes wrong, the answer is usually in the logs. Look for red (ERROR) and yellow (WARNING) entries first. Download logs before clearing them.</p>
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-green-500" /> Monitor the Compliance Dashboard</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Check the Logs page regularly — it records every action with full NIS2/SOC2/EU AI Act provenance. Use the <strong>Decision</strong> tab to track AI reasoning influences. Click trace IDs to reconstruct full workflows. Verify the <strong>"Chain Intact"</strong> badge stays green — a broken chain indicates tampering. Export the audit log periodically for off-site compliance archival.</p>
                    </div>
                 </div>
              </section>
@@ -714,26 +719,64 @@ export function Guide() {
                 <div className="flex items-center gap-3 border-b-2 border-shogun-subdued/40 pb-3">
                    <Terminal className="w-6 h-6 text-shogun-subdued" />
                    <div>
-                      <h4 className="text-xl font-bold uppercase tracking-widest">Logs — The Audit Trail</h4>
-                      <p className="text-xs text-shogun-subdued">A timestamped record of every action taken by every agent.</p>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">Logs — The Compliance Dashboard</h4>
+                      <p className="text-xs text-shogun-subdued">NIS2, SOC2, and EU AI Act-compliant event logging with full trace reconstruction and tamper-proof audit chain.</p>
                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Search className="w-4 h-4 text-shogun-subdued" /> Search & Filter Bar</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">At the top. Type keywords to search through log messages. Use the <strong>severity filter dropdown</strong> to show only specific log levels: INFO (routine), WARNING (potential issue), ERROR (something failed), or CRITICAL (serious problem). The status bar at the bottom shows live counts of errors and warnings.</p>
+                   <div className="shogun-card space-y-2 md:col-span-2 border-l-2 border-shogun-blue/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Layers className="w-4 h-4 text-shogun-blue" /> Dual-Layer Architecture</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every event is written to <strong>two independent stores</strong>: (1) an <strong>operational SQLite log</strong> (fast, searchable, 90-day retention) for day-to-day monitoring, and (2) a <strong>tamper-resistant HMAC-chained audit database</strong> (append-only, 7-year retention) for regulatory evidence. If anyone modifies or deletes an entry in the audit chain, the cryptographic hash chain breaks — and the dashboard flags it immediately.</p>
                    </div>
                    <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-shogun-subdued" /> Log Table</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Each log entry shows: a colored <strong>severity icon</strong> (green check, yellow warning, red X), the <strong>message</strong>, the <strong>component</strong> that generated it, and the <strong>timestamp</strong>. Logs are sorted newest-first.</p>
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-shogun-subdued" /> Event Stream</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The main panel shows every event in chronological order. Each row displays: <strong>timestamp</strong>, <strong>category icon</strong>, <strong>severity badge</strong> (info/warn/error/critical), <strong>result status</strong> (green check for success, red X for denied), the <strong>action description</strong>, <strong>event type tag</strong> (e.g., DECISION.CONTEXT), the <strong>model used</strong>, <strong>tool invoked</strong>, and <strong>trace ID link</strong>. Click any event to expand its detail panel. Toggle between <strong>Live</strong> (auto-refresh every 5 seconds) and <strong>Paused</strong> modes.</p>
                    </div>
                    <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Download className="w-4 h-4 text-shogun-subdued" /> Download Button</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Downloads all current logs as a JSON file for external analysis or archival. Useful for sending to support or keeping for compliance records.</p>
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Filter className="w-4 h-4 text-shogun-subdued" /> Category Tabs</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Eleven filterable categories across the top, each with a real-time event count badge:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Decision:</strong> AI decision provenance — context assembled, influences tracked (EU AI Act). Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">decision.context</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">decision.influences</code>.</li>
+                         <li><strong>Oversight:</strong> Human review — AI responses delivered for implicit oversight, emergency shutdowns. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">oversight.response_delivered</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">oversight.emergency_shutdown</code>.</li>
+                         <li><strong>Risk:</strong> Security tier warnings, denied tools, high-autonomy alerts. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">risk.tools_denied</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">risk.high_autonomy_mode</code>.</li>
+                         <li><strong>Model:</strong> Model selection, LLM responses, API errors, fallback activations. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">model.selected</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">model.response</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">model.error</code>.</li>
+                         <li><strong>Policy:</strong> Torii policy evaluations — tools granted or denied with reasons. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">policy.evaluated</code>.</li>
+                         <li><strong>Memory:</strong> Memory recall, search queries, write operations with retrieval provenance. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">memory.search</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">memory.write</code>.</li>
+                         <li><strong>Tools:</strong> Tool/skill executions, arguments, and results. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">tool.executed</code>.</li>
+                         <li><strong>Auth:</strong> Session tracking, security posture changes, API credential lifecycle, kill switch activations. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">auth.session</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">auth.posture_changed</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">auth.credential_added</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">auth.kill_switch_activated</code>.</li>
+                         <li><strong>Incident:</strong> Critical security events — model API failures, kill switch emergency actions, audit chain integrity violations. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">incident.model_api_error</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">incident.kill_switch</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">incident.chain_broken</code>.</li>
+                         <li><strong>System:</strong> Server lifecycle (startup/shutdown), governance configuration changes (Constitution/Mandate), backup and restore provenance. Events: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">system.startup</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">system.shutdown</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">system.config_changed</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">system.backup_created</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">system.backup_restored</code>.</li>
+                      </ul>
                    </div>
                    <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-red-400" /> Clear Button</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Permanently deletes all log entries. This action cannot be undone. Use this to clean up after debugging or when the log gets too long. A confirmation dialog appears before clearing.</p>
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Link2 className="w-4 h-4 text-shogun-blue" /> Trace Reconstruction</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every chat turn generates a <strong>trace_id</strong> (e.g., <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">trc_d5ae40fb</code>) that links all events in that workflow — from policy evaluation through memory recall, model selection, tool execution, and decision provenance. Click any trace ID link to open the <strong>Trace Reconstruction modal</strong>, which displays every event in the chain as a numbered timeline. This allows full <strong>workflow reconstruction</strong> for incident investigation.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><FileKey className="w-4 h-4 text-shogun-gold" /> Event Detail Panel</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Click any event to expand a detail panel showing the full NIS2/SOC2 + EU AI Act record:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>WHO/WHAT/WHEN:</strong> User ID, agent, event type, timestamp.</li>
+                         <li><strong>MODEL/PROVIDER:</strong> Which AI model and cloud provider handled the request.</li>
+                         <li><strong>POLICY:</strong> Security policy reference, decision (allowed/denied), and reason.</li>
+                         <li><strong>RISK/TRACE:</strong> Risk score and correlated trace ID.</li>
+                         <li><strong>AI Confidence bar:</strong> Color-coded indicator (green ≥ 70%, yellow 40–70%, red &lt; 40%).</li>
+                         <li><strong>Framework badges:</strong> Shows which compliance frameworks apply (SOC2, NIS2, EU_AI_ACT).</li>
+                         <li><strong>Governance flags:</strong> Human oversight required, evidence completeness, risk level.</li>
+                         <li><strong>Detail payload:</strong> Full structured JSON of all event metadata.</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-green-500" /> Audit Chain Integrity</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The top-right corner shows a real-time <strong>Chain Intact</strong> indicator (green) or <strong>Chain Broken</strong> alert (red, pulsing). This verifies the HMAC-SHA256 hash chain across all immutable audit records. If the chain is intact, no records have been tampered with. The status bar at the bottom also shows "AUDIT: INTACT" or "BROKEN."</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Download className="w-4 h-4 text-shogun-gold" /> Compliance Export</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Click the download icon to export the <strong>immutable audit log</strong> as a JSON file. This export pulls from the tamper-proof chain (not the operational log), making it suitable for regulatory auditors, compliance reviews, and incident investigations. The export includes all event metadata, governance flags, and chain hashes.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Trash2 className="w-4 h-4 text-red-400" /> Clear Operational Logs</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Click the trash icon to clear the <strong>operational log only</strong>. The immutable audit chain is <strong>never affected</strong> by this action — it is append-only and cannot be cleared. A confirmation dialog warns you before deletion. The clearing event itself is recorded in the immutable audit chain as evidence.</p>
                    </div>
                 </div>
              </section>
@@ -1152,8 +1195,8 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">API keys for AI providers should be rotated periodically. If you suspect a key has been exposed, revoke it immediately from the provider's dashboard and update it in Katana → Cloud Providers.</p>
                    </div>
                    <div className="shogun-card space-y-2 border-l-2 border-shogun-blue/40">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Terminal className="w-4 h-4 text-shogun-blue" /> Review Logs Frequently</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">The Logs page records every action. Make it a habit to review logs at least daily, especially after enabling higher-autonomy postures. Look for unexpected ERROR or CRITICAL entries. Download logs before clearing them for archival purposes.</p>
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Terminal className="w-4 h-4 text-shogun-blue" /> Use the Compliance Dashboard</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The Logs page is your compliance nerve center. Make it a habit to check the <strong>Decision</strong> tab to review AI reasoning provenance, the <strong>Risk</strong> tab for security tier warnings and denied tools, the <strong>Oversight</strong> tab for human review actions, the <strong>Incident</strong> tab for critical alerts (model API failures, kill switch activations, chain integrity violations), and the <strong>System</strong> tab for server lifecycle and governance config changes. Verify the audit chain stays intact. Export the immutable audit log regularly for off-site archival — this is your evidence for NIS2, SOC2, and EU AI Act compliance.</p>
                    </div>
                    <div className="shogun-card space-y-2 border-l-2 border-shogun-blue/40">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-shogun-blue" /> Test Posture Changes in SHRINE</div>

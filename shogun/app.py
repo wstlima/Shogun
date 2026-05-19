@@ -22,6 +22,27 @@ async def lifespan(app: FastAPI):
     # Startup
     settings.ensure_directories()
 
+    # ── Auto-migrate execution_events to NIS2/SOC2 schema ──────
+    try:
+        from shogun.db.engine import async_session_factory, engine
+        from sqlalchemy import text, inspect as sa_inspect
+        async with engine.begin() as conn:
+            columns = await conn.run_sync(
+                lambda c: [col["name"] for col in sa_inspect(c).get_columns("execution_events")]
+                if "execution_events" in sa_inspect(c).get_table_names() else []
+            )
+            if columns and ("event_category" not in columns or "confidence_score" not in columns):
+                # Schema missing NIS2/SOC2 or EU AI Act columns — rebuild
+                await conn.execute(text("DROP TABLE IF EXISTS execution_events"))
+                import logging
+                logging.getLogger(__name__).info("Migrated execution_events schema (NIS2/SOC2 + EU AI Act)")
+            # Ensure table exists with full schema
+            from shogun.db.base import Base
+            import shogun.db.models  # noqa: F401
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception:
+        pass  # Non-fatal — table will be created on first use
+
     # ── Auto-heal: promote any stuck 'not_configured' providers to 'connected'
     try:
         from shogun.db.engine import async_session_factory
@@ -71,9 +92,30 @@ async def lifespan(app: FastAPI):
         import logging
         logging.getLogger(__name__).error("Telegram poller startup failed: %s", exc)
 
+    # ── EVENT: System Startup ─────────────────────────────────
+    try:
+        from shogun.services.event_logger import EventLogger
+        import platform
+        await EventLogger.emit_system_event(
+            "system.startup", "Shogun server started",
+            detail={
+                "version": "1.1.7",
+                "platform": platform.system(),
+                "python": platform.python_version(),
+            },
+        )
+    except Exception:
+        pass
+
     yield
 
     # Shutdown
+    try:
+        from shogun.services.event_logger import EventLogger as _EL
+        import asyncio
+        await _EL.emit_system_event("system.shutdown", "Shogun server shutting down")
+    except Exception:
+        pass
     if telegram_task:
         telegram_task.cancel()
     try:

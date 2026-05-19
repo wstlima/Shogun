@@ -4,6 +4,7 @@ import {
   CheckCircle2, RefreshCw, Search, Eye, X, Plus, Save,
   Trash2, Copy, Check, Activity,
   Globe, HardDrive, Terminal, Zap, Users,
+  ChevronDown, ChevronRight, Database,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -91,6 +92,48 @@ export function Torii() {
     kill_switch_enabled: true, dry_run_supported: true,
   });
 
+  // Permission block editor state
+  const DEFAULT_PERMS = {
+    filesystem: { mode: 'scoped', allowed_paths: [] as string[], allow_home_access: false, allow_arbitrary_paths: false },
+    network:    { mode: 'allowlist', allowed_domains: [] as string[], allow_arbitrary_requests: false },
+    shell:      { enabled: false, allowed_binaries: [] as string[] },
+    skills:     { allow_auto_install: false, require_approval: true, allow_untrusted: false },
+    subagents:  { allow_spawn: true, max_active: 5, allow_auto_spawn: false },
+    memory:     { allow_write: true, allow_bulk_delete: false },
+  };
+  const [newPermissions, setNewPermissions] = useState(structuredClone(DEFAULT_PERMS));
+  const [expandedPerms, setExpandedPerms]   = useState<Set<string>>(new Set());
+  const [tagInputs, setTagInputs]           = useState<Record<string, string>>({});
+
+  const togglePermSection = (key: string) => {
+    setExpandedPerms(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const addTag = (category: string, field: string) => {
+    const key = `${category}.${field}`;
+    const val = (tagInputs[key] || '').trim();
+    if (!val) return;
+    setNewPermissions(prev => {
+      const copy = structuredClone(prev);
+      const arr = (copy as any)[category][field] as string[];
+      if (!arr.includes(val)) arr.push(val);
+      return copy;
+    });
+    setTagInputs(prev => ({ ...prev, [key]: '' }));
+  };
+
+  const removeTag = (category: string, field: string, idx: number) => {
+    setNewPermissions(prev => {
+      const copy = structuredClone(prev);
+      ((copy as any)[category][field] as string[]).splice(idx, 1);
+      return copy;
+    });
+  };
+
   // Copied confirmation
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -172,11 +215,14 @@ export function Torii() {
         description: newPolicy.description || null,
         kill_switch_enabled: newPolicy.kill_switch_enabled,
         dry_run_supported: newPolicy.dry_run_supported,
-        permissions: {},
+        permissions: newPermissions,
       });
       flash('success', t('torii.policy_created'));
       setShowCreate(false);
       setNewPolicy({ name: '', tier: 'tactical', description: '', kill_switch_enabled: true, dry_run_supported: true });
+      setNewPermissions(structuredClone(DEFAULT_PERMS));
+      setExpandedPerms(new Set());
+      setTagInputs({});
       fetchData();
     } catch {
       flash('error', t('torii.policy_create_failed'));
@@ -537,6 +583,238 @@ export function Torii() {
                       />
                       <span className="text-xs text-shogun-subdued">{t('torii.dry_run_supported')}</span>
                     </label>
+                  </div>
+                </div>
+
+                {/* ── Permission Block Accordion ── */}
+                <div className="space-y-1 pt-2">
+                  <h5 className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Shield className="w-3 h-3 text-shogun-gold" /> {t('torii.permission_blocks_title', 'Permission Blocks')}
+                  </h5>
+
+                  {/* ── Filesystem ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('filesystem')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <HardDrive className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_filesystem', 'Filesystem')}
+                      </span>
+                      {expandedPerms.has('filesystem') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('filesystem') && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-shogun-border bg-[#050508]">
+                        <div className="pt-3 space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_mode', 'Mode')}</label>
+                          <select value={newPermissions.filesystem.mode}
+                            onChange={e => setNewPermissions(p => ({ ...p, filesystem: { ...p.filesystem, mode: e.target.value } }))}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-2.5 text-xs focus:border-shogun-blue outline-none">
+                            <option value="full">Full</option><option value="scoped">Scoped</option><option value="allowlist">Allowlist</option><option value="disabled">Disabled</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_allowed_paths', 'Allowed Paths')}</label>
+                          <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                            {newPermissions.filesystem.allowed_paths.map((p, i) => (
+                              <span key={i} className="flex items-center gap-1 bg-shogun-card border border-shogun-border rounded px-2 py-0.5 text-[10px] text-shogun-text font-mono">
+                                {p} <X className="w-2.5 h-2.5 text-shogun-subdued hover:text-red-400 cursor-pointer" onClick={() => removeTag('filesystem', 'allowed_paths', i)} />
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input type="text" placeholder="/data, /tmp, ..." value={tagInputs['filesystem.allowed_paths'] || ''}
+                              onChange={e => setTagInputs(p => ({ ...p, 'filesystem.allowed_paths': e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag('filesystem', 'allowed_paths'); } }}
+                              className="flex-1 bg-[#050508] border border-shogun-border rounded-lg p-2 text-xs focus:border-shogun-blue outline-none font-mono" />
+                            <button type="button" onClick={() => addTag('filesystem', 'allowed_paths')}
+                              className="px-3 text-[10px] font-bold text-shogun-blue border border-shogun-blue/30 rounded-lg hover:bg-shogun-blue/10 transition-all">+</button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newPermissions.filesystem.allow_home_access}
+                              onChange={e => setNewPermissions(p => ({ ...p, filesystem: { ...p.filesystem, allow_home_access: e.target.checked } }))} className="accent-shogun-blue" />
+                            <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_home_access', 'Allow Home Access')}</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newPermissions.filesystem.allow_arbitrary_paths}
+                              onChange={e => setNewPermissions(p => ({ ...p, filesystem: { ...p.filesystem, allow_arbitrary_paths: e.target.checked } }))} className="accent-shogun-blue" />
+                            <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_arbitrary_paths', 'Allow Arbitrary Paths')}</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Network ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('network')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Globe className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_network', 'Network')}
+                      </span>
+                      {expandedPerms.has('network') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('network') && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-shogun-border bg-[#050508]">
+                        <div className="pt-3 space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_mode', 'Mode')}</label>
+                          <select value={newPermissions.network.mode}
+                            onChange={e => setNewPermissions(p => ({ ...p, network: { ...p.network, mode: e.target.value } }))}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-2.5 text-xs focus:border-shogun-blue outline-none">
+                            <option value="full">Full</option><option value="allowlist">Allowlist</option><option value="disabled">Disabled</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_allowed_domains', 'Allowed Domains')}</label>
+                          <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                            {newPermissions.network.allowed_domains.map((d, i) => (
+                              <span key={i} className="flex items-center gap-1 bg-shogun-card border border-shogun-border rounded px-2 py-0.5 text-[10px] text-shogun-text font-mono">
+                                {d} <X className="w-2.5 h-2.5 text-shogun-subdued hover:text-red-400 cursor-pointer" onClick={() => removeTag('network', 'allowed_domains', i)} />
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input type="text" placeholder="api.example.com, *.github.com" value={tagInputs['network.allowed_domains'] || ''}
+                              onChange={e => setTagInputs(p => ({ ...p, 'network.allowed_domains': e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag('network', 'allowed_domains'); } }}
+                              className="flex-1 bg-[#050508] border border-shogun-border rounded-lg p-2 text-xs focus:border-shogun-blue outline-none font-mono" />
+                            <button type="button" onClick={() => addTag('network', 'allowed_domains')}
+                              className="px-3 text-[10px] font-bold text-shogun-blue border border-shogun-blue/30 rounded-lg hover:bg-shogun-blue/10 transition-all">+</button>
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.network.allow_arbitrary_requests}
+                            onChange={e => setNewPermissions(p => ({ ...p, network: { ...p.network, allow_arbitrary_requests: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_arbitrary_requests', 'Allow Arbitrary Requests')}</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Shell ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('shell')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Terminal className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_shell', 'Shell')}
+                      </span>
+                      {expandedPerms.has('shell') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('shell') && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-shogun-border bg-[#050508]">
+                        <div className="pt-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newPermissions.shell.enabled}
+                              onChange={e => setNewPermissions(p => ({ ...p, shell: { ...p.shell, enabled: e.target.checked } }))} className="accent-shogun-blue" />
+                            <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_enabled', 'Enabled')}</span>
+                          </label>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_allowed_binaries', 'Allowed Binaries')}</label>
+                          <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                            {newPermissions.shell.allowed_binaries.map((b, i) => (
+                              <span key={i} className="flex items-center gap-1 bg-shogun-card border border-shogun-border rounded px-2 py-0.5 text-[10px] text-shogun-text font-mono">
+                                {b} <X className="w-2.5 h-2.5 text-shogun-subdued hover:text-red-400 cursor-pointer" onClick={() => removeTag('shell', 'allowed_binaries', i)} />
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input type="text" placeholder="python, git, curl, ..." value={tagInputs['shell.allowed_binaries'] || ''}
+                              onChange={e => setTagInputs(p => ({ ...p, 'shell.allowed_binaries': e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag('shell', 'allowed_binaries'); } }}
+                              className="flex-1 bg-[#050508] border border-shogun-border rounded-lg p-2 text-xs focus:border-shogun-blue outline-none font-mono" />
+                            <button type="button" onClick={() => addTag('shell', 'allowed_binaries')}
+                              className="px-3 text-[10px] font-bold text-shogun-blue border border-shogun-blue/30 rounded-lg hover:bg-shogun-blue/10 transition-all">+</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Skills ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('skills')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Zap className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_skills', 'Skills')}
+                      </span>
+                      {expandedPerms.has('skills') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('skills') && (
+                      <div className="px-4 pb-4 pt-3 space-y-2 border-t border-shogun-border bg-[#050508]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.skills.allow_auto_install}
+                            onChange={e => setNewPermissions(p => ({ ...p, skills: { ...p.skills, allow_auto_install: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_auto_install', 'Allow Auto-Install')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.skills.require_approval}
+                            onChange={e => setNewPermissions(p => ({ ...p, skills: { ...p.skills, require_approval: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_require_approval', 'Require Approval')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.skills.allow_untrusted}
+                            onChange={e => setNewPermissions(p => ({ ...p, skills: { ...p.skills, allow_untrusted: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_untrusted', 'Allow Untrusted')}</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Sub-Agents ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('subagents')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Users className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_subagents', 'Sub-Agents')}
+                      </span>
+                      {expandedPerms.has('subagents') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('subagents') && (
+                      <div className="px-4 pb-4 pt-3 space-y-3 border-t border-shogun-border bg-[#050508]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.subagents.allow_spawn}
+                            onChange={e => setNewPermissions(p => ({ ...p, subagents: { ...p.subagents, allow_spawn: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_spawn', 'Allow Spawning')}</span>
+                        </label>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('profile.perm_prop_max_active', 'Max Active')}</label>
+                          <input type="number" min={0} max={50} value={newPermissions.subagents.max_active}
+                            onChange={e => setNewPermissions(p => ({ ...p, subagents: { ...p.subagents, max_active: parseInt(e.target.value) || 0 } }))}
+                            className="w-24 bg-[#050508] border border-shogun-border rounded-lg p-2.5 text-xs focus:border-shogun-blue outline-none font-mono" />
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.subagents.allow_auto_spawn}
+                            onChange={e => setNewPermissions(p => ({ ...p, subagents: { ...p.subagents, allow_auto_spawn: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_auto_spawn', 'Allow Auto-Spawn')}</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Memory ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('memory')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Database className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_memory', 'Memory')}
+                      </span>
+                      {expandedPerms.has('memory') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('memory') && (
+                      <div className="px-4 pb-4 pt-3 space-y-2 border-t border-shogun-border bg-[#050508]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.memory.allow_write}
+                            onChange={e => setNewPermissions(p => ({ ...p, memory: { ...p.memory, allow_write: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_write', 'Allow Write')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.memory.allow_bulk_delete}
+                            onChange={e => setNewPermissions(p => ({ ...p, memory: { ...p.memory, allow_bulk_delete: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_bulk_delete', 'Allow Bulk Delete')}</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
 

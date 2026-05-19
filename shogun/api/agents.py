@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 import shutil
 import os
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Lazy import to avoid circular deps at module level
+def _get_event_logger():
+    from shogun.services.event_logger import EventLogger
+    return EventLogger
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -120,8 +128,26 @@ async def create_agent(
     svc: AgentService = Depends(get_agent_service),
 ):
     data = body.model_dump()
+    # ── Posture enforcement: subagent limit ──────────────────
+    if data.get("agent_type") == "samurai":
+        from shogun.services.posture_guard import check_kill_switch, check_subagent_limit
+        await check_kill_switch()
+        await check_subagent_limit()
     data["memory_scope"] = data["memory_scope"] if isinstance(data["memory_scope"], dict) else data["memory_scope"].model_dump()
     record = await svc.create(**data)
+
+    # ── Inject Kaizen governance into Samurai agents ─────────
+    if data.get("agent_type") == "samurai":
+        try:
+            from shogun.api.kaizen import build_governance_prompt_block
+            governance_block = build_governance_prompt_block()
+            bs = dict(record.bushido_settings) if record.bushido_settings else {}
+            bs["governance_prompt"] = governance_block
+            record.bushido_settings = bs
+            await svc.session.flush()
+        except Exception:
+            pass  # Non-fatal — don't block agent creation
+
     return ApiResponse(data=AgentResponse.model_validate(record))
 
 
@@ -262,8 +288,18 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
     from shogun.db.models.operator import Operator
     from shogun.api.deps import get_db
     from shogun.services.native_skills import NATIVE_TOOLS, execute_native_tool
+    from shogun.services.posture_guard import check_kill_switch, get_posture_tool_filter, filter_tools_by_posture
     from sqlalchemy import select
     import uuid as _uuid
+
+    # ── 0. Posture enforcement: kill switch gate ─────────────────
+    try:
+        await check_kill_switch()
+    except HTTPException:
+        async def _blocked():
+            yield f"data: {json.dumps({'type': 'error', 'content': '⛩️ HARAKIRI is active — all AI operations are suspended. Deactivate the kill switch in the Torii to resume.'})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(_blocked(), media_type="text/event-stream")
 
     # ── 1. Load primary Shogun agent ──────────────────────────────
     filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
@@ -274,6 +310,14 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
 
     # ── 2. Resolve primary model from settings ────────────────────
     bushido = agent.bushido_settings or {}
+
+    # ── Bushido calibration parameters (from Bushido page sliders) ─
+    _reflection_intensity = bushido.get("reflection_intensity", 70)
+    _consolidation_rate = bushido.get("consolidation_rate", 45)
+    _exploration_variance = bushido.get("exploration_variance", 24)
+    # Map exploration_variance (0-100) to LLM temperature (0.3-1.2)
+    _temperature = round(0.3 + (_exploration_variance / 100) * 0.9, 2)
+
     saved_primary: str = bushido.get("primary_model", "")
     saved_provider_id: str = saved_primary.split("::")[0] if "::" in saved_primary else ""
     saved_model_name: str = saved_primary.split("::")[1] if "::" in saved_primary else ""
@@ -373,6 +417,11 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
             yield "data: [DONE]\n\n"
         return StreamingResponse(_no_provider(), media_type="text/event-stream")
 
+    # ── Generate trace_id for correlating all events in this chat turn ──
+    _trace_id = f"trc_{uuid.uuid4().hex[:16]}"
+    _agent_id_str = str(agent.id) if agent else None
+    EL = _get_event_logger()
+
     # Endpoint resolve
     PROVIDER_URLS: dict[str, str] = {
         "ollama":     "http://localhost:11434",
@@ -396,6 +445,20 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
             or provider.name
         )
         provider_name = provider.name
+    else:
+        model_name = model_name or saved_model_name or "unknown"
+
+    # ── EVENT: Model Selected ─────────────────────────────────
+    try:
+        import asyncio
+        asyncio.ensure_future(EL.emit_model_event(
+            "model.selected", f"Model resolved: {model_name} via {provider.provider_type}",
+            model_used=model_name, provider_used=provider.provider_type,
+            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+            detail={"reason": res_reason, "provider_id": str(provider.id), "base_url": base_url},
+        ))
+    except Exception:
+        pass
 
     api_key = provider.config.get("api_key") or provider.config.get("api-key")
     req_headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -424,7 +487,109 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
             operator_name = op.display_name
         break
 
+    # ── EVENT: Auth — Session Start ──────────────────────────
+    try:
+        import asyncio
+        asyncio.ensure_future(EL.emit_auth_event(
+            "auth.session", f"Chat session started by {operator_name}",
+            user_id=operator_name, agent_id=_agent_id_str, trace_id=_trace_id,
+            detail={"channel": "web", "operator": operator_name},
+        ))
+    except Exception:
+        pass
+
+    # ── 4d. Recall Relevant Memories from Archives ────────────────
+    recalled_memories_text = ""
+    try:
+        from shogun.services.memory_service import MemoryService
+        async for db in get_db():
+            mem_svc = MemoryService(db)
+
+            # 1. Semantic search for user-query-relevant memories
+            relevant = await mem_svc.search(
+                query=user_msg,
+                agent_id=agent.id,
+                limit=5,
+            )
+
+            # 2. Always include pinned memories (identity, preferences, etc.)
+            pinned = await mem_svc.get_pinned(agent_id=agent.id)
+
+            # Merge: pinned first, then relevant (deduplicated)
+            seen: set[str] = set()
+            memory_entries: list[str] = []
+
+            for p in pinned:
+                mid = str(p.id)
+                if mid not in seen:
+                    seen.add(mid)
+                    memory_entries.append(f"[PINNED | {p.memory_type}] {p.title}\n{p.content}")
+
+            for r in relevant:
+                mid = r["memory_id"]
+                if mid not in seen:
+                    seen.add(mid)
+                    score = r["scores"]["final"]
+                    memory_entries.append(f"[{r['memory_type']} | salience:{score:.2f}] {r['title']}\n{r['content']}")
+
+            if memory_entries:
+                recalled_memories_text = "\n\n".join(memory_entries)
+
+            # 3. Batch-update access tracking (single SQL UPDATE instead of N round-trips)
+            recalled_ids = []
+            if relevant:
+                from shogun.db.models.memory_record import MemoryRecord
+                from sqlalchemy import update
+                recall_ids = [uuid.UUID(r["memory_id"]) for r in relevant]
+                recalled_ids = [str(rid) for rid in recall_ids]
+                await db.execute(
+                    update(MemoryRecord)
+                    .where(MemoryRecord.id.in_(recall_ids))
+                    .values(
+                        access_count=MemoryRecord.access_count + 1,
+                        recall_count=MemoryRecord.recall_count + 1,
+                        last_accessed_at=datetime.now(),
+                        last_recalled_at=datetime.now(),
+                    )
+                )
+                await db.commit()
+
+            # ── EVENT: Memory Recalled (enhanced retrieval provenance) ──
+            _retrieval_context = []
+            if relevant:
+                for r in relevant:
+                    _retrieval_context.append({
+                        "memory_id": r["memory_id"],
+                        "title": r.get("title", "")[:100],
+                        "memory_type": r.get("memory_type", "unknown"),
+                        "relevance_score": round(r.get("scores", {}).get("final", 0), 3),
+                    })
+            if memory_entries:
+                try:
+                    import asyncio
+                    asyncio.ensure_future(EL.emit_memory_event(
+                        "memory.search", f"Recalled {len(memory_entries)} memories ({len(pinned)} pinned, {len(relevant)} semantic)",
+                        trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                        memory_ids=recalled_ids,
+                        detail={
+                            "query": user_msg[:200],
+                            "pinned_count": len(pinned),
+                            "relevant_count": len(relevant),
+                            "retrieval_context": _retrieval_context,
+                        },
+                    ))
+                except Exception:
+                    pass
+            break
+    except Exception as e:
+        logger.debug("Memory recall skipped: %s", e)
+
     # ── 5. Build system prompt ────────────────────────────────────
+    # Fetch posture for context injection and tool filtering
+    _posture_filter = await get_posture_tool_filter()
+    _active_tier = _posture_filter.get("active_tier", "tactical").upper()
+    _max_subagents = _posture_filter.get("max_active_subagents", 5)
+
     persona_name = agent.name or "Shogun"
     system_prompt = f"""You are {persona_name}, the primary AI orchestrator of the Shogun platform.
 
@@ -442,7 +607,7 @@ The platform uses Japanese-themed naming:
 - **Comms**: This chat interface where the user talks directly to you.
 - **Bushido**: The behavioral rules/directives that govern agent decisions.
 - **Kaizen**: The continuous improvement and optimization system.
-- **Torii**: The mission and task management system.
+- **Torii**: The security and governance portal.
 
 Note: You now have Native Skills (Tools) injected into your capabilities. If the user asks you to spawn a samurai, update models, etc. use the provided tools directly instead of redirecting them, IF the tools are available to you.
 
@@ -452,11 +617,31 @@ CONSTITUTIONAL DIRECTIVES (from Kaizen — you must follow these):
 YOUR MANDATE:
 {gov['mandate_summary']}
 
+ACTIVE SECURITY POSTURE (from the Torii — you MUST operate within these guardrails):
+- Security Tier: {_active_tier}
+- Filesystem Mode: {_posture_filter.get('filesystem_mode', 'scoped')}
+- Network Mode: {_posture_filter.get('network_mode', 'allowlist')}
+- Shell Execution: {'ALLOWED' if _posture_filter.get('shell_enabled') else 'DENIED'}
+- Auto-Install Skills: {'ALLOWED' if _posture_filter.get('skill_auto_install') else 'DENIED'}
+- Max Active Samurai: {_max_subagents} (currently {ctx['samurai_count']} deployed)
+You must respect these constraints. If the user asks you to do something outside your current
+security posture, inform them of the restriction and suggest changing the tier in the Torii.
+
+BEHAVIORAL CALIBRATION (from Bushido — these shape how you think):
+- Reflection Intensity: {_reflection_intensity}% (how deeply you self-evaluate before responding)
+- Memory Consolidation Rate: {_consolidation_rate}/1000 per epoch (how aggressively you integrate new patterns)
+- Exploration Variance: {_exploration_variance}% → temperature {_temperature} (creative deviation vs. proven patterns)
+Apply these calibration settings to your reasoning: higher reflection = more thorough analysis before answering;
+higher consolidation = weight recent interactions more heavily; higher exploration = more creative/novel responses.
+
 CURRENT SYSTEM STATE:
 - Active model providers: {ctx['provider_summary']}
 - Your current model: {model_name} (Selection logic: {res_reason})
 - Samurai agents deployed: {ctx['samurai_count']}
 - Registered tools/API connectors: {ctx['tool_count']}
+
+RECALLED MEMORIES (from your persistent Archives):
+{recalled_memories_text or '(No relevant memories found for this query.)'}
 
 YOUR CAPABILITIES:
 - Answer questions and have natural conversations on any topic
@@ -470,6 +655,13 @@ BEHAVIOUR:
 - When you don't know something about live system state, say so honestly
 - Do NOT pretend you can directly execute actions
 - Format responses with markdown when it improves readability
+- You HAVE persistent memory via the Archives system (Qdrant vector store + SQLite).
+  Information from recalled memories is injected above. Use it naturally — refer to
+  stored knowledge, operator preferences, and past events when relevant.
+  If asked where you store information, explain that you use the Archives for long-term
+  memory which persists across sessions.
+- When the user shares important personal details, preferences, or facts worth
+  remembering, use the store_memory tool to save them to the Archives.
 """
 
     # ── 6. Build messages ─────────────────────────────────────────
@@ -483,12 +675,14 @@ BEHAVIOUR:
 
     # ── 7. Native Skills Setup ────────────────────────────────────
     active_tools = []
+    _policy_name = None
     async for db in get_db():
         if agent.security_policy_id:
             from shogun.db.models.security_policy import SecurityPolicy
             pol = await db.execute(select(SecurityPolicy).where(SecurityPolicy.id == agent.security_policy_id))
             policy = pol.scalar_one_or_none()
             if policy:
+                _policy_name = policy.name if hasattr(policy, 'name') else str(agent.security_policy_id)
                 perms = policy.permissions
                 # Shogun can override the base Torii policy with custom permissions
                 if agent.bushido_settings and agent.bushido_settings.get("custom_permissions"):
@@ -497,13 +691,123 @@ BEHAVIOUR:
                 # Determine which native skills are allowed based on policy limits
                 allow_skills = not perms.get("skills", {}).get("require_approval", True)
                 allow_auto_spawn = perms.get("subagents", {}).get("allow_auto_spawn", False)
+                _denied_tools = []
                 for tool in NATIVE_TOOLS:
                     if tool["function"]["name"] == "spawn_samurai" and not allow_auto_spawn:
+                        _denied_tools.append(tool["function"]["name"])
                         continue
                     if tool["function"]["name"] in ["list_available_models", "update_model_settings"] and not allow_skills:
+                        _denied_tools.append(tool["function"]["name"])
                         continue
                     active_tools.append(tool)
+
+                try:
+                    import asyncio
+                    asyncio.ensure_future(EL.emit_policy_event(
+                        "policy.evaluated",
+                        f"Torii policy evaluated: {len(active_tools)} tools granted, {len(_denied_tools)} denied",
+                        trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                        policy_ref=_policy_name,
+                        policy_decision="allowed" if active_tools else "restricted",
+                        policy_reason=f"Granted: {[t['function']['name'] for t in active_tools]}. Denied: {_denied_tools}",
+                        detail={"allow_skills": allow_skills, "allow_auto_spawn": allow_auto_spawn},
+                    ))
+                    # ── EVENT: Risk — Tool Denied ──────────────────
+                    if _denied_tools:
+                        asyncio.ensure_future(EL.emit_risk_event(
+                            "risk.tools_denied",
+                            f"Policy denied {len(_denied_tools)} tools: {_denied_tools}",
+                            severity="warn", risk_score="medium",
+                            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                            detail={"denied_tools": _denied_tools, "policy": _policy_name},
+                        ))
+                except Exception:
+                    pass
+        else:
+            # No security policy — still grant core memory tool
+            for tool in NATIVE_TOOLS:
+                if tool["function"]["name"] == "store_memory":
+                    active_tools.append(tool)
         break
+
+    # ── 7b. Global posture enforcement layer ──────────────────────
+    # The per-agent policy gating above checks the agent's assigned policy.
+    # This additional layer enforces the GLOBAL posture tier constraints,
+    # stripping tools that the current tier does not permit.
+    active_tools, _posture_denied = filter_tools_by_posture(active_tools, _posture_filter)
+    if _posture_denied:
+        try:
+            import asyncio
+            asyncio.ensure_future(EL.emit_policy_event(
+                "policy.posture_filtered",
+                f"Posture [{_active_tier}] stripped {len(_posture_denied)} tools: {_posture_denied}",
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                policy_ref=f"posture:{_active_tier}",
+                policy_decision="denied",
+                policy_reason=f"Global posture filter denied: {_posture_denied}",
+                detail={"posture_tier": _active_tier, "denied_tools": _posture_denied},
+            ))
+        except Exception:
+            pass
+
+    # ── EU AI Act: Derive use-case context ─────────────────
+    _security_tier = "guarded"
+    if _policy_name:
+        _tier_map = {"shrine": "minimal", "guarded": "limited", "tactical": "limited", "campaign": "high", "ronin": "high"}
+        for tier_key, risk_lvl in _tier_map.items():
+            if tier_key in (_policy_name or "").lower():
+                _security_tier = risk_lvl
+                break
+
+    _use_case_context = {
+        "domain": "assistant",
+        "purpose": task_type if task_type != "*" else "general_conversation",
+        "risk_level": _security_tier,
+        "human_oversight_required": False,
+        "frameworks": ["SOC2", "NIS2", "EU_AI_ACT"],
+    }
+
+    # ── EVENT: Decision Context (EU AI Act) ───────────────
+    try:
+        import asyncio
+        _safeguards = []
+        if _policy_name:
+            _safeguards.append(f"torii_policy:{_policy_name}")
+        if recalled_memories_text:
+            _safeguards.append("memory_grounding")
+
+        asyncio.ensure_future(EL.emit_decision_event(
+            "decision.context",
+            f"Decision context assembled for chat turn",
+            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+            model_used=model_name, provider_used=provider_name,
+            use_case_context=_use_case_context,
+            governance_flags={
+                "human_oversight_required": False,
+                "evidence_completeness": "full" if recalled_memories_text else "none",
+            },
+            detail={
+                "inputs": {
+                    "user_message_length": len(user_msg),
+                    "history_messages": len(history),
+                    "memories_recalled": len(memory_entries) if 'memory_entries' in dir() else 0,
+                    "tools_available": [t["function"]["name"] for t in active_tools],
+                },
+                "safeguards_applied": _safeguards,
+                "security_tier": _security_tier,
+            },
+        ))
+        # ── EVENT: Risk — High Autonomy Mode ──────────────
+        if _security_tier in ("high",):
+            asyncio.ensure_future(EL.emit_risk_event(
+                "risk.high_autonomy_mode",
+                f"Operating in high-autonomy tier ({_policy_name or 'campaign/ronin'})",
+                severity="warn", risk_score="high",
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={"security_tier": _security_tier, "policy": _policy_name},
+            ))
+    except Exception:
+        pass
 
     # Log user message for drift monitor
     _append_chat_log("user", user_msg)
@@ -522,7 +826,7 @@ BEHAVIOUR:
                 "model": model_name,
                 "messages": messages,
                 "stream": True,
-                "temperature": 0.7,
+                "temperature": _temperature,
             }
             if active_tools:
                 req_json["tools"] = active_tools
@@ -538,6 +842,25 @@ BEHAVIOUR:
                         if resp.status_code >= 400:
                             body_bytes = await resp.aread()
                             err = body_bytes.decode(errors="replace")[:300]
+                            # ── EVENT: Model Error ────────────────
+                            try:
+                                await EL.emit_model_event(
+                                    "model.error", f"LLM API error {resp.status_code}: {err[:100]}",
+                                    result="error", severity="error",
+                                    model_used=model_name, provider_used=provider_name,
+                                    trace_id=_trace_id, agent_id=_agent_id_str,
+                                    detail={"status_code": resp.status_code, "error": err},
+                                )
+                                # ── EVENT: Incident — Model API Error ───
+                                await EL.emit_incident_event(
+                                    "incident.model_api_error",
+                                    f"Model API returned HTTP {resp.status_code}",
+                                    severity="error", risk_score="high",
+                                    trace_id=_trace_id, agent_id=_agent_id_str,
+                                    detail={"model": model_name, "provider": provider_name, "status_code": resp.status_code, "error": err[:200]},
+                                )
+                            except Exception:
+                                pass
                             yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ LLM error ({resp.status_code}): {err}'})}\n\n"
                             yield "data: [DONE]\n\n"
                             return
@@ -609,6 +932,42 @@ BEHAVIOUR:
                         # Execute
                         res_str = await execute_native_tool(func_name, args, db)
                         messages.append({"role": "tool", "tool_call_id": tcall["id"], "name": func_name, "content": res_str})
+
+                        # ── EVENT: Tool Executed ──────────────
+                        try:
+                            _tool_result = json.loads(res_str)
+                            _tool_status = _tool_result.get("status", "unknown")
+                        except Exception:
+                            _tool_status = "unknown"
+                        try:
+                            await EL.emit_tool_event(
+                                "tool.executed", f"Native tool '{func_name}' executed",
+                                tool_name=func_name,
+                                result="success" if _tool_status == "success" else "error",
+                                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                model_used=model_name, provider_used=provider_name,
+                                detail={"args": {k: str(v)[:200] for k, v in args.items()}, "result_status": _tool_status},
+                            )
+                            # Also emit category-specific events for memory operations
+                            if func_name == "store_memory" and _tool_status == "success":
+                                _mem_id = None
+                                try:
+                                    _mem_id = json.loads(res_str).get("memory_id")
+                                except Exception:
+                                    pass
+                                await EL.emit_memory_event(
+                                    "memory.write", f"Memory inscribed: {args.get('title', 'untitled')[:80]}",
+                                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                    memory_ids=[_mem_id] if _mem_id else [],
+                                    detail={
+                                        "title": args.get("title", ""),
+                                        "memory_type": args.get("memory_type", ""),
+                                        "importance": args.get("importance", "0.7"),
+                                        "content_length": len(args.get("content", "")),
+                                    },
+                                )
+                        except Exception:
+                            pass
                     break # Only one DB session needed
 
                 # Continue the loop to hit LLM again with the tool results
@@ -616,6 +975,63 @@ BEHAVIOUR:
             
             # If no tool calls occurred or we are done, terminate loop
             break
+
+        # ── EVENT: Response Complete ─────────────────────
+        _tools_used_in_turn = []
+        try:
+            _last_content = messages[-1].get("content", "") or ""
+            _resp_len = len(_last_content) if isinstance(_last_content, str) else 0
+        except Exception:
+            _resp_len = 0
+        try:
+            # Collect tool names used in this turn
+            for msg in messages:
+                if msg.get("role") == "tool" and msg.get("name"):
+                    _tools_used_in_turn.append(msg["name"])
+
+            await EL.emit_model_event(
+                "model.response", f"Chat turn completed ({model_name})",
+                model_used=model_name, provider_used=provider_name,
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={"message_count": len(messages), "tools_used": len(_tools_used_in_turn)},
+            )
+        except Exception:
+            pass
+
+        # ── EVENT: Decision Influences (EU AI Act) ─────────
+        try:
+            await EL.emit_decision_event(
+                "decision.influences",
+                f"Decision influences for chat turn: {len(_tools_used_in_turn)} tools, {len(recalled_ids) if 'recalled_ids' in dir() else 0} memories",
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                model_used=model_name, provider_used=provider_name,
+                use_case_context=_use_case_context,
+                detail={
+                    "inputs_used": recalled_ids if 'recalled_ids' in dir() else [],
+                    "tools_used": _tools_used_in_turn,
+                    "safeguards_applied": _safeguards if '_safeguards' in dir() else [],
+                    "retrieval_context": _retrieval_context if '_retrieval_context' in dir() else [],
+                    "decision_summary": f"Response generated via {model_name} with {len(_tools_used_in_turn)} tool invocations",
+                },
+            )
+        except Exception:
+            pass
+
+        # ── EVENT: Oversight — Response Delivered ──────────
+        try:
+            await EL.emit_oversight_event(
+                "oversight.response_delivered",
+                f"AI response delivered for human review ({_resp_len} chars)",
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={
+                    "response_length": _resp_len,
+                    "model": model_name,
+                    "tools_used": _tools_used_in_turn,
+                    "review_status": "implicit",
+                },
+            )
+        except Exception:
+            pass
 
         yield "data: [DONE]\n\n"
 

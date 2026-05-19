@@ -40,6 +40,14 @@ async def create_provider(
     svc: ModelProviderService = Depends(get_model_provider_service),
 ):
     record = await svc.create(**body.model_dump())
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_auth_event(
+            "auth.credential_added", f"API provider registered: {body.name}",
+            detail={"provider_name": body.name, "provider_type": body.provider_type},
+        )
+    except Exception:
+        pass
     return ApiResponse(data=ModelProviderResponse.model_validate(record))
 
 
@@ -52,6 +60,14 @@ async def update_provider(
     record = await svc.update(provider_id, **body.model_dump(exclude_unset=True))
     if not record:
         raise HTTPException(status_code=404, detail="Provider not found")
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_auth_event(
+            "auth.credential_updated", f"API provider updated: {record.name}",
+            detail={"provider_id": str(provider_id), "provider_name": record.name},
+        )
+    except Exception:
+        pass
     return ApiResponse(data=ModelProviderResponse.model_validate(record))
 
 
@@ -68,6 +84,14 @@ async def delete_provider(
     deleted = await svc.delete(provider_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Provider not found")
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_auth_event(
+            "auth.credential_removed", f"API provider removed",
+            detail={"provider_id": str(provider_id)},
+        )
+    except Exception:
+        pass
     return ApiResponse(data={"deleted": True})
 
 

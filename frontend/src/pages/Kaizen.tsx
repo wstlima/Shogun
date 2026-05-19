@@ -21,7 +21,7 @@ import {
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
-const API = 'http://localhost:8000/api/v1/kaizen';
+const API = '/api/v1/kaizen';
 
 // ── Simple markdown-to-HTML renderer (no deps) ───────────────
 function renderMarkdown(md: string): string {

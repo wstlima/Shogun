@@ -26,6 +26,14 @@ async def connect_telegram(body: TelegramConnectRequest):
         allowed_chat_ids=body.allowed_chat_ids or [],
         webhook_url=body.webhook_url,
     )
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_auth_event(
+            "auth.channel_connected", "Telegram bot connected",
+            detail={"channel": "telegram", "mode": body.mode},
+        )
+    except Exception:
+        pass
     return ApiResponse(data=result)
 
 
@@ -47,4 +55,12 @@ async def detect_chat_id():
 @router.delete("/telegram/disconnect", response_model=ApiResponse)
 async def disconnect_telegram():
     result = await channel_svc.disconnect_telegram()
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_auth_event(
+            "auth.channel_disconnected", "Telegram bot disconnected",
+            detail={"channel": "telegram"},
+        )
+    except Exception:
+        pass
     return ApiResponse(data=result)

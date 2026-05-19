@@ -172,12 +172,13 @@ def _extract_mandate_summary(content: str, max_lines: int = 30) -> str:
     return "\n".join(summary_lines)
 
 
-# ── Public helper for chat prompt injection ────────────────────
+# ── Public helpers for governance prompt injection ─────────────
 
 def get_governance_context() -> dict:
     """Return key rules and mandate summary for system prompt injection.
     
-    Called by the Shogun chat handler to inject governance context.
+    Called by any LLM execution path (Shogun chat, Samurai spawns, missions)
+    to ensure constitutional governance is always enforced.
     """
     constitution_content = _ensure_file(CONSTITUTION_PATH, DEFAULT_CONSTITUTION)
     mandate_content = _ensure_file(MANDATE_PATH, DEFAULT_MANDATE)
@@ -193,6 +194,22 @@ def get_governance_context() -> dict:
         "rules_text": rules_text,
         "mandate_summary": mandate_summary,
     }
+
+
+def build_governance_prompt_block() -> str:
+    """Return a pre-formatted system prompt section for governance injection.
+
+    This is the canonical way to inject constitutional directives and the
+    active mandate into any LLM system prompt — whether for the Shogun,
+    Samurai sub-agents, or autonomous mission execution.
+    """
+    gov = get_governance_context()
+    return (
+        "CONSTITUTIONAL DIRECTIVES (from Kaizen — you must follow these):\n"
+        f"{gov['rules_text']}\n\n"
+        "ACTIVE MANDATE:\n"
+        f"{gov['mandate_summary']}"
+    )
 
 
 # ── Constitution endpoints ─────────────────────────────────────
@@ -244,6 +261,15 @@ async def save_constitution(body: ConstitutionBody):
         session.add(revision)
         await session.commit()
 
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_system_event(
+            "system.config_changed", f"Constitution updated (v{max_ver + 1})",
+            detail={"document": "constitution", "version": max_ver + 1, "summary": body.change_summary},
+        )
+    except Exception:
+        pass
+
     return ApiResponse(data={
         "content": body.content,
         "valid": True,
@@ -291,6 +317,15 @@ async def save_mandate(body: MandateBody):
         )
         session.add(revision)
         await session.commit()
+
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_system_event(
+            "system.config_changed", f"Mandate updated (v{max_ver + 1})",
+            detail={"document": "mandate", "version": max_ver + 1, "summary": body.change_summary},
+        )
+    except Exception:
+        pass
 
     return ApiResponse(data={
         "content": body.content,

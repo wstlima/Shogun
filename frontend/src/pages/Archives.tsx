@@ -30,8 +30,8 @@ import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
-const API = 'http://localhost:8000/api/v1/memory';
-const AGENTS_API = 'http://localhost:8000/api/v1/agents';
+const API = '/api/v1/memory';
+const AGENTS_API = '/api/v1/agents';
 
 type MemoryCategory = 'all' | 'episodic' | 'semantic' | 'procedural' | 'persona' | 'skills';
 
