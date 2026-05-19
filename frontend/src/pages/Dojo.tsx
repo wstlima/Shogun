@@ -92,6 +92,11 @@ export function Dojo() {
   // ── Transcript ─────────────────────────────────────────────
   const [transcript, setTranscript] = useState<any>(null);
 
+  // ── Skill Install ───────────────────────────────────────────
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installMessage, setInstallMessage] = useState<{type: 'success' | 'error' | 'info', text: string} | null>(null);
+  const [installedSkills, setInstalledSkills] = useState<Set<string>>(new Set());
+
   // ── Data Fetching ──────────────────────────────────────────
 
   const fetchStats = useCallback(async () => {
@@ -217,14 +222,18 @@ export function Dojo() {
     setExamAnswers({});
     setExamResult(null);
     try {
-      // Step 1: Find the test
+      // Step 1: Find the test (may include questions directly)
       const testRes = await axios.get('/api/v1/dojo/openclaw/exams/find', { params: { skill_id: skillId } });
       const test = testRes.data.data;
       setExamTest(test);
-      // Step 2: Get questions
-      const qRes = await axios.get(`/api/v1/dojo/openclaw/exams/${test.id}/questions`);
-      const exam = qRes.data.data;
-      setExamQuestions(exam.questions || []);
+      // Step 2: Use questions from find_test if available, otherwise fetch separately
+      let questions = test.questions || [];
+      if (questions.length === 0) {
+        const qRes = await axios.get(`/api/v1/dojo/openclaw/exams/${test.id}/questions`);
+        const exam = qRes.data.data;
+        questions = exam.questions || exam || [];
+      }
+      setExamQuestions(Array.isArray(questions) ? questions : []);
       setExamMode('reviewing');
     } catch (error: any) {
       setExamError(error.response?.data?.detail || 'Could not load exam. Check your API key in credentials.');
@@ -268,6 +277,37 @@ export function Dojo() {
     setExamError(null);
   };
 
+  // ── Skill Install ────────────────────────────────────────────
+
+  const handleInstallSkill = async (skill: any) => {
+    setInstalling(skill.id);
+    setInstallMessage(null);
+    try {
+      const res = await axios.post('/api/v1/dojo/openclaw/install', {
+        openclaw_skill_id: skill.id,
+        skill_name: skill.name,
+        slug: skill.slug || '',
+        version: skill.version || '1.0.0',
+        risk_tier: skill.risk_tier || 'standard',
+        description: skill.description || '',
+        permissions: skill.permissions || {},
+        capabilities: skill.capabilities || [],
+      });
+      const data = res.data.data;
+      if (data.already_installed) {
+        setInstallMessage({ type: 'info', text: `${skill.name} is already installed.` });
+      } else {
+        setInstallMessage({ type: 'success', text: `${skill.name} installed successfully!` });
+      }
+      setInstalledSkills(prev => new Set(prev).add(skill.id));
+    } catch (error: any) {
+      setInstallMessage({ type: 'error', text: error.response?.data?.detail || 'Install failed.' });
+    } finally {
+      setInstalling(null);
+      setTimeout(() => setInstallMessage(null), 4000);
+    }
+  };
+
   // ── Local Filtering ────────────────────────────────────────
 
   const filteredSkills = skills.filter(s => {
@@ -301,6 +341,20 @@ export function Dojo() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
+      {/* ── Install Toast ────────────────────────────────── */}
+      {installMessage && (
+        <div className={cn(
+          "fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-bold animate-in slide-in-from-top duration-300 flex items-center gap-3",
+          installMessage.type === 'success' ? "bg-green-500/90 text-white" :
+          installMessage.type === 'info' ? "bg-shogun-blue/90 text-white" :
+          "bg-red-500/90 text-white"
+        )}>
+          {installMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> :
+           installMessage.type === 'info' ? <AlertCircle className="w-4 h-4" /> :
+           <X className="w-4 h-4" />}
+          {installMessage.text}
+        </div>
+      )}
       {/* ── Header ────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -634,8 +688,15 @@ export function Dojo() {
                               <div className="w-12 h-12 bg-[#050508] border border-shogun-border rounded-xl flex items-center justify-center text-shogun-gold group-hover:bg-shogun-gold/10 transition-colors">
                                  <Book className="w-6 h-6" />
                               </div>
-                              <div className="flex flex-col items-end">
-                                 <code className="text-[9px] bg-shogun-card px-1.5 py-0.5 rounded border border-shogun-border text-shogun-subdued">v{skill.version}</code>
+                              <div className="flex flex-col items-end gap-1">
+                                 <div className="flex items-center gap-1.5">
+                                   {installedSkills.has(skill.id) && (
+                                     <span className="text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 bg-green-500/15 text-green-400 rounded border border-green-500/30 flex items-center gap-1">
+                                       <CheckCircle2 className="w-2.5 h-2.5" /> Installed
+                                     </span>
+                                   )}
+                                   <code className="text-[9px] bg-shogun-card px-1.5 py-0.5 rounded border border-shogun-border text-shogun-subdued">v{skill.version}</code>
+                                 </div>
                                  <span className={cn(
                                    "text-[8px] font-bold uppercase tracking-widest mt-1",
                                    skill.risk_tier === 'shrine' ? 'text-shogun-gold' : skill.risk_tier === 'tactical' ? 'text-shogun-blue' : skill.risk_tier === 'elevated' ? 'text-orange-400' : 'text-green-400'
@@ -656,8 +717,11 @@ export function Dojo() {
                                  {skill.permissions?.filesystem_read && <Book className="w-3 h-3 text-purple-400" />}
                                  {skill.permissions?.credentials && <Lock className="w-3 h-3 text-orange-400" />}
                               </div>
-                              <div className="flex items-center gap-1 text-[10px] font-mono text-shogun-subdued group-hover:text-shogun-gold transition-colors">
-                                 <Plus className="w-3 h-3" /> Install
+                              <div
+                                 onClick={(e) => { e.stopPropagation(); if (!installedSkills.has(skill.id)) handleInstallSkill(skill); }}
+                                 className={cn("flex items-center gap-1 text-[10px] font-mono transition-colors", installedSkills.has(skill.id) ? "text-green-400" : installing === skill.id ? "text-shogun-gold animate-pulse cursor-pointer" : "text-shogun-subdued group-hover:text-shogun-gold cursor-pointer")}
+                              >
+                                 {installedSkills.has(skill.id) ? <><CheckCircle2 className="w-3 h-3" /> Installed</> : installing === skill.id ? <><Loader2 className="w-3 h-3 animate-spin" /> Installing…</> : <><Plus className="w-3 h-3" /> + Install</>}
                               </div>
                            </div>
                          </div>
@@ -855,7 +919,7 @@ export function Dojo() {
                    ) : (
                      <>
                        {/* Achievement Summary */}
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                          <div className="shogun-card text-center">
                            <Award className="w-8 h-8 text-shogun-gold mx-auto mb-2" />
                            <p className="text-2xl font-bold text-shogun-gold">{achievements.badges?.length || 0}</p>
@@ -868,9 +932,14 @@ export function Dojo() {
                          </div>
                          <div className="shogun-card text-center">
                            <Star className="w-8 h-8 text-shogun-blue mx-auto mb-2" />
-                           <p className="text-2xl font-bold text-shogun-blue">{achievements.skills_completed || 0}</p>
+                           <p className="text-2xl font-bold text-shogun-blue">{achievements.skills_installed ?? achievements.skills_completed ?? 0}</p>
                            <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold">Skills Installed</p>
                          </div>
+                          <div className="shogun-card text-center">
+                            <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
+                            <p className="text-2xl font-bold text-green-400">{achievements.exams_passed || 0}</p>
+                            <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold">Exams Passed</p>
+                          </div>
                        </div>
 
                        {/* Earned Badges */}
@@ -1047,8 +1116,17 @@ export function Dojo() {
                         >
                           <GraduationCap className="w-5 h-5" /> {t('dojo.take_exam', 'Take Certification Exam')}
                         </button>
-                        <button className="w-full py-3 bg-shogun-card border border-shogun-border text-shogun-subdued hover:text-shogun-text font-bold text-xs uppercase tracking-[0.2em] rounded-xl transition-all flex items-center justify-center gap-3">
-                          <Plus className="w-5 h-5" /> Install to Shogun Prime
+                        <button
+                          onClick={() => !installedSkills.has(selectedSkill?.id) && handleInstallSkill(selectedSkill)}
+                          disabled={installing === selectedSkill?.id || installedSkills.has(selectedSkill?.id)}
+                          className={cn("w-full py-3 bg-shogun-card border font-bold text-xs uppercase tracking-[0.2em] rounded-xl transition-all flex items-center justify-center gap-3",
+                            installedSkills.has(selectedSkill?.id) ? "border-green-500/30 text-green-400" :
+                            installing === selectedSkill?.id ? "border-shogun-border text-shogun-gold animate-pulse" :
+                            "border-shogun-border text-shogun-subdued hover:text-shogun-text")}
+                        >
+                          {installedSkills.has(selectedSkill?.id) ? <><CheckCircle2 className="w-5 h-5" /> Installed</> :
+                           installing === selectedSkill?.id ? <><Loader2 className="w-5 h-5 animate-spin" /> Installing…</> :
+                           <><Plus className="w-5 h-5" /> Install to {registrationStatus?.agent_name || 'Shogun'}</>}
                         </button>
                         <p className="text-[9px] text-shogun-subdued text-center italic">
                           Take the 30–50 question exam to get instantly certified by OpenClaw College.
@@ -1122,7 +1200,7 @@ export function Dojo() {
                     </button>
                     <button
                       onClick={handleSubmitExam}
-                      disabled={Object.keys(examAnswers).length === 0}
+                      disabled={examQuestions.length > 0 && Object.keys(examAnswers).length === 0}
                       className="flex-1 py-3 bg-shogun-gold hover:bg-shogun-gold/90 text-black font-bold text-xs uppercase tracking-[0.2em] rounded-xl shadow-shogun transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       <CheckCircle2 className="w-4 h-4" /> Submit Exam

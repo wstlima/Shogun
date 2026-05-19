@@ -281,25 +281,46 @@ async def register_with_openclaw(
             "openclaw_agent_id": agent.openclaw_agent_id,
         })
 
-    # Register with the College
+    # Generate RSA-2048 key pair for cryptographic identity
+    from shogun.integrations.openclaw_client import OpenClawClient
+    pub_pem, priv_pem = OpenClawClient.generate_key_pair()
+
+    # Step 1: Register with the College (sends real public key)
     async with get_openclaw_client() as client:
         resp_data = await client.register_agent(
             name=body.agent_name,
-            capabilities=body.capabilities,
+            public_key=pub_pem,
         )
 
-    # The College returns { id, name, runtime, ... }
-    openclaw_id = resp_data.get("id") or resp_data.get("agentId")
-    if not openclaw_id:
-        raise HTTPException(status_code=502, detail="Registration succeeded but no ID returned")
+    # The College returns { message, membershipId, profileUrl }
+    membership_id = resp_data.get("membershipId")
+    if not membership_id:
+        raise HTTPException(status_code=502, detail="Registration succeeded but no membershipId returned")
 
-    agent.openclaw_agent_id = str(openclaw_id)
+    # Step 2: Cryptographically verify identity (proves we own the private key)
+    verify_result = None
+    try:
+        async with get_openclaw_client() as client:
+            verify_result = await client.verify_agent(membership_id, priv_pem)
+        logger.info(f"Agent verified with College: {verify_result.get('trustStatus')}")
+    except Exception as e:
+        logger.warning(f"Agent verification failed (non-fatal): {e}")
+
+    # Step 3: Resolve the internal agent ID the College uses for lookups
+    async with get_openclaw_client() as client:
+        internal_id = await client.resolve_agent_id(membership_id)
+
+    # Persist everything locally
+    agent.openclaw_agent_id = internal_id or membership_id
+    agent.openclaw_private_key = priv_pem
     await db.commit()
     await db.refresh(agent)
 
     return ApiResponse(data={
         "registered": True,
         "openclaw_agent_id": agent.openclaw_agent_id,
+        "membership_id": membership_id,
+        "trust_status": verify_result.get("trustStatus") if verify_result else "unverified",
         "agent_name": agent.name,
         "college_response": resp_data,
     })
@@ -342,6 +363,25 @@ async def get_achievements(db: AsyncSession = Depends(get_db)):
             "note": "Agent record not found on College — may have been removed.",
         })
 
+    # Count locally installed skills
+    from sqlalchemy import func as sa_func
+    from shogun.db.models.skill_installation import SkillInstallation
+    installed_result = await db.execute(
+        select(sa_func.count()).select_from(SkillInstallation).where(
+            SkillInstallation.status == "installed"
+        )
+    )
+    installed_count = installed_result.scalar() or 0
+
+    # Count exams passed from College test results
+    test_results = agent_data.get("testResults", [])
+    exams_passed = sum(
+        1 for tr in test_results
+        if tr.get("verificationStatus") == "approved"
+        or tr.get("passed") is True
+        or (tr.get("score", 0) >= tr.get("passThreshold", 85))
+    )
+
     return ApiResponse(data={
         "registered": True,
         "openclaw_agent_id": agent.openclaw_agent_id,
@@ -349,6 +389,9 @@ async def get_achievements(db: AsyncSession = Depends(get_db)):
         "badges": agent_data.get("earnedBadges", []),
         "specializations_earned": agent_data.get("earnedSpecializations", []),
         "skills_completed": agent_data.get("skillsCompleted", 0),
+        "skills_installed": installed_count,
+        "exams_passed": exams_passed,
+        "exams_total": len(test_results),
         "feedback_count": agent_data.get("feedbackCount", 0),
         "created_at": agent_data.get("createdAt"),
     })
@@ -393,6 +436,113 @@ async def add_skill_from_url(body: AddUrlRequest):
         "repo": repo,
         "skill_type": body.skill_type,
         "message": f"Skill source '{owner}/{repo}' registered. The agent will process it on the next Bushido cycle.",
+    })
+
+
+# ── Skill Installation ────────────────────────────────────────
+
+class InstallSkillRequest(BaseModel):
+    openclaw_skill_id: str = Field(..., min_length=1)
+    skill_name: str = Field(..., min_length=1)
+    slug: str = Field(default="")
+    version: str = Field(default="1.0.0")
+    risk_tier: str = Field(default="standard")
+    description: str = Field(default="")
+    permissions: dict = Field(default_factory=dict)
+    capabilities: list[str] = Field(default_factory=list)
+
+
+@router.post("/openclaw/install", response_model=ApiResponse)
+async def install_openclaw_skill(
+    body: InstallSkillRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Install an OpenClaw College skill into the local Shogun system.
+
+    Creates a Skill record and a SkillInstallation record.
+    If the skill was already installed, returns the existing record.
+    """
+    from datetime import datetime, timezone
+
+    from shogun.db.models.skill import Skill
+    from shogun.db.models.skill_installation import SkillInstallation
+    from shogun.db.models.skill_source import SkillSource
+
+    # Ensure an OpenClaw skill source exists
+    result = await db.execute(
+        select(SkillSource).where(SkillSource.slug == OPENCLAW_SOURCE_SLUG)
+    )
+    source = result.scalars().first()
+    if not source:
+        source = SkillSource(
+            name=OPENCLAW_SOURCE_NAME,
+            slug=OPENCLAW_SOURCE_SLUG,
+            source_type="registry",
+            base_url=OPENCLAW_BASE_URL,
+            default_enabled=True,
+            trust_level="certified",
+            sync_policy="manual_refresh",
+            status="active",
+        )
+        db.add(source)
+        await db.flush()
+
+    # Build a slug from the skill name if not provided
+    slug = body.slug or body.skill_name.lower().replace(" ", "-").replace("&", "and")[:100]
+
+    # Check for duplicate install
+    result = await db.execute(
+        select(Skill).where(Skill.slug == slug, Skill.source_id == source.id)
+    )
+    existing = result.scalars().first()
+    if existing and not existing.is_deleted:
+        return ApiResponse(data={
+            "already_installed": True,
+            "skill_id": str(existing.id),
+            "skill_name": existing.name,
+        })
+
+    # Create the Skill record
+    skill = Skill(
+        source_id=source.id,
+        name=body.skill_name,
+        slug=slug,
+        version=body.version,
+        skill_type="single",
+        manifest={
+            "openclaw_id": body.openclaw_skill_id,
+            "risk_tier": body.risk_tier,
+            "description": body.description,
+            "permissions": body.permissions,
+            "capabilities": body.capabilities,
+        },
+        risk_score={"shrine": 0.9, "elevated": 0.6, "tactical": 0.3}.get(body.risk_tier, 0.1),
+        trust_score=80,
+        status="installed",
+    )
+    db.add(skill)
+    await db.flush()
+
+    # Create the installation record
+    installation = SkillInstallation(
+        skill_id=skill.id,
+        target_type="global",
+        status="installed",
+        installed_version=body.version,
+        auto_update=False,
+        quarantine_status="cleared",
+        installed_at=datetime.now(timezone.utc),
+        installed_by="dojo",
+    )
+    db.add(installation)
+    await db.commit()
+
+    return ApiResponse(data={
+        "installed": True,
+        "skill_id": str(skill.id),
+        "skill_name": skill.name,
+        "version": skill.version,
+        "installation_id": str(installation.id),
     })
 
 

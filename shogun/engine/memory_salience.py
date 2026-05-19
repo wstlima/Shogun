@@ -159,6 +159,9 @@ def compute_decayed_relevance(
         return max(current_relevance * 0.85, RELEVANCE_FLOOR)
 
     half_life_hours = DECAY_HALF_LIFE_HOURS.get(decay_class, 72.0)
+    # Normalize naive datetimes from SQLite to UTC-aware
+    if last_confirmed_at.tzinfo is None:
+        last_confirmed_at = last_confirmed_at.replace(tzinfo=timezone.utc)
     elapsed_hours = (now - last_confirmed_at).total_seconds() / 3600.0
 
     if elapsed_hours <= 0:
@@ -236,6 +239,9 @@ def compute_recency_boost(
     if now is None:
         now = datetime.now(timezone.utc)
 
+    # Normalize naive datetimes from SQLite to UTC-aware
+    if last_accessed_at.tzinfo is None:
+        last_accessed_at = last_accessed_at.replace(tzinfo=timezone.utc)
     elapsed_hours = (now - last_accessed_at).total_seconds() / 3600.0
     if elapsed_hours <= 0:
         return 1.0

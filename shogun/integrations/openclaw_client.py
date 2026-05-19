@@ -267,22 +267,123 @@ class OpenClawClient:
     async def register_agent(
         self,
         name: str,
-        runtime: str = "shogun",
-        capabilities: list[str] | None = None,
+        public_key: str,
     ) -> dict[str, Any]:
         """Register the Shogun agent with OpenClaw College.
 
-        Returns the full registration response which includes the
-        assigned ``id`` on the College platform.
+        The College API expects ``agentName`` and ``publicKey``.
+        Returns ``{ message, membershipId, profileUrl }``.
         """
         payload = {
-            "name": name,
-            "runtime": runtime,
-            "capabilities": capabilities or ["browse", "learn", "feedback"],
+            "agentName": name,
+            "publicKey": public_key,
         }
         resp = await self.client.post(f"{self.base_url}/v1/agents/register", json=payload)
         resp.raise_for_status()
         return resp.json()
+
+    async def resolve_agent_id(self, membership_id: str) -> str | None:
+        """Look up the internal agent ``id`` from a ``membershipId``.
+
+        After registration, the College returns a ``membershipId`` (e.g.
+        ``OCC-AGENT-HER-XXXX``).  Downstream endpoints like achievements
+        and exams require the internal ``id`` (e.g. ``ag-2afee74b``).
+        This method queries the agents list to resolve it.
+        """
+        try:
+            resp = await self.client.get(f"{self.base_url}/agents")
+            resp.raise_for_status()
+            agents = resp.json()
+            for agent in agents:
+                if agent.get("membershipId") == membership_id:
+                    return agent.get("id")
+        except Exception as e:
+            logger.warning(f"Failed to resolve agent ID for {membership_id}: {e}")
+        return None
+
+    async def verify_agent(
+        self,
+        membership_id: str,
+        private_key_pem: str,
+    ) -> dict[str, Any]:
+        """Cryptographically verify agent identity with the College.
+
+        Signs a payload with the agent's RSA private key and sends it to
+        the ``/verify`` endpoint.  On success the College upgrades
+        ``trustStatus`` from ``unverified`` → ``certified``.
+
+        Signature payload: ``METHOD + URL_PATH + TIMESTAMP + NONCE + BODY``
+        Algorithm: RSA-PKCS1v15-SHA256
+        """
+        import json
+        import secrets
+        from datetime import datetime, timezone
+
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+
+        # Load private key from PEM
+        private_key = serialization.load_pem_private_key(
+            private_key_pem.encode("utf-8"),
+            password=None,
+        )
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        nonce = secrets.token_hex(16)
+        method = "POST"
+        url_path = f"/api/v1/agents/{membership_id}/verify"
+        body = json.dumps({})
+
+        # Construct and sign the payload
+        sig_payload = f"{method}{url_path}{timestamp}{nonce}{body}"
+        signature = private_key.sign(
+            sig_payload.encode("utf-8"),
+            asym_padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-occ-membership-id": membership_id,
+            "x-occ-timestamp": timestamp,
+            "x-occ-nonce": nonce,
+            "x-occ-signature": signature.hex(),
+        }
+
+        resp = await self.client.post(
+            f"{self.base_url}/v1/agents/{membership_id}/verify",
+            content=body,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # ── Key Generation ───────────────────────────────────────
+
+    @staticmethod
+    def generate_key_pair() -> tuple[str, str]:
+        """Generate an RSA-2048 key pair for College registration.
+
+        Returns:
+            (public_key_pem, private_key_pem) — both as PEM strings.
+        """
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+        pub_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        priv_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode()
+        return pub_pem.strip(), priv_pem.strip()
 
     # ── Agent Lookup ─────────────────────────────────────────
 

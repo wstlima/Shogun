@@ -199,13 +199,21 @@ class MemoryService(BaseService[MemoryRecord]):
         # 4. Rerank using salience engine
         ranked = rerank_candidates(candidates, weight_overrides=weight_overrides)
 
-        # 5. Return top-N with full score breakdown
-        return [
-            {
+        # 5. Return top-N with full score breakdown + all fields the frontend needs
+        results_out = []
+        for c in ranked[:limit]:
+            record = records.get(c.memory_id)
+            results_out.append({
+                "id": c.memory_id,
                 "memory_id": c.memory_id,
                 "memory_type": c.memory_type,
+                "agent_id": str(record.agent_id) if record else None,
                 "title": c.title,
                 "content": c.content,
+                "summary": record.summary if record else None,
+                "relevance_score": round(c.relevance_score, 4),
+                "importance_score": round(c.importance_score, 4),
+                "confidence_score": round(c.confidence_score, 4),
                 "scores": {
                     "semantic_similarity": round(c.semantic_similarity, 4),
                     "relevance_score": round(c.relevance_score, 4),
@@ -217,11 +225,15 @@ class MemoryService(BaseService[MemoryRecord]):
                 "decay_class": c.decay_class,
                 "access_count": c.access_count,
                 "successful_use_count": c.successful_use_count,
+                "recall_count": record.recall_count if record else 0,
                 "is_pinned": c.is_pinned,
+                "is_archived": False,
+                "created_at": record.created_at.isoformat() if record and record.created_at else None,
+                "updated_at": record.updated_at.isoformat() if record and record.updated_at else None,
+                "last_accessed_at": record.last_accessed_at.isoformat() if record and record.last_accessed_at else None,
                 "last_confirmed_at": c.last_confirmed_at.isoformat() if c.last_confirmed_at else None,
-            }
-            for c in ranked[:limit]
-        ]
+            })
+        return results_out
 
     # ── Forget with Qdrant cleanup ──────────────────────────────
 

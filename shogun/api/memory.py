@@ -148,15 +148,24 @@ async def search_memory(
       3. Apply salience reranking (decay × importance × recency)
       4. Return scored, ranked results
     """
-    results = await svc.search(
-        query=body.query,
-        agent_id=body.agent_id,
-        memory_types=[t.value for t in body.memory_types] if body.memory_types else None,
-        min_importance=body.filters.min_importance if body.filters else None,
-        pinned_only=body.filters.pinned_only if body.filters else False,
-        limit=body.limit,
-        weight_overrides=body.weight_overrides,
-    )
+    import logging, traceback
+    logger = logging.getLogger(__name__)
+    try:
+        results = await svc.search(
+            query=body.query,
+            agent_id=body.agent_id,
+            memory_types=[t.value for t in body.memory_types] if body.memory_types else None,
+            min_importance=body.filters.min_importance if body.filters else None,
+            pinned_only=body.filters.pinned_only if body.filters else False,
+            limit=body.limit,
+            weight_overrides=body.weight_overrides,
+        )
+    except Exception as e:
+        logger.error("Memory search failed: %s\n%s", e, traceback.format_exc())
+        return ApiResponse(
+            data=[],
+            meta={"query": body.query, "count": 0, "error": str(e)},
+        )
 
     return ApiResponse(
         data=results,
