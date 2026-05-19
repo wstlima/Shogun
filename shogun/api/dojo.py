@@ -311,9 +311,11 @@ async def register_with_openclaw(
     async with get_openclaw_client() as client:
         internal_id = await client.resolve_agent_id(membership_id)
 
-    # Persist everything locally
+    # Persist everything locally (including the platform API key for write ops)
+    from shogun.integrations.openclaw_client import OPENCLAW_API_KEY
     agent.openclaw_agent_id = internal_id or membership_id
     agent.openclaw_private_key = priv_pem
+    agent.openclaw_api_key = OPENCLAW_API_KEY
     await db.commit()
     await db.refresh(agent)
 

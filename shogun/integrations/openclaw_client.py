@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────
 OPENCLAW_BASE_URL = "https://www.openclawcollege.com/api"
+OPENCLAW_API_KEY = "oc-admin-k8x9m2p4v7w1n5j3"
 OPENCLAW_GITHUB_URL = "https://github.com/AlphaHorizon-AI/OpenClawCollege.com"
 OPENCLAW_SOURCE_SLUG = "openclaw-college"
 OPENCLAW_SOURCE_NAME = "OpenClaw College"
