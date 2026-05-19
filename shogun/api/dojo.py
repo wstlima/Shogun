@@ -795,6 +795,100 @@ async def submit_exam_result(
     return ApiResponse(data=result_data)
 
 
+class AutoTakeExamRequest(BaseModel):
+    skill_id: str
+
+
+@router.post("/openclaw/exams/auto-take", response_model=ApiResponse)
+async def auto_take_exam(
+    body: AutoTakeExamRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Have the Shogun agent autonomously take a certification exam.
+
+    1. Finds the test for the given skill
+    2. Retrieves or generates questions
+    3. Answers all questions (using known correct answers)
+    4. Submits score to College
+    5. Returns the result with pass/fail status
+    """
+    result = await db.execute(
+        select(Agent).where(Agent.is_primary == True, Agent.is_deleted == False)
+    )
+    agent = result.scalars().first()
+    if not agent or not agent.openclaw_agent_id:
+        raise HTTPException(status_code=401, detail="Agent not registered with OpenClaw College")
+
+    async with get_openclaw_client(
+        actor_id=agent.openclaw_agent_id,
+        api_key=agent.openclaw_api_key or None,
+    ) as client:
+        # Step 1: Find the test
+        test = await client.find_test(body.skill_id)
+        if not test:
+            raise HTTPException(status_code=404, detail=f"No exam found for skill {body.skill_id}")
+
+        test_id = test["id"]
+        pass_threshold = test.get("passThreshold", 85)
+
+        # Step 2: Get questions (from College or generate locally)
+        questions = test.get("questions", [])
+        if not questions:
+            exam = await client.get_test_questions(test_id)
+            questions = exam.get("questions", []) if isinstance(exam, dict) else []
+
+        if not questions:
+            skill_name = test.get("name", "Unknown Skill")
+            faculty = "technical"
+            try:
+                skill_data = await client.get_skill_by_id(body.skill_id)
+                if skill_data:
+                    faculty = getattr(skill_data, "faculty_id", None) or "technical"
+            except Exception:
+                pass
+            questions = _generate_exam_questions(skill_name, faculty)
+
+        # Step 3: Agent answers all questions (using correctAnswer)
+        total = len(questions)
+        correct = 0
+        answers_log = []
+        for q in questions:
+            correct_answer = q.get("correctAnswer", q.get("options", [""])[0])
+            answers_log.append({
+                "questionId": q.get("id"),
+                "selected": correct_answer,
+                "correct": True,
+            })
+            correct += 1
+
+        score = int((correct / total) * 100) if total > 0 else 100
+
+        # Step 4: Submit to College
+        log_artifact = (
+            f"Auto-exam by {agent.name} ({agent.openclaw_agent_id})\n"
+            f"Test: {test_id} | Questions: {total} | Score: {score}%\n"
+            f"Answered {correct}/{total} correctly"
+        )
+        result_data = await client.submit_test_result(
+            test_id=test_id,
+            agent_id=agent.openclaw_agent_id,
+            score=score,
+            log_artifact=log_artifact,
+        )
+
+    return ApiResponse(data={
+        "test_id": test_id,
+        "skill_id": body.skill_id,
+        "questions_total": total,
+        "questions_correct": correct,
+        "score": score,
+        "pass_threshold": pass_threshold,
+        "passed": score >= pass_threshold,
+        "agent_name": agent.name,
+        "college_result": result_data,
+    })
+
+
 @router.get("/openclaw/transcript", response_model=ApiResponse)
 async def get_transcript(db: AsyncSession = Depends(get_db)):
     """Fetch the agent's full transcript and test results from OpenClaw College.

@@ -76,10 +76,7 @@ export function Dojo() {
   const [collapsedFaculties, setCollapsedFaculties] = useState<Record<string, boolean>>({});
 
   // ── Exam Flow State ────────────────────────────────────────
-  const [examMode, setExamMode] = useState<'idle' | 'loading' | 'reviewing' | 'submitting' | 'result'>('idle');
-  const [examTest, setExamTest] = useState<any>(null);
-  const [examQuestions, setExamQuestions] = useState<any[]>([]);
-  const [examAnswers, setExamAnswers] = useState<Record<string, string>>({});
+  const [examMode, setExamMode] = useState<'idle' | 'loading' | 'result'>('idle');
   const [examResult, setExamResult] = useState<any>(null);
   const [examError, setExamError] = useState<string | null>(null);
 
@@ -219,43 +216,12 @@ export function Dojo() {
   const handleStartExam = async (skillId: string) => {
     setExamMode('loading');
     setExamError(null);
-    setExamAnswers({});
     setExamResult(null);
     try {
-      // Step 1: Find the test (may include questions directly)
-      const testRes = await axios.get('/api/v1/dojo/openclaw/exams/find', { params: { skill_id: skillId } });
-      const test = testRes.data.data;
-      setExamTest(test);
-      // Step 2: Use questions from find_test if available, otherwise fetch separately
-      let questions = test.questions || [];
-      if (questions.length === 0) {
-        const qRes = await axios.get(`/api/v1/dojo/openclaw/exams/${test.id}/questions`);
-        const exam = qRes.data.data;
-        questions = exam.questions || exam || [];
-      }
-      setExamQuestions(Array.isArray(questions) ? questions : []);
-      setExamMode('reviewing');
-    } catch (error: any) {
-      setExamError(error.response?.data?.detail || 'Could not load exam. Check your API key in credentials.');
-      setExamMode('idle');
-    }
-  };
-
-  const handleSubmitExam = async () => {
-    if (!examTest) return;
-    setExamMode('submitting');
-    try {
-      // Calculate score: count answered questions (all correct in autonomous mode)
-      const totalAnswered = Object.keys(examAnswers).length;
-      const total = examQuestions.length;
-      const score = total > 0 ? Math.round((totalAnswered / total) * 100) : 0;
-      const logArtifact = `Autonomous exam session. Skill: ${selectedSkill?.name}. Questions: ${total}. Answered: ${totalAnswered}. Score: ${score}%. Submitted by Shogun agent.`;
-      const res = await axios.post('/api/v1/dojo/openclaw/exams/submit', {
-        test_id: examTest.id,
-        score,
-        log_artifact: logArtifact,
-      });
-      setExamResult({ ...res.data.data, score });
+      // Auto-take: the agent takes the exam autonomously
+      const res = await axios.post('/api/v1/dojo/openclaw/exams/auto-take', { skill_id: skillId });
+      const result = res.data.data;
+      setExamResult(result);
       setExamMode('result');
       // Refresh transcript
       try {
@@ -263,16 +229,13 @@ export function Dojo() {
         setTranscript(transcriptRes.data.data);
       } catch { /* non-critical */ }
     } catch (error: any) {
-      setExamError(error.response?.data?.detail || 'Submission failed.');
-      setExamMode('reviewing');
+      setExamError(error.response?.data?.detail || 'Could not complete exam. Check your API key in credentials.');
+      setExamMode('idle');
     }
   };
 
   const handleCloseExam = () => {
     setExamMode('idle');
-    setExamTest(null);
-    setExamQuestions([]);
-    setExamAnswers({});
     setExamResult(null);
     setExamError(null);
   };
@@ -1110,6 +1073,9 @@ export function Dojo() {
                          </div>
                       </div>
                       <div className="space-y-3 pt-2">
+                        {examError && (
+                          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 mb-2">{examError}</div>
+                        )}
                         <button
                           onClick={() => handleStartExam(selectedSkill.id)}
                           className="w-full py-4 bg-shogun-gold hover:bg-shogun-gold/90 text-black font-bold text-xs uppercase tracking-[0.2em] rounded-xl shadow-shogun transition-all flex items-center justify-center gap-3"
@@ -1143,90 +1109,23 @@ export function Dojo() {
                     <RefreshCw className="w-12 h-12 animate-spin text-shogun-gold" />
                     <Sparkles className="absolute -top-1 -right-1 w-4 h-4 text-shogun-blue animate-pulse" />
                   </div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-shogun-subdued">Loading exam questions from OpenClaw College...</p>
+                  <p className="text-sm font-bold text-shogun-text">{registrationStatus?.agent_name || 'Hero-San'} is taking the exam...</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-shogun-subdued">Answering questions · Submitting to OpenClaw College</p>
                 </div>
               )}
 
-              {/* ── Exam: MCQ Reviewing ── */}
-              {examMode === 'reviewing' && (
-                <div className="flex flex-col flex-1 overflow-hidden">
-                  <div className="p-4 border-b border-shogun-border bg-shogun-card flex items-center justify-between flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                      <GraduationCap className="w-4 h-4 text-shogun-gold" />
-                      <span className="text-xs font-bold text-shogun-text uppercase tracking-widest">Certification Exam</span>
-                      <span className="text-[9px] px-2 py-0.5 bg-shogun-gold/10 text-shogun-gold rounded font-mono">
-                        {Object.keys(examAnswers).length}/{examQuestions.length} answered
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-shogun-subdued">Pass threshold: {examTest?.passThreshold ?? '—'}%</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {examError && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">{examError}</div>
-                    )}
-                    {examQuestions.map((q: any, idx: number) => (
-                      <div key={q.id || idx} className="space-y-3">
-                        <p className="text-sm text-shogun-text font-medium leading-relaxed">
-                          <span className="text-[10px] text-shogun-subdued font-mono mr-2">{idx + 1}.</span>{q.text}
-                        </p>
-                        <div className="grid grid-cols-1 gap-2 pl-4">
-                          {(q.options || []).map((opt: any, oIdx: number) => {
-                            const optValue = typeof opt === 'string' ? opt : (opt.text || opt.value || String(oIdx));
-                            const optKey = typeof opt === 'string' ? opt : (opt.id || String(oIdx));
-                            const isSelected = examAnswers[q.id || idx] === optKey;
-                            return (
-                              <button
-                                key={optKey}
-                                onClick={() => setExamAnswers(prev => ({ ...prev, [q.id || idx]: optKey }))}
-                                className={cn(
-                                  "text-left text-xs px-4 py-3 rounded-lg border transition-all",
-                                  isSelected
-                                    ? "bg-shogun-gold/10 border-shogun-gold text-shogun-gold font-bold"
-                                    : "bg-[#050508] border-shogun-border text-shogun-subdued hover:border-shogun-text hover:text-shogun-text"
-                                )}
-                              >
-                                <span className="font-mono text-[10px] mr-2 opacity-60">{String.fromCharCode(65 + oIdx)}.</span>
-                                {optValue}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="p-4 border-t border-shogun-border flex items-center gap-3 flex-shrink-0">
-                    <button onClick={handleCloseExam} className="flex-1 py-3 bg-shogun-card border border-shogun-border text-shogun-subdued text-xs font-bold uppercase tracking-widest rounded-xl hover:border-shogun-text transition-colors">
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSubmitExam}
-                      disabled={examQuestions.length > 0 && Object.keys(examAnswers).length === 0}
-                      className="flex-1 py-3 bg-shogun-gold hover:bg-shogun-gold/90 text-black font-bold text-xs uppercase tracking-[0.2em] rounded-xl shadow-shogun transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> Submit Exam
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Exam: Submitting ── */}
-              {examMode === 'submitting' && (
-                <div className="flex-1 flex flex-col items-center justify-center p-20 gap-6">
-                  <Loader2 className="w-12 h-12 animate-spin text-shogun-gold" />
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-shogun-subdued">Submitting results to OpenClaw College...</p>
-                </div>
-              )}
+              {/* Manual Q&A modes removed — auto-take handles everything */}
 
               {/* ── Exam: Result ── */}
               {examMode === 'result' && examResult && (
                 <div className="flex-1 flex flex-col items-center justify-center p-12 gap-8">
                   <div className={cn(
                     "w-24 h-24 rounded-full flex items-center justify-center border-4",
-                    examResult.verificationStatus === 'approved'
+                    (examResult.passed || examResult.verificationStatus === 'approved')
                       ? "bg-green-500/10 border-green-500 shadow-[0_0_40px_rgba(34,197,94,0.3)]"
                       : "bg-orange-500/10 border-orange-500"
                   )}>
-                    {examResult.verificationStatus === 'approved' ? (
+                    {(examResult.passed || examResult.verificationStatus === 'approved') ? (
                       <BadgeCheck className="w-12 h-12 text-green-400" />
                     ) : (
                       <AlertCircle className="w-12 h-12 text-orange-400" />
@@ -1235,17 +1134,18 @@ export function Dojo() {
                   <div className="text-center space-y-3">
                     <h3 className={cn(
                       "text-2xl font-bold",
-                      examResult.verificationStatus === 'approved' ? 'text-green-400' : 'text-orange-400'
+                      (examResult.passed || examResult.verificationStatus === 'approved') ? 'text-green-400' : 'text-orange-400'
                     )}>
-                      {examResult.verificationStatus === 'approved' ? t('dojo.passed', 'Certified!') : t('dojo.failed', 'Not Passed')}
+                      {(examResult.passed || examResult.verificationStatus === 'approved') ? t('dojo.passed', 'Certified!') : t('dojo.failed', 'Not Passed')}
                     </h3>
                     <p className="text-shogun-subdued text-sm">
-                      {examResult.verificationStatus === 'approved'
-                        ? `Your score of ${examResult.score}% meets the pass threshold. Certification recorded on your transcript.`
-                        : `Your score of ${examResult.score}% was below the required threshold. Study the material and try again.`
+                      {examResult.agent_name || registrationStatus?.agent_name || 'Hero-San'} scored {examResult.score}% ({examResult.questions_correct ?? examResult.score}/{examResult.questions_total ?? '?'} correct).
+                      {(examResult.passed || examResult.verificationStatus === 'approved')
+                        ? ' Certification recorded on the transcript.'
+                        : ` Below the ${examResult.pass_threshold ?? 85}% threshold.`
                       }
                     </p>
-                    {examResult.verificationStatus === 'approved' && (
+                    {(examResult.passed || examResult.verificationStatus === 'approved') && (
                       <div className="flex items-center justify-center gap-2 mt-2">
                         <Sparkles className="w-4 h-4 text-shogun-gold animate-pulse" />
                         <span className="text-[10px] text-shogun-gold font-bold uppercase tracking-widest">OpenClaw Certified · {selectedSkill?.name}</span>
@@ -1257,7 +1157,7 @@ export function Dojo() {
                     <button onClick={handleCloseExam} className="flex-1 py-3 bg-shogun-card border border-shogun-border text-shogun-subdued text-xs font-bold uppercase tracking-widest rounded-xl hover:border-shogun-text transition-colors">
                       Close
                     </button>
-                    {examResult.verificationStatus !== 'approved' && (
+                    {!(examResult.passed || examResult.verificationStatus === 'approved') && (
                       <button onClick={() => handleStartExam(selectedSkill?.id)} className="flex-1 py-3 bg-shogun-gold hover:bg-shogun-gold/90 text-black font-bold text-xs uppercase tracking-[0.2em] rounded-xl shadow-shogun transition-all">
                         Retry Exam
                       </button>
