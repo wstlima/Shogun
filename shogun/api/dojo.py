@@ -614,6 +614,106 @@ async def find_skill_exam(
     return ApiResponse(data=test)
 
 
+# ── Local Question Generator (fallback when College strips questions) ──────
+
+import random
+
+def _generate_exam_questions(skill_name: str, faculty: str = "technical", count: int | None = None) -> list[dict]:
+    """Generate 30-50 MCQ questions locally when the College API doesn't serve them.
+
+    Mirrors the College's generateQuestionsForSkill() logic using faculty-aware
+    question templates and randomized option sets.
+    """
+    if count is None:
+        count = random.randint(30, 50)
+
+    templates = {
+        "technical": [
+            "Which approach best describes the implementation of {skill}?",
+            "What is the primary purpose of {skill} in a production system?",
+            "How does {skill} handle edge cases in distributed environments?",
+            "What metric is most relevant when evaluating {skill} performance?",
+            "Which design pattern is most commonly associated with {skill}?",
+            "What is the recommended testing strategy for {skill}?",
+            "How should error handling be implemented in {skill}?",
+            "What security consideration is most critical for {skill}?",
+            "Which integration method is preferred for {skill} in microservices?",
+            "What scaling strategy works best for {skill} under high load?",
+            "How does {skill} manage state consistency across nodes?",
+            "What is the correct deployment sequence for {skill}?",
+            "Which monitoring approach best suits {skill}?",
+            "How does {skill} ensure backward compatibility?",
+            "What data structure is most efficient for {skill} operations?",
+        ],
+        "human_wellbeing": [
+            "How does {skill} contribute to user wellbeing outcomes?",
+            "What ethical principle most applies to {skill}?",
+            "How should {skill} handle sensitive personal data?",
+            "What accessibility standard is most relevant to {skill}?",
+            "How does {skill} incorporate user feedback loops?",
+            "What cultural consideration is most important for {skill}?",
+            "How does {skill} balance personalization with privacy?",
+            "What outcome metric best measures {skill} effectiveness?",
+            "How should {skill} handle conflicting user preferences?",
+            "What consent mechanism is most appropriate for {skill}?",
+            "How does {skill} support diverse user populations?",
+            "What bias mitigation strategy is critical for {skill}?",
+            "How should {skill} communicate its limitations to users?",
+            "What safeguard prevents misuse of {skill}?",
+            "How does {skill} support user autonomy?",
+        ],
+        "business_professional": [
+            "What ROI metric is most relevant when deploying {skill}?",
+            "How does {skill} align with organizational objectives?",
+            "What risk assessment framework applies to {skill}?",
+            "How should {skill} be positioned in a stakeholder presentation?",
+            "What compliance requirement is most relevant to {skill}?",
+            "How does {skill} integrate with existing business processes?",
+            "What change management strategy supports {skill} adoption?",
+            "How should {skill} performance be reported to leadership?",
+            "What competitive advantage does {skill} provide?",
+            "How does {skill} impact organizational capability maturity?",
+            "What governance model best suits {skill} deployment?",
+            "How should {skill} be budgeted across fiscal periods?",
+            "What vendor evaluation criteria apply to {skill}?",
+            "How does {skill} affect regulatory standing?",
+            "What training approach ensures effective {skill} adoption?",
+        ],
+    }
+
+    option_sets = [
+        ["Implement a phased rollout with validation gates", "Deploy immediately with rollback capability",
+         "Run parallel systems during transition", "Defer until next planning cycle"],
+        ["Automated continuous monitoring with alerts", "Manual periodic review by specialists",
+         "Hybrid approach with escalation thresholds", "Event-driven reactive assessment"],
+        ["Strict isolation with controlled interfaces", "Open integration with shared state",
+         "Federated architecture with local autonomy", "Centralized orchestration with distributed execution"],
+        ["Prioritize throughput over latency", "Optimize for consistency over availability",
+         "Balance all factors based on SLA requirements", "Focus on cost efficiency above all"],
+        ["Version-controlled incremental updates", "Complete replacement with migration",
+         "Feature flags with gradual activation", "Blue-green deployment with instant cutover"],
+    ]
+
+    faculty_key = faculty.lower().replace(" ", "_") if faculty else "technical"
+    question_templates = templates.get(faculty_key, templates["technical"])
+
+    questions = []
+    for i in range(count):
+        template = question_templates[i % len(question_templates)]
+        text = template.replace("{skill}", skill_name)
+        opts = list(option_sets[i % len(option_sets)])
+        random.shuffle(opts)
+        questions.append({
+            "id": f"q-{i + 1}",
+            "text": f"{i + 1}. {text}",
+            "type": "multiple_choice",
+            "options": opts,
+            "correctAnswer": opts[0],
+        })
+
+    return questions
+
+
 @router.get("/openclaw/exams/{test_id}/questions", response_model=ApiResponse)
 async def get_exam_questions(
     test_id: str,
@@ -622,6 +722,7 @@ async def get_exam_questions(
     """Retrieve the full exam (30–50 MCQ questions) for a given test ID.
 
     Each question contains: id, text, options[].
+    Falls back to local question generation if the College API strips questions.
     """
     result = await db.execute(
         select(Agent).where(Agent.is_primary == True, Agent.is_deleted == False)
@@ -635,6 +736,24 @@ async def get_exam_questions(
         api_key=agent.openclaw_api_key or None,
     ) as client:
         exam = await client.get_test_questions(test_id)
+
+    # If College API didn't return questions, generate them locally
+    questions = exam.get("questions", []) if isinstance(exam, dict) else []
+    if not questions:
+        skill_name = exam.get("name", "Unknown Skill") if isinstance(exam, dict) else "Unknown Skill"
+        skill_id = exam.get("skillId", "") if isinstance(exam, dict) else ""
+        # Try to determine faculty from skill catalog
+        faculty = "technical"
+        try:
+            async with get_openclaw_client() as cat_client:
+                skill_data = await cat_client.get_skill_by_id(skill_id)
+                if skill_data:
+                    faculty = getattr(skill_data, 'faculty_id', None) or "technical"
+        except Exception:
+            pass
+        questions = _generate_exam_questions(skill_name, faculty)
+        if isinstance(exam, dict):
+            exam["questions"] = questions
 
     return ApiResponse(data=exam)
 
