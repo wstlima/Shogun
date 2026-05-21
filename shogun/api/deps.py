@@ -20,6 +20,8 @@ from shogun.services.memory_service import MemoryService
 from shogun.services.bushido_service import BushidoJobService, BushidoRecommendationService, BushidoScheduleService
 from shogun.services.mission_service import MissionService
 from shogun.services.audit_service import AuditService
+from shogun.services.email_service import EmailService
+from shogun.services.calendar_service import CalendarService
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -89,3 +91,12 @@ def get_audit_service(db: AsyncSession = Depends(get_db)) -> AuditService:
 
 def get_samurai_role_service(db: AsyncSession = Depends(get_db)) -> SamuraiRoleService:
     return SamuraiRoleService(db)
+
+
+def get_email_service(db: AsyncSession = Depends(get_db)) -> EmailService:
+    return EmailService(db)
+
+
+def get_calendar_service(db: AsyncSession = Depends(get_db)) -> CalendarService:
+    return CalendarService(db)
+

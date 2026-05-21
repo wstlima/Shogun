@@ -36,12 +36,13 @@ import {
   Eye,
   EyeOff,
   Edit2,
+  Mail,
 } from "lucide-react";
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
-type TabType = 'providers' | 'tools' | 'routing' | 'telegram';
+type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'mail_calendar';
 type RegisterMode = 'quick' | 'manual';
 
 // ── Documentation links for cloud providers ─────────────────────
@@ -248,6 +249,40 @@ export function Katana() {
   const [tgTestResult, setTgTestResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null);
   const [tgDetecting, setTgDetecting]   = useState(false);
   const [tgShowToken, setTgShowToken]   = useState(false);
+
+  // ── Mail & Calendar state ──────────────────────────────────────
+  const [mailAccount, setMailAccount] = useState<any>(null);
+  const [mailForm, setMailForm] = useState({
+    provider: 'gmail',
+    display_name: '',
+    email_address: '',
+    protocol: 'imap',
+    imap_host: 'imap.gmail.com',
+    imap_port: 993,
+    imap_use_ssl: true,
+    smtp_host: 'smtp.gmail.com',
+    smtp_port: 587,
+    smtp_use_ssl: true,
+    username: '',
+    password: '',
+    caldav_url: 'https://apidata.googleusercontent.com/caldav/v1/calendars/primary/events',
+    calendar_provider: 'google_api',
+    calendar_credentials: null as any,
+  });
+  const [mailSaving, setMailSaving] = useState(false);
+  const [mailTesting, setMailTesting] = useState(false);
+  const [mailTestResult, setMailTestResult] = useState<{ ok: boolean; imap_ok: boolean; smtp_ok: boolean; message?: string } | null>(null);
+  const [mailPermissions, setMailPermissions] = useState({
+    perm_read_mail: true,
+    perm_send_mail: false,
+    perm_delete_mail: false,
+    perm_read_calendar: true,
+    perm_create_events: false,
+    perm_edit_events: false,
+    perm_delete_events: false,
+  });
+  const [showMailPassword, setShowMailPassword] = useState(false);
+
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
 
@@ -442,6 +477,158 @@ export function Katana() {
     } catch {
       setStatusMessage({ type: 'error', text: t('katana.disconnect_failed') });
     } finally {
+      setTimeout(() => setStatusMessage(null), 3000);
+    }
+  };
+
+  // ── Mail & Calendar handlers ────────────────────────────────────────
+  useEffect(() => {
+    const prov = mailForm.provider;
+    if (prov === 'gmail') {
+      setMailForm(f => ({
+        ...f,
+        imap_host: 'imap.gmail.com',
+        imap_port: 993,
+        imap_use_ssl: true,
+        smtp_host: 'smtp.gmail.com',
+        smtp_port: 587,
+        smtp_use_ssl: true,
+        caldav_url: 'https://apidata.googleusercontent.com/caldav/v1/calendars/primary/events',
+        calendar_provider: 'google_api',
+      }));
+    } else if (prov === 'outlook') {
+      setMailForm(f => ({
+        ...f,
+        imap_host: 'outlook.office365.com',
+        imap_port: 993,
+        imap_use_ssl: true,
+        smtp_host: 'smtp.office365.com',
+        smtp_port: 587,
+        smtp_use_ssl: true,
+        caldav_url: '',
+        calendar_provider: 'microsoft_graph',
+      }));
+    } else if (prov === 'proton') {
+      setMailForm(f => ({
+        ...f,
+        imap_host: '127.0.0.1',
+        imap_port: 1143,
+        imap_use_ssl: false,
+        smtp_host: '127.0.0.1',
+        smtp_port: 1025,
+        smtp_use_ssl: false,
+        caldav_url: 'http://127.0.0.1:5000',
+        calendar_provider: 'caldav',
+      }));
+    }
+  }, [mailForm.provider]);
+
+  const fetchMailStatus = async () => {
+    try {
+      const res = await axios.get('/api/v1/channels/email/account');
+      const acc = res.data.data;
+      setMailAccount(acc);
+      if (acc) {
+        setMailForm({
+          provider: acc.provider,
+          display_name: acc.display_name || '',
+          email_address: acc.email_address || '',
+          protocol: acc.protocol || 'imap',
+          imap_host: acc.imap_host || '',
+          imap_port: acc.imap_port || 993,
+          imap_use_ssl: acc.imap_use_ssl ?? true,
+          smtp_host: acc.smtp_host || '',
+          smtp_port: acc.smtp_port || 587,
+          smtp_use_ssl: acc.smtp_use_ssl ?? true,
+          username: acc.username || '',
+          password: '',
+          caldav_url: acc.caldav_url || '',
+          calendar_provider: acc.calendar_provider || 'none',
+          calendar_credentials: acc.calendar_credentials || null,
+        });
+        setMailPermissions({
+          perm_read_mail: acc.perm_read_mail,
+          perm_send_mail: acc.perm_send_mail,
+          perm_delete_mail: acc.perm_delete_mail,
+          perm_read_calendar: acc.perm_read_calendar,
+          perm_create_events: acc.perm_create_events,
+          perm_edit_events: acc.perm_edit_events,
+          perm_delete_events: acc.perm_delete_events,
+        });
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleMailConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mailForm.email_address || !mailForm.username || (!mailAccount && !mailForm.password)) return;
+    setMailSaving(true);
+    try {
+      const res = await axios.post('/api/v1/channels/email/account', mailForm);
+      const acc = res.data.data;
+      setMailAccount(acc);
+      setStatusMessage({ type: 'success', text: 'Mail & Calendar account connected!' });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to connect account' });
+    } finally {
+      setMailSaving(false);
+      setTimeout(() => setStatusMessage(null), 4000);
+    }
+  };
+
+  const handleMailDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect this Mail & Calendar account?')) return;
+    try {
+      await axios.delete('/api/v1/channels/email/account');
+      setMailAccount(null);
+      setMailForm({
+        provider: 'gmail',
+        display_name: '',
+        email_address: '',
+        protocol: 'imap',
+        imap_host: 'imap.gmail.com',
+        imap_port: 993,
+        imap_use_ssl: true,
+        smtp_host: 'smtp.gmail.com',
+        smtp_port: 587,
+        smtp_use_ssl: true,
+        username: '',
+        password: '',
+        caldav_url: 'https://apidata.googleusercontent.com/caldav/v1/calendars/primary/events',
+        calendar_provider: 'google_api',
+        calendar_credentials: null,
+      });
+      setStatusMessage({ type: 'success', text: 'Mail & Calendar account disconnected.' });
+    } catch {
+      setStatusMessage({ type: 'error', text: 'Failed to disconnect account.' });
+    } finally {
+      setTimeout(() => setStatusMessage(null), 3000);
+    }
+  };
+
+  const handleMailTest = async () => {
+    setMailTesting(true);
+    setMailTestResult(null);
+    try {
+      const res = await axios.post('/api/v1/channels/email/account/test', mailForm);
+      setMailTestResult(res.data.data);
+    } catch (e: any) {
+      setMailTestResult({ ok: false, imap_ok: false, smtp_ok: false, message: e.response?.data?.detail || e.message || 'Test request failed' });
+    } finally {
+      setMailTesting(false);
+    }
+  };
+
+  const handleMailSavePermissions = async () => {
+    setMailSaving(true);
+    try {
+      const res = await axios.patch('/api/v1/channels/email/account/permissions', mailPermissions);
+      setMailAccount(res.data.data);
+      setStatusMessage({ type: 'success', text: 'Permissions updated successfully!' });
+    } catch {
+      setStatusMessage({ type: 'error', text: 'Failed to update permissions.' });
+    } finally {
+      setMailSaving(false);
       setTimeout(() => setStatusMessage(null), 3000);
     }
   };
@@ -866,12 +1053,13 @@ export function Katana() {
 
       {/* ── Tab bar ────────────────────────────────────────────── */}
       <div className="flex border-b border-shogun-border">
-        {(['providers', 'tools', 'routing', 'telegram'] as TabType[]).map((tab) => (
+        {(['providers', 'tools', 'routing', 'telegram', 'mail_calendar'] as TabType[]).map((tab) => (
           <button
             key={tab}
             onClick={() => {
               setActiveTab(tab);
               if (tab === 'telegram' && !tgStatus) fetchTgStatus();
+              if (tab === 'mail_calendar' && !mailAccount) fetchMailStatus();
             }}
             className={cn(
               "px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all relative",
@@ -886,6 +1074,15 @@ export function Katana() {
                 <MessageCircle className="w-3.5 h-3.5" />
                 Telegram
                 {tgStatus?.connected && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                )}
+              </span>
+            )}
+            {tab === 'mail_calendar' && (
+              <span className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5" />
+                Mail & Calendar
+                {mailAccount?.is_active && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
                 )}
               </span>
@@ -2273,6 +2470,430 @@ export function Katana() {
                       {t('katana.auto_detect_chat_id')}
                     </button>
                     <p className="text-[10px] text-shogun-subdued text-center mt-2 leading-tight">{t('katana.must_complete_step5')} <br/>{t('katana.auto_whitelist_desc')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ MAIL & CALENDAR TAB ═══════════════════════════════════ */}
+        {activeTab === 'mail_calendar' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2 text-shogun-text">
+                  <Mail className="w-5 h-5 text-shogun-blue" /> {t('katana.mail_calendar_settings', 'Mail & Calendar Settings')}
+                </h3>
+                <p className="text-xs text-shogun-subdued mt-1">
+                  {t('katana.mail_calendar_desc', 'Configure a single email and calendar account to send/receive mail and manage events.')}
+                </p>
+              </div>
+              {mailAccount?.is_active && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-400/10 border border-green-400/30 rounded-lg">
+                  <Wifi className="w-3.5 h-3.5 text-green-400" />
+                  <span className="text-xs font-bold text-green-400">{t('katana.connected', 'Connected')}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* Left Column: Connection Info & Form */}
+              <div className="lg:col-span-3 space-y-5">
+                {mailAccount?.is_active && (
+                  <div className="shogun-card bg-green-400/5 border-green-400/20 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-green-400/10 border border-green-400/30 flex items-center justify-center">
+                        <Mail className="w-6 h-6 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-shogun-text">{mailAccount.display_name || mailAccount.email_address}</p>
+                        <p className="text-[10px] text-shogun-subdued mt-0.5">
+                          {mailAccount.email_address} · {mailAccount.provider.toUpperCase()}
+                        </p>
+                        <p className="text-[10px] text-shogun-subdued">
+                          {t('katana.calendar_integrated', 'Calendar')}: <span className="font-bold uppercase text-green-400">{mailAccount.calendar_provider}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleMailDisconnect}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 rounded-lg text-xs font-bold transition-all"
+                    >
+                      <WifiOff className="w-3.5 h-3.5" /> {t('katana.disconnect', 'Disconnect')}
+                    </button>
+                  </div>
+                )}
+
+                <div className="shogun-card space-y-5">
+                  <h4 className="text-sm font-bold text-shogun-text">
+                    {mailAccount?.is_active ? t('katana.update_mail_config', 'Update Connection Settings') : t('katana.connect_mail_account', 'Connect Email Account')}
+                  </h4>
+                  <form onSubmit={handleMailConnect} className="space-y-4">
+                    {/* Provider Select */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.mail_provider', 'Provider')}</label>
+                      <select
+                        value={mailForm.provider}
+                        onChange={e => setMailForm({ ...mailForm, provider: e.target.value })}
+                        className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none text-shogun-text"
+                      >
+                        <option value="gmail">Google Gmail</option>
+                        <option value="outlook">Microsoft Outlook</option>
+                        <option value="proton">Proton Mail (Bridge)</option>
+                        <option value="other">Other / Custom IMAP</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Display Name */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.display_name', 'Display Name')}</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Shogun Agent"
+                          value={mailForm.display_name}
+                          onChange={e => setMailForm({ ...mailForm, display_name: e.target.value })}
+                          className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none"
+                        />
+                      </div>
+                      {/* Email Address */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.email_address', 'Email Address')}</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="e.g. user@domain.com"
+                          value={mailForm.email_address}
+                          onChange={e => setMailForm({ ...mailForm, email_address: e.target.value, username: mailForm.username || e.target.value })}
+                          className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* IMAP/POP3 Section */}
+                    <div className="pt-4 border-t border-shogun-border/40 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-shogun-text uppercase tracking-wider">{t('katana.incoming_mail_server', 'Incoming Mail Server')}</span>
+                        <div className="flex gap-2">
+                          {(['imap', 'pop3'] as const).map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setMailForm({ ...mailForm, protocol: p })}
+                              className={cn(
+                                'px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border transition-all',
+                                mailForm.protocol === p ? 'bg-shogun-blue text-white border-shogun-blue' : 'border-shogun-border text-shogun-subdued hover:border-shogun-blue/40'
+                              )}
+                            >
+                              {p.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.incoming_host', 'Host')}</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="imap.example.com"
+                            value={mailForm.imap_host}
+                            onChange={e => setMailForm({ ...mailForm, imap_host: e.target.value })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.incoming_port', 'Port')}</label>
+                          <input
+                            type="number"
+                            required
+                            value={mailForm.imap_port}
+                            onChange={e => setMailForm({ ...mailForm, imap_port: parseInt(e.target.value) || 0 })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-shogun-subdued hover:text-shogun-text transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={mailForm.imap_use_ssl}
+                          onChange={e => setMailForm({ ...mailForm, imap_use_ssl: e.target.checked })}
+                          className="accent-shogun-blue"
+                        />
+                        {t('katana.incoming_ssl', 'Use SSL/TLS for Incoming Mail')}
+                      </label>
+                    </div>
+
+                    {/* SMTP Section */}
+                    <div className="pt-4 border-t border-shogun-border/40 space-y-4">
+                      <span className="text-xs font-bold text-shogun-text uppercase tracking-wider block">{t('katana.outgoing_mail_server', 'Outgoing SMTP Server')}</span>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.outgoing_host', 'Host')}</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="smtp.example.com"
+                            value={mailForm.smtp_host}
+                            onChange={e => setMailForm({ ...mailForm, smtp_host: e.target.value })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.outgoing_port', 'Port')}</label>
+                          <input
+                            type="number"
+                            required
+                            value={mailForm.smtp_port}
+                            onChange={e => setMailForm({ ...mailForm, smtp_port: parseInt(e.target.value) || 0 })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-shogun-subdued hover:text-shogun-text transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={mailForm.smtp_use_ssl}
+                          onChange={e => setMailForm({ ...mailForm, smtp_use_ssl: e.target.checked })}
+                          className="accent-shogun-blue"
+                        />
+                        {t('katana.outgoing_ssl', 'Use SSL/TLS for Outgoing Mail')}
+                      </label>
+                    </div>
+
+                    {/* Authentication Section */}
+                    <div className="pt-4 border-t border-shogun-border/40 space-y-4">
+                      <span className="text-xs font-bold text-shogun-text uppercase tracking-wider block">{t('katana.auth', 'Authentication')}</span>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.username', 'Username')}</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. user@domain.com"
+                            value={mailForm.username}
+                            onChange={e => setMailForm({ ...mailForm, username: e.target.value })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest flex items-center justify-between">
+                            <span>{t('katana.password', 'Password')}</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showMailPassword ? 'text' : 'password'}
+                              required={!mailAccount}
+                              placeholder={mailAccount ? '••••••••' : 'Password or App Password'}
+                              value={mailForm.password}
+                              onChange={e => setMailForm({ ...mailForm, password: e.target.value })}
+                              className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 pr-10 text-sm focus:border-shogun-blue outline-none font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowMailPassword(v => !v)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-shogun-subdued hover:text-shogun-text"
+                            >
+                              {showMailPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calendar Integration Section */}
+                    <div className="pt-4 border-t border-shogun-border/40 space-y-4">
+                      <span className="text-xs font-bold text-shogun-text uppercase tracking-wider block">{t('katana.calendar_integration', 'Calendar Integration')}</span>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.calendar_provider', 'Provider')}</label>
+                          <select
+                            value={mailForm.calendar_provider}
+                            onChange={e => setMailForm({ ...mailForm, calendar_provider: e.target.value })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none text-shogun-text"
+                          >
+                            <option value="none">None / Disabled</option>
+                            <option value="caldav">CalDAV (Proton / Generic)</option>
+                            <option value="google_api">Google Calendar API</option>
+                            <option value="microsoft_graph">Microsoft Graph</option>
+                          </select>
+                        </div>
+
+                        {mailForm.calendar_provider === 'caldav' && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.caldav_url', 'CalDAV URL')}</label>
+                            <input
+                              type="url"
+                              required
+                              placeholder="https://caldav.example.com"
+                              value={mailForm.caldav_url}
+                              onChange={e => setMailForm({ ...mailForm, caldav_url: e.target.value })}
+                              className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Connection Test Results */}
+                    {mailTestResult && (
+                      <div className={cn(
+                        'p-4 rounded-lg text-xs space-y-2 border',
+                        mailTestResult.ok
+                          ? 'bg-green-400/10 border-green-400/20 text-green-400'
+                          : 'bg-red-400/10 border-red-400/20 text-red-400'
+                      )}>
+                        <div className="flex items-center gap-2 font-bold">
+                          {mailTestResult.ok ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                          <span>{mailTestResult.ok ? t('katana.test_successful', 'All connections successful!') : t('katana.test_failed', 'Connection tests failed')}</span>
+                        </div>
+                        <p className="text-[10px] leading-relaxed opacity-90">{mailTestResult.message}</p>
+                        <div className="flex gap-4 pt-1 text-[10px]">
+                          <span className="flex items-center gap-1">
+                            <span className={cn('w-1.5 h-1.5 rounded-full', mailTestResult.imap_ok ? 'bg-green-400' : 'bg-red-400')} />
+                            Incoming Server Login: {mailTestResult.imap_ok ? 'OK' : 'FAIL'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className={cn('w-1.5 h-1.5 rounded-full', mailTestResult.smtp_ok ? 'bg-green-400' : 'bg-red-400')} />
+                            Outgoing SMTP Login: {mailTestResult.smtp_ok ? 'OK' : 'FAIL'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-4 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleMailTest}
+                        disabled={mailTesting || !mailForm.email_address || !mailForm.username}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 border border-shogun-blue/40 bg-shogun-blue/10 hover:bg-shogun-blue/20 text-shogun-blue disabled:opacity-40 font-bold rounded-lg text-sm transition-all"
+                      >
+                        {mailTesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {t('katana.test_connection', 'Test Connection')}
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={mailSaving || !mailForm.email_address || !mailForm.username}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-shogun-blue hover:bg-shogun-blue/90 disabled:opacity-40 text-white font-bold rounded-lg text-sm transition-all"
+                      >
+                        {mailSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {mailAccount?.is_active ? t('katana.save_settings', 'Save Settings') : t('katana.connect_account', 'Connect Account')}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {/* Right Column: Permissions & Setup Guides */}
+              <div className="lg:col-span-2 space-y-5">
+                {/* Permissions Panel */}
+                {mailAccount && (
+                  <div className="shogun-card space-y-4">
+                    <h4 className="text-sm font-bold text-shogun-text flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-shogun-gold" />
+                      {t('katana.permissions_toggles', 'Access Permissions')}
+                    </h4>
+                    <p className="text-[10px] text-shogun-subdued leading-relaxed">
+                      {t('katana.permissions_help', 'Control what permissions your Shogun assistant has. Enforced both client-side and server-side.')}
+                    </p>
+
+                    <div className="space-y-3 pt-2">
+                      {[
+                        { key: 'perm_read_mail', label: t('katana.perm_read_mail', '📨 Read Mail (Inbox/Folders)') },
+                        { key: 'perm_send_mail', label: t('katana.perm_send_mail', '✉️ Send / Reply to Mail') },
+                        { key: 'perm_delete_mail', label: t('katana.perm_delete_mail', '🗑️ Delete Mail (Move to Trash)') },
+                        { key: 'perm_read_calendar', label: t('katana.perm_read_calendar', '📅 Read Calendar Events') },
+                        { key: 'perm_create_events', label: t('katana.perm_create_events', '➕ Create Calendar Events') },
+                        { key: 'perm_edit_events', label: t('katana.perm_edit_events', '✏️ Edit Calendar Events') },
+                        { key: 'perm_delete_events', label: t('katana.perm_delete_events', '🗑️ Delete Calendar Events') },
+                      ].map(({ key, label }) => (
+                        <label key={key} className="flex items-center justify-between py-2 border-b border-shogun-border/30 cursor-pointer group">
+                          <span className="text-xs text-shogun-subdued group-hover:text-shogun-text transition-colors">{label}</span>
+                          <input
+                            type="checkbox"
+                            checked={(mailPermissions as any)[key]}
+                            onChange={e => setMailPermissions({ ...mailPermissions, [key]: e.target.checked })}
+                            className="w-4 h-4 accent-shogun-blue cursor-pointer"
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={handleMailSavePermissions}
+                      disabled={mailSaving}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 mt-2 bg-shogun-gold hover:bg-shogun-gold/90 text-black font-bold rounded-lg text-xs transition-all"
+                    >
+                      {mailSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {t('katana.save_permissions', 'Save Permissions')}
+                    </button>
+                  </div>
+                )}
+
+                {/* Setup Guides */}
+                <div className="shogun-card space-y-4">
+                  <h4 className="text-sm font-bold text-shogun-text flex items-center gap-2">
+                    <ChevronRight className="w-4 h-4 text-shogun-gold" />
+                    {t('katana.setup_guides', 'Quick Setup Guide')}
+                  </h4>
+
+                  <div className="text-xs space-y-4">
+                    {mailForm.provider === 'gmail' && (
+                      <div className="space-y-2 animate-in fade-in duration-200">
+                        <h5 className="font-bold text-shogun-blue">Google Gmail Setup:</h5>
+                        <ol className="list-decimal pl-4 space-y-1.5 text-shogun-subdued text-[11px] leading-relaxed">
+                          <li>Go to your Google Account settings &rarr; Security.</li>
+                          <li>Ensure <strong>2-Step Verification</strong> is enabled.</li>
+                          <li>Click on <strong>App passwords</strong> (or search for it).</li>
+                          <li>Generate a new app password for "Mail" on your device.</li>
+                          <li>Use your Gmail address as username and the 16-character generated password to connect.</li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {mailForm.provider === 'outlook' && (
+                      <div className="space-y-2 animate-in fade-in duration-200">
+                        <h5 className="font-bold text-shogun-blue">Outlook / Office 365 Setup:</h5>
+                        <ol className="list-decimal pl-4 space-y-1.5 text-shogun-subdued text-[11px] leading-relaxed">
+                          <li>Log in to your Outlook Account security settings.</li>
+                          <li>Select <strong>Manage how I sign in</strong> &rarr; App passwords.</li>
+                          <li>Create a new App Password.</li>
+                          <li>Use your Outlook email address and the App Password to connect.</li>
+                          <li>For Exchange accounts, verify IMAP access is enabled in Outlook settings.</li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {mailForm.provider === 'proton' && (
+                      <div className="space-y-2 animate-in fade-in duration-200">
+                        <h5 className="font-bold text-shogun-blue">Proton Mail (Bridge) Setup:</h5>
+                        <ol className="list-decimal pl-4 space-y-1.5 text-shogun-subdued text-[11px] leading-relaxed">
+                          <li>Download and open the <strong>Proton Mail Bridge</strong> application.</li>
+                          <li>Add your Proton account to the Bridge and wait for local encryption to sync.</li>
+                          <li>Go to Bridge settings to view the local IMAP port, SMTP port, and Bridge password.</li>
+                          <li>Set host to <code className="text-shogun-blue font-mono bg-[#050508] px-1 rounded">127.0.0.1</code>.</li>
+                          <li>Use the ports provided by the Bridge (default: IMAP 1143, SMTP 1025) and disable SSL/TLS toggles (the Bridge encrypts traffic locally).</li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {mailForm.provider === 'other' && (
+                      <div className="space-y-2 animate-in fade-in duration-200">
+                        <h5 className="font-bold text-shogun-blue">Generic Mail Provider:</h5>
+                        <p className="text-[11px] text-shogun-subdued leading-relaxed">
+                          Enter your custom IMAP and SMTP server details (hostnames, ports, and SSL settings) as provided by your email provider. Ensure your credentials are correct.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

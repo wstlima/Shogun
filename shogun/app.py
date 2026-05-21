@@ -169,6 +169,8 @@ def create_app() -> FastAPI:
     from shogun.api.setup import router as setup_router
     from shogun.api.updates import router as updates_router
     from shogun.api.backups import router as backups_router
+    from shogun.api.email import router as email_router
+    from shogun.api.calendar import router as calendar_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -192,6 +194,8 @@ def create_app() -> FastAPI:
     app.include_router(setup_router, prefix=prefix)
     app.include_router(updates_router, prefix=prefix)
     app.include_router(backups_router, prefix=prefix)
+    app.include_router(email_router, prefix=prefix)
+    app.include_router(calendar_router, prefix=prefix)
 
     # Static serving for user uploads
     uploads_path = Path(settings.uploads_path)

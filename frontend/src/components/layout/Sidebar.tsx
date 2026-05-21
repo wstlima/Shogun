@@ -97,7 +97,7 @@ export const Sidebar = () => {
           <NavItem 
             icon={MessageSquare} 
             label={t('nav.comms', 'Comms')} 
-            subLabel={t('nav.comms_sub', 'Chat Console')} 
+            subLabel={t('nav.comms_sub', 'Mail · Calendar · Chat')} 
             active={location.pathname === '/chat'}
             onClick={() => navigate('/chat')}
           />

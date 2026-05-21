@@ -23,6 +23,7 @@ from shogun.db.models.runtime_session import RuntimeSession
 from shogun.db.models.samurai_role import SamuraiRole
 from shogun.db.models.kaizen_revision import KaizenRevision
 from shogun.db.models.workspace import Workspace, WorkspacePeer, WorkspaceMessage
+from shogun.db.models.email_account import EmailAccount
 
 __all__ = [
     "Operator",
@@ -53,4 +54,5 @@ __all__ = [
     "Workspace",
     "WorkspacePeer",
     "WorkspaceMessage",
+    "EmailAccount",
 ]
