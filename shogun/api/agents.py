@@ -938,15 +938,28 @@ BEHAVIOUR:
                                     
                                     # Process tool calls from streaming
                                     if "tool_calls" in delta:
-                                        for tcall in delta["tool_calls"]:
-                                            idx = tcall["index"]
+                                        for i, tcall in enumerate(delta["tool_calls"]):
+                                            idx = tcall.get("index", i)
                                             if idx not in tool_calls_buffer:
-                                                tool_calls_buffer[idx] = {"id": tcall.get("id"), "type": "function", "function": {"name": tcall["function"].get("name", ""), "arguments": ""}}
+                                                tool_calls_buffer[idx] = {
+                                                    "id": tcall.get("id"),
+                                                    "type": "function",
+                                                    "function": {
+                                                        "name": tcall["function"].get("name", "") if "function" in tcall else "",
+                                                        "arguments": tcall["function"].get("arguments", "") if "function" in tcall else ""
+                                                    }
+                                                }
                                             else:
-                                                tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"].get("arguments", "")
+                                                if tcall.get("id"):
+                                                    tool_calls_buffer[idx]["id"] = tcall["id"]
+                                                if "function" in tcall:
+                                                    if tcall["function"].get("name"):
+                                                        tool_calls_buffer[idx]["function"]["name"] = tcall["function"]["name"]
+                                                    if tcall["function"].get("arguments"):
+                                                        tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"]["arguments"]
                                             
                                             # Yield action notice initially
-                                            if tcall.get("id"):
+                                            if tool_calls_buffer[idx].get("id") and tool_calls_buffer[idx]["function"].get("name"):
                                                 func_name = tool_calls_buffer[idx]["function"]["name"]
                                                 yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                                     
@@ -965,8 +978,8 @@ BEHAVIOUR:
                                         
                                         assistant_tokens.append(content)
                                         yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                                except Exception:
-                                    pass  # skip malformed chunks
+                                except Exception as chunk_exc:
+                                    logger.warning("[Shogun] Error parsing stream chunk: %s", chunk_exc, exc_info=True)
 
             except httpx.ConnectError:
                 yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ Cannot connect to {base_url}. Is {provider.provider_type} running?'})}\n\n"
@@ -1056,45 +1069,103 @@ BEHAVIOUR:
             # Strip <think>...</think> blocks before parsing tool calls
             import re as _re
             full_text_clean = _re.sub(r"<think>.*?</think>", "", full_text, flags=_re.DOTALL).strip()
+            
+            _valid_tool_names = [
+                "spawn_samurai", "list_available_models", "update_model_settings", "store_memory",
+                "fetch_inbox", "read_email", "send_email", "list_calendar_events",
+                "create_calendar_event", "list_cron_jobs", "create_cron_job", "delete_cron_job"
+            ]
+            _tool_names_pattern = "|".join(_valid_tool_names)
+            
+            _tc_matches = []
+            
+            # 1. Parse via strict <tool_call> blocks if present
             if "<tool_call>" in full_text_clean and "</tool_call>" in full_text_clean:
-                import logging as _logging
-                _log = _logging.getLogger("shogun.agents")
-                # Step 1: Extract each <tool_call>...</tool_call> block (non-greedy)
                 _block_pattern = _re.compile(r"<tool_call>(.*?)</tool_call>", _re.DOTALL)
                 _blocks = _block_pattern.findall(full_text_clean)
-                # Step 2: Parse function name + args from each block
                 _func_pattern = _re.compile(r"(\w+)\s*\(([\s\S]*)\)\s*$", _re.DOTALL)
-                _tc_matches = []
                 for _block in _blocks:
-                    _m = _func_pattern.match(_block.strip())
+                    _block_clean = _block.strip()
+                    if _block_clean.startswith("tool_name:"):
+                        _block_clean = _block_clean[len("tool_name:"):].strip()
+                    _m = _func_pattern.match(_block_clean)
                     if _m:
+                        _func_name = _m.group(1).strip()
+                        if _func_name in _valid_tool_names:
+                            _tc_matches.append((_func_name, _m.group(2).strip()))
+            
+            # 2. If no <tool_call> blocks matched, fall back to matching code blocks and text patterns
+            if not _tc_matches:
+                _code_block_pattern = _re.compile(r"```[a-zA-Z0-9]*\s*\n(.*?)\n\s*```", _re.DOTALL)
+                _code_blocks = _code_block_pattern.findall(full_text_clean)
+                
+                _call_pattern = _re.compile(
+                    r"(?:tool_name:\s*)?(" + _tool_names_pattern + r")\s*\(([\s\S]*?)\)",
+                    _re.DOTALL
+                )
+                
+                for _block in _code_blocks:
+                    for _m in _call_pattern.finditer(_block):
                         _tc_matches.append((_m.group(1), _m.group(2).strip()))
-                _log.info(f"[Shogun] Text-mode tool calls found: {len(_tc_matches)} — {[m[0] for m in _tc_matches]}")
-                if _tc_matches:
-                    _text_tool_results = []
-                    async for db in get_db():
-                        for func_name, raw_args in _tc_matches:
-                            # Parse arguments from various formats
-                            args = {}
-                            raw_args = raw_args.strip()
-                            if raw_args:
-                                try:
-                                    # Try JSON first: func({"key": "val"})
-                                    args = json.loads(raw_args)
-                                except json.JSONDecodeError:
-                                    # Try key=value pairs: func(key="val", key2="val2")
-                                    # or func(folder={"INBOX"}, uid={"12345"})
-                                    _kv_pattern = _re.compile(
-                                        r'(\w+)\s*=\s*(?:'
-                                        r'\{?"([^}]*?)"\}?'    # key={"value"} or key="value"
-                                        r"|'([^']*?)'"         # key='value'
-                                        r'|(\S+)'              # key=value (no quotes)
-                                        r')',
-                                    )
-                                    for m in _kv_pattern.finditer(raw_args):
-                                        k = m.group(1)
-                                        v = m.group(2) or m.group(3) or m.group(4) or ""
-                                        args[k] = v
+                        
+                if not _tc_matches:
+                    for _m in _call_pattern.finditer(full_text_clean):
+                        _tc_matches.append((_m.group(1), _m.group(2).strip()))
+            
+            # Deduplicate matches
+            _seen = set()
+            _deduped_tc_matches = []
+            for _fn, _raw_args in _tc_matches:
+                _key = (_fn, _raw_args)
+                if _key not in _seen:
+                    _seen.add(_key)
+                    _deduped_tc_matches.append((_fn, _raw_args))
+            
+            import logging as _logging
+            _log = _logging.getLogger("shogun.agents")
+            if _deduped_tc_matches:
+                _log.info(f"[Shogun] Text-mode tool calls found: {len(_deduped_tc_matches)} — {[m[0] for m in _deduped_tc_matches]}")
+                _text_tool_results = []
+                async for db in get_db():
+                    for func_name, raw_args in _deduped_tc_matches:
+                        # Parse arguments from various formats
+                        args = {}
+                        raw_args = raw_args.strip()
+                        if raw_args:
+                            if raw_args.endswith(","):
+                                raw_args = raw_args[:-1].strip()
+                            try:
+                                # Try JSON first: func({"key": "val"})
+                                args = json.loads(raw_args)
+                            except json.JSONDecodeError:
+                                # Try key=value pairs: func(key="val", key2="val2")
+                                _kv_pattern = _re.compile(
+                                    r'(\w+)\s*=\s*(?:'
+                                    r'\{?"([^}]*?)"\}?'    # key={"value"} or key="value"
+                                    r"|'([^']*?)'"         # key='value'
+                                    r'|(\S+)'              # key=value (no quotes)
+                                    r')',
+                                )
+                                for m in _kv_pattern.finditer(raw_args):
+                                    k = m.group(1)
+                                    v = m.group(2) or m.group(3) or m.group(4) or ""
+                                    v_str = str(v).strip().strip(",")
+                                    v_lower = v_str.lower()
+                                    if v_lower == "true":
+                                        v_parsed = True
+                                    elif v_lower == "false":
+                                        v_parsed = False
+                                    elif v_lower in ("none", "null"):
+                                        v_parsed = None
+                                    else:
+                                        try:
+                                            if "." in v_str:
+                                                v_parsed = float(v_str)
+                                            else:
+                                                v_parsed = int(v_str)
+                                        except ValueError:
+                                            v_parsed = v_str
+                                    args[k] = v_parsed
                                 _log.info(f"[Shogun] Text-mode tool '{func_name}' parsed args: {args}")
 
                             yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
