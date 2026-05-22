@@ -1,7 +1,8 @@
 {
-  "version": "1.3.0",
-  "build": 23,
+  "version": "1.3.1",
+  "build": 24,
   "channel": "stable",
-  "released": "2026-05-22T10:58:00Z",
-  "changelog": "Support multi-account email and calendar integration, improve Ollama model management with a dedicated Local Model Manager, and implement Telegram auto-disconnect on authentication failure."
+  "released": "2026-05-22T11:34:00Z",
+  "changelog": "Fix local model listing and delete button base URL resolution fallback bug, enable deletion of custom model tags, and optimize streaming and orchestrator tool calling."
 }
+
