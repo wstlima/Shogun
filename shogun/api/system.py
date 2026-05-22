@@ -236,6 +236,56 @@ async def pull_model_stream(
     )
 
 
+@router.get("/local-models", response_model=ApiResponse)
+async def get_local_models(
+    provider_type: str = Query(..., description="Provider type, e.g. 'ollama' or 'lmstudio'"),
+    base_url: str = Query(..., description="Base URL of the provider"),
+):
+    """Proxy requests to local providers to retrieve currently loaded/downloaded models, avoiding CORS issues."""
+    import httpx
+
+    url = base_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider_type == "ollama":
+                resp = await client.get(f"{url}/api/tags")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = [m.get("name") or m.get("model") for m in data.get("models", [])]
+                    return ApiResponse(success=True, data=models)
+                else:
+                    return ApiResponse(
+                        success=False,
+                        data=[],
+                        meta={"error": f"Ollama returned {resp.status_code}: {resp.text[:200]}"}
+                    )
+            else:
+                # lmstudio or other OpenAI-compatible local provider
+                resp = await client.get(f"{url}/models")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = [m.get("id") for m in data.get("data", [])]
+                    return ApiResponse(success=True, data=models)
+                else:
+                    return ApiResponse(
+                        success=False,
+                        data=[],
+                        meta={"error": f"Local provider returned {resp.status_code}: {resp.text[:200]}"}
+                    )
+    except httpx.ConnectError:
+        return ApiResponse(
+            success=False,
+            data=[],
+            meta={"error": f"Cannot connect to provider at {base_url}. Is it running?"}
+        )
+    except Exception as exc:
+        return ApiResponse(
+            success=False,
+            data=[],
+            meta={"error": str(exc)}
+        )
+
+
 @router.delete("/delete-model")
 async def delete_ollama_model(
     model: str = Query(..., description="Ollama model tag to delete, e.g. llama3.2:3b"),
@@ -246,7 +296,8 @@ async def delete_ollama_model(
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.delete(
+            resp = await client.request(
+                "DELETE",
                 f"{base_url}/api/delete",
                 json={"name": model},
             )

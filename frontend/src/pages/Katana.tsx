@@ -291,6 +291,7 @@ export function Katana() {
   const [providers, setProviders]   = useState<any[]>([]);
   const [tools, setTools]           = useState<any[]>([]);
   const [localModels, setLocalModels] = useState<string[]>([]);
+  const [localProviderType, setLocalProviderType] = useState<string>('ollama');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
 
@@ -644,17 +645,22 @@ export function Katana() {
   };
 
   const fetchLocalModels = async (providerType: string, customBaseUrl?: string) => {
+    setLocalProviderType(providerType);
     try {
-      const baseUrl = customBaseUrl || (providerType === 'ollama'
-        ? (newProvider.base_url || 'http://localhost:11434')
-        : (newProvider.base_url || 'http://localhost:1234'));
+      const baseUrl = customBaseUrl || 
+        (newProvider.provider_type === providerType ? newProvider.base_url : null) || 
+        (providerType === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1');
 
-      if (providerType === 'ollama') {
-        const res = await axios.get(`${baseUrl}/api/tags`);
-        setLocalModels((res.data?.models || []).map((m: any) => m.name || m.model));
+      const res = await axios.get('/api/v1/system/local-models', {
+        params: {
+          provider_type: providerType,
+          base_url: baseUrl,
+        }
+      });
+      if (res.data?.success) {
+        setLocalModels(res.data.data || []);
       } else {
-        const res = await axios.get(`${baseUrl}/v1/models`);
-        setLocalModels((res.data?.data || []).map((m: any) => m.id));
+        setLocalModels([]);
       }
     } catch {
       setLocalModels([]);
@@ -687,7 +693,7 @@ export function Katana() {
 
   // Stream an Ollama model pull via SSE backend proxy
   const handlePullModel = async (modelId: string) => {
-    const baseUrl = newProvider.base_url || 'http://localhost:11434';
+    const baseUrl = (newProvider.provider_type === 'ollama' ? newProvider.base_url : null) || 'http://localhost:11434';
     setPullingModel(modelId);
     setPullStatus({ status: 'Connecting to Ollama…', percent: 0 });
     try {
@@ -743,8 +749,10 @@ export function Katana() {
 
   const handleDeleteOllamaModel = async (modelId: string) => {
     if (!confirm(`Delete model "${modelId}" from Ollama? This will free disk space but the model will need to be re-pulled to use again.`)) return;
-    const activeOllama = providers.find(p => p.provider_type === 'ollama');
-    const baseUrl = activeOllama?.base_url || newProvider.base_url || 'http://localhost:11434';
+    const activeOllama = providers.find(p => p.provider_type === 'ollama' && p.base_url);
+    const baseUrl = activeOllama?.base_url || 
+      (newProvider.provider_type === 'ollama' ? newProvider.base_url : null) || 
+      'http://localhost:11434';
     setDeletingModel(modelId);
     try {
       const params = new URLSearchParams({ model: modelId, base_url: baseUrl });
@@ -1463,7 +1471,7 @@ export function Katana() {
                                             ? <><RefreshCw className="w-2.5 h-2.5" /> {t('katana.repull')}</>
                                             : <><Download className="w-2.5 h-2.5" /> {t('katana.pull')}</>}
                                       </button>
-                                      {alreadyHave && matchingLocalModel && (
+                                      {alreadyHave && matchingLocalModel && localProviderType === 'ollama' && (
                                         <button
                                           type="button"
                                           disabled={!!pullingModel || deletingModel === matchingLocalModel}
@@ -1531,21 +1539,23 @@ export function Katana() {
                               <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                               <span className="text-[10px] font-mono text-shogun-text truncate">{m}</span>
                             </div>
-                            <button
-                              type="button"
-                              disabled={deletingModel === m}
-                              onClick={() => handleDeleteOllamaModel(m)}
-                              className={cn(
-                                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all border",
-                                deletingModel === m
-                                  ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
-                                  : "border-shogun-border text-red-500/50 hover:border-red-500/50 hover:text-red-500 hover:bg-red-500/5"
-                              )}
-                              title={t('katana.delete_local_model', 'Delete from Ollama')}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              <span>{t('katana.delete', 'Delete')}</span>
-                            </button>
+                            {localProviderType === 'ollama' && (
+                              <button
+                                type="button"
+                                disabled={deletingModel === m}
+                                onClick={() => handleDeleteOllamaModel(m)}
+                                className={cn(
+                                  "shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all border",
+                                  deletingModel === m
+                                    ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
+                                    : "border-shogun-border text-red-500/50 hover:border-red-500/50 hover:text-red-500 hover:bg-red-500/5"
+                                )}
+                                title={t('katana.delete_local_model', 'Delete from Ollama')}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>{t('katana.delete', 'Delete')}</span>
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1711,21 +1721,23 @@ export function Katana() {
                               </span>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            disabled={deletingModel === m}
-                            onClick={() => handleDeleteOllamaModel(m)}
-                            className={cn(
-                              "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border",
-                              deletingModel === m
-                                ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
-                                : "border-shogun-border text-red-500/60 hover:border-red-500 hover:text-red-500 hover:bg-red-500/10"
-                            )}
-                            title={t('katana.delete_local_model', 'Delete from Ollama')}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>{deletingModel === m ? t('katana.deleting', 'Deleting') : t('katana.delete', 'Delete')}</span>
-                          </button>
+                          {localProviderType === 'ollama' && (
+                            <button
+                              type="button"
+                              disabled={deletingModel === m}
+                              onClick={() => handleDeleteOllamaModel(m)}
+                              className={cn(
+                                "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border",
+                                deletingModel === m
+                                  ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
+                                  : "border-shogun-border text-red-500/60 hover:border-red-500 hover:text-red-500 hover:bg-red-500/10"
+                              )}
+                              title={t('katana.delete_local_model', 'Delete from Ollama')}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>{deletingModel === m ? t('katana.deleting', 'Deleting') : t('katana.delete', 'Delete')}</span>
+                            </button>
+                          )}
                         </div>
                       );
                     })}
