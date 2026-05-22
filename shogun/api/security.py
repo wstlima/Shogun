@@ -32,6 +32,12 @@ _DEFAULT_POSTURE = {
     "max_active_subagents": 5,
     "kill_switch_enabled": True,
     "kill_switch_active": False,   # True when the kill switch has been triggered
+    "comms_read_email": True,
+    "comms_send_email": True,
+    "comms_read_calendar": True,
+    "comms_create_events": True,
+    "comms_list_cron": True,
+    "comms_manage_cron": True,
 }
 
 # Constraint values that each tier enforces when selected
@@ -42,6 +48,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "shell_enabled": False,
         "skill_auto_install": False,
         "max_active_subagents": 0,
+        "comms_read_email": False,
+        "comms_send_email": False,
+        "comms_read_calendar": False,
+        "comms_create_events": False,
+        "comms_list_cron": False,
+        "comms_manage_cron": False,
     },
     "guarded": {
         "filesystem_mode": "allowlist",
@@ -49,6 +61,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "shell_enabled": False,
         "skill_auto_install": False,
         "max_active_subagents": 2,
+        "comms_read_email": True,
+        "comms_send_email": False,
+        "comms_read_calendar": True,
+        "comms_create_events": False,
+        "comms_list_cron": True,
+        "comms_manage_cron": False,
     },
     "tactical": {
         "filesystem_mode": "scoped",
@@ -56,6 +74,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "shell_enabled": False,
         "skill_auto_install": False,
         "max_active_subagents": 5,
+        "comms_read_email": True,
+        "comms_send_email": True,
+        "comms_read_calendar": True,
+        "comms_create_events": True,
+        "comms_list_cron": True,
+        "comms_manage_cron": True,
     },
     "campaign": {
         "filesystem_mode": "full",
@@ -63,6 +87,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "shell_enabled": True,
         "skill_auto_install": True,
         "max_active_subagents": 15,
+        "comms_read_email": True,
+        "comms_send_email": True,
+        "comms_read_calendar": True,
+        "comms_create_events": True,
+        "comms_list_cron": True,
+        "comms_manage_cron": True,
     },
     "ronin": {
         "filesystem_mode": "full",
@@ -70,6 +100,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "shell_enabled": True,
         "skill_auto_install": True,
         "max_active_subagents": 50,
+        "comms_read_email": True,
+        "comms_send_email": True,
+        "comms_read_calendar": True,
+        "comms_create_events": True,
+        "comms_list_cron": True,
+        "comms_manage_cron": True,
     },
 }
 

@@ -37,6 +37,8 @@ import {
   EyeOff,
   Edit2,
   Mail,
+  Cloud,
+  Monitor,
 } from "lucide-react";
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -307,6 +309,30 @@ export function Katana() {
 
   // ── Pull-model state ─────────────────────────────────────────
   const [showPullPanel, setShowPullPanel]         = useState(false);
+  
+  useEffect(() => {
+    const activeLocal = providers.find(p => p.status === 'connected' && isLocalProvider(p.provider_type));
+    const isLocal = isLocalProvider(newProvider.provider_type);
+    
+    if (isLocal) {
+      fetchLocalModels(newProvider.provider_type, newProvider.base_url);
+      // Set a sensible default path when switching to a local provider
+      if (!localModelPath) {
+        if (newProvider.provider_type === 'ollama') {
+          // Windows default; user can override
+          setLocalModelPath('%USERPROFILE%\\.ollama\\models');
+        } else {
+          setLocalModelPath('');
+        }
+      }
+    } else if (activeLocal) {
+      fetchLocalModels(activeLocal.provider_type, activeLocal.base_url);
+    } else {
+      setLocalModels([]);
+      setLocalModelPath('');
+    }
+  }, [newProvider.provider_type, newProvider.base_url, providers]);
+
   const [pullCatalogFilter, setPullCatalogFilter] = useState<'all' | OllamaCategory>('all');
   const [pullingModel, setPullingModel]           = useState<string | null>(null);
   const [pullStatus, setPullStatus]               = useState<{ status: string; percent: number } | null>(null);
@@ -352,23 +378,7 @@ export function Katana() {
 
   useEffect(() => { fetchData(); }, []);
 
-  useEffect(() => {
-    if (isLocalProvider(newProvider.provider_type)) {
-      fetchLocalModels(newProvider.provider_type);
-      // Set a sensible default path when switching to a local provider
-      if (!localModelPath) {
-        if (newProvider.provider_type === 'ollama') {
-          // Windows default; user can override
-          setLocalModelPath('%USERPROFILE%\\.ollama\\models');
-        } else {
-          setLocalModelPath('');
-        }
-      }
-    } else {
-      setLocalModels([]);
-      setLocalModelPath('');
-    }
-  }, [newProvider.provider_type]);
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -633,11 +643,11 @@ export function Katana() {
     }
   };
 
-  const fetchLocalModels = async (providerType: string) => {
+  const fetchLocalModels = async (providerType: string, customBaseUrl?: string) => {
     try {
-      const baseUrl = providerType === 'ollama'
+      const baseUrl = customBaseUrl || (providerType === 'ollama'
         ? (newProvider.base_url || 'http://localhost:11434')
-        : (newProvider.base_url || 'http://localhost:1234');
+        : (newProvider.base_url || 'http://localhost:1234'));
 
       if (providerType === 'ollama') {
         const res = await axios.get(`${baseUrl}/api/tags`);
@@ -725,6 +735,33 @@ export function Katana() {
     } finally {
       setPullingModel(null);
       setPullStatus(null);
+    }
+  };
+
+  // ── Delete local model ──────────────────────────────────────────
+  const [deletingModel, setDeletingModel] = useState<string | null>(null);
+
+  const handleDeleteOllamaModel = async (modelId: string) => {
+    if (!confirm(`Delete model "${modelId}" from Ollama? This will free disk space but the model will need to be re-pulled to use again.`)) return;
+    const activeOllama = providers.find(p => p.provider_type === 'ollama');
+    const baseUrl = activeOllama?.base_url || newProvider.base_url || 'http://localhost:11434';
+    setDeletingModel(modelId);
+    try {
+      const params = new URLSearchParams({ model: modelId, base_url: baseUrl });
+      const resp = await fetch(`/api/v1/system/delete-model?${params}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (data.success) {
+        setLocalModels(prev => prev.filter(m => m !== modelId));
+        setStatusMessage({ type: 'success', text: `${modelId} deleted successfully.` });
+      } else {
+        setStatusMessage({ type: 'error', text: data.message || `Failed to delete ${modelId}` });
+      }
+      setTimeout(() => setStatusMessage(null), 5000);
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || `Failed to delete ${modelId}` });
+      setTimeout(() => setStatusMessage(null), 6000);
+    } finally {
+      setDeletingModel(null);
     }
   };
 
@@ -1372,7 +1409,17 @@ export function Katana() {
                               .filter(m => pullCatalogFilter === 'all' || m.category === pullCatalogFilter)
                               .map(m => {
                                 const isThis = pullingModel === m.id;
-                                const alreadyHave = localModels.includes(m.id) || localModels.includes(m.name);
+                                const matchingLocalModel = localModels.find(model => {
+                                  const normModel = model.toLowerCase();
+                                  const normId = m.id.toLowerCase();
+                                  if (normModel === normId) return true;
+                                  if (!normId.includes(':') && normModel.startsWith(normId + ':')) return true;
+                                  const cleanModel = normModel.replace(/^[^/]+\//, '');
+                                  if (cleanModel === normId) return true;
+                                  if (!normId.includes(':') && cleanModel.startsWith(normId + ':')) return true;
+                                  return false;
+                                });
+                                const alreadyHave = !!matchingLocalModel;
                                 return (
                                   <div
                                     key={m.id}
@@ -1396,25 +1443,43 @@ export function Katana() {
                                         <span className="text-[8px] text-shogun-subdued/70 truncate">{m.desc}</span>
                                       </div>
                                     </div>
-                                    <button
-                                      type="button"
-                                      disabled={!!pullingModel}
-                                      onClick={() => handlePullModel(m.id)}
-                                      className={cn(
-                                        "ml-3 shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border",
-                                        isThis
-                                          ? "border-cyan-500/40 text-cyan-400 bg-cyan-500/10 animate-pulse"
+                                    <div className="ml-3 shrink-0 flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={!!pullingModel}
+                                        onClick={() => handlePullModel(m.id)}
+                                        className={cn(
+                                          "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border",
+                                          isThis
+                                            ? "border-cyan-500/40 text-cyan-400 bg-cyan-500/10 animate-pulse"
+                                            : alreadyHave
+                                              ? "border-green-500/20 text-green-400 bg-green-500/5 hover:bg-green-500/10"
+                                              : "border-shogun-border text-shogun-subdued hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-500/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                                        )}
+                                      >
+                                        {isThis
+                                          ? <><RefreshCw className="w-2.5 h-2.5 animate-spin" /> {t('katana.pulling')}</>
                                           : alreadyHave
-                                            ? "border-green-500/20 text-green-400 bg-green-500/5 hover:bg-green-500/10"
-                                            : "border-shogun-border text-shogun-subdued hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-500/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                                            ? <><RefreshCw className="w-2.5 h-2.5" /> {t('katana.repull')}</>
+                                            : <><Download className="w-2.5 h-2.5" /> {t('katana.pull')}</>}
+                                      </button>
+                                      {alreadyHave && matchingLocalModel && (
+                                        <button
+                                          type="button"
+                                          disabled={!!pullingModel || deletingModel === matchingLocalModel}
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteOllamaModel(matchingLocalModel); }}
+                                          className={cn(
+                                            "p-1.5 rounded-lg transition-all border",
+                                            deletingModel === matchingLocalModel
+                                              ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
+                                              : "border-shogun-border text-red-500/40 hover:border-red-500/50 hover:text-red-500 hover:bg-red-500/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                                          )}
+                                          title={t('katana.delete_local_model', 'Delete from Ollama')}
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
                                       )}
-                                    >
-                                      {isThis
-                                        ? <><RefreshCw className="w-2.5 h-2.5 animate-spin" /> {t('katana.pulling')}</>
-                                        : alreadyHave
-                                          ? <><RefreshCw className="w-2.5 h-2.5" /> {t('katana.repull')}</>
-                                          : <><Download className="w-2.5 h-2.5" /> {t('katana.pull')}</>}
-                                    </button>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -1445,6 +1510,45 @@ export function Katana() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* ── Manage Local Models ─────────────────────── */}
+                  {isLocal && localModels.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest flex items-center gap-2">
+                        <Monitor className="w-3.5 h-3.5" />
+                        {t('katana.manage_local_models', 'Manage Local Models')}
+                        <span className="text-[8px] px-1.5 py-0.5 rounded bg-[#050508] border border-shogun-border text-shogun-subdued font-bold">{localModels.length}</span>
+                      </label>
+                      <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                        {localModels.map(m => (
+                          <div
+                            key={m}
+                            className="flex items-center justify-between p-2 rounded-lg border border-shogun-border bg-[#050508] hover:border-shogun-subdued transition-all"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                              <span className="text-[10px] font-mono text-shogun-text truncate">{m}</span>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={deletingModel === m}
+                              onClick={() => handleDeleteOllamaModel(m)}
+                              className={cn(
+                                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all border",
+                                deletingModel === m
+                                  ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
+                                  : "border-shogun-border text-red-500/50 hover:border-red-500/50 hover:text-red-500 hover:bg-red-500/5"
+                              )}
+                              title={t('katana.delete_local_model', 'Delete from Ollama')}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>{t('katana.delete', 'Delete')}</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -1496,12 +1600,16 @@ export function Katana() {
                     const color   = getProviderColor(p.provider_type);
                     const docLink = PROVIDER_DOCS[p.provider_type];
                     const isActive = p.status === 'connected';
+                    const isLocalProv = isLocalProvider(p.provider_type);
                     return (
                       <div key={p.id} className="shogun-card group hover:border-shogun-blue/50 transition-all">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl", color.bg, color.text)}>
-                              {p.provider_type[0].toUpperCase()}
+                            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", color.bg, color.text)}>
+                              {isLocalProv
+                                ? <Monitor className="w-6 h-6" />
+                                : <Cloud className="w-6 h-6" />
+                              }
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -1557,6 +1665,71 @@ export function Katana() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Local Models Manager */}
+              {localModels.length > 0 && (
+                <div className="shogun-card space-y-4 border border-shogun-border bg-[#02040a]/40 backdrop-blur-md rounded-xl p-5 mt-6">
+                  <div className="flex items-center justify-between border-b border-shogun-border/40 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Monitor className="w-5 h-5 text-green-400" />
+                      <div>
+                        <h4 className="font-bold text-shogun-text text-sm">Local Models Manager</h4>
+                        <p className="text-[10px] text-shogun-subdued mt-0.5">Manage models pulled on your local machines</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#050508] border border-shogun-border text-green-400 font-mono font-bold">
+                      {localModels.length} models
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                    {localModels.map(m => {
+                      // Check if this model is in the curated OLLAMA_CATALOG
+                      const catalogItem = OLLAMA_CATALOG.find(cat => {
+                        const lClean = m.toLowerCase().replace(/^[^/]+\//, '');
+                        const idLower = cat.id.toLowerCase();
+                        if (lClean === idLower) return true;
+                        if (!idLower.includes(':') && lClean.startsWith(idLower + ':')) return true;
+                        return false;
+                      });
+
+                      return (
+                        <div
+                          key={m}
+                          className="flex items-center justify-between p-3 rounded-lg border border-shogun-border bg-[#050508]/60 hover:border-shogun-subdued transition-all group"
+                        >
+                          <div className="flex flex-col min-w-0 mr-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0 shadow-[0_0_8px_#22c55e]" />
+                              <span className="text-xs font-mono text-shogun-text truncate font-semibold" title={m}>{m}</span>
+                            </div>
+                            {catalogItem && (
+                              <span className="text-[9px] text-cyan-400/70 mt-1 pl-4 truncate">
+                                {catalogItem.name} ({catalogItem.desc})
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={deletingModel === m}
+                            onClick={() => handleDeleteOllamaModel(m)}
+                            className={cn(
+                              "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all border",
+                              deletingModel === m
+                                ? "border-red-500/40 text-red-400 bg-red-500/10 animate-pulse"
+                                : "border-shogun-border text-red-500/60 hover:border-red-500 hover:text-red-500 hover:bg-red-500/10"
+                            )}
+                            title={t('katana.delete_local_model', 'Delete from Ollama')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>{deletingModel === m ? t('katana.deleting', 'Deleting') : t('katana.delete', 'Delete')}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

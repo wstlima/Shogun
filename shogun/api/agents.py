@@ -323,6 +323,7 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
     saved_model_name: str = saved_primary.split("::")[1] if "::" in saved_primary else ""
 
     provider = None
+    _model_supports_tools = None  # True/False/None — resolved below
 
     # ── 3. Resolve routing profiles and provider ──────────────────
     task_type = _detect_task_type(user_msg)
@@ -365,6 +366,7 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
                             model_name = mdef.model_key
                             provider_name = mdef.display_name
                             _search_model = model_name
+                            _model_supports_tools = mdef.supports_tools
                             res_reason = f"logic_routing_authorized ({task_type})"
                         else:
                             logger.warning(f"[Routing] Unauthorized model '{mdef.model_key}' blocked. Fallback to primary.")
@@ -447,6 +449,18 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
         provider_name = provider.name
     else:
         model_name = model_name or saved_model_name or "unknown"
+
+    # ── Provider-type heuristic for tool support ──────────────────
+    # If not resolved from a ModelDefinition, infer from provider type.
+    if _model_supports_tools is None and provider:
+        _PROVIDER_TOOL_SUPPORT = {
+            "openai": True, "openrouter": True, "anthropic": True,
+            "google": True, "custom": True,
+            "ollama": False, "lmstudio": False, "local": False,
+        }
+        _model_supports_tools = _PROVIDER_TOOL_SUPPORT.get(provider.provider_type, False)
+    _model_supports_tools = _model_supports_tools or False
+    logger.info(f"[Shogun] Model tool support: {_model_supports_tools} (provider: {provider.provider_type if provider else 'none'})")
 
     # ── EVENT: Model Selected ─────────────────────────────────
     try:
@@ -604,12 +618,15 @@ The platform uses Japanese-themed naming:
 - **Samurai**: Sub-agents you can spawn to handle specific tasks (research, coding, analysis, etc.).
 - **Dojo**: The UI section where Samurai agents are created, configured, and managed.
 - **Katana**: The configuration hub for model providers (Ollama, OpenAI, etc.) and API tools.
-- **Comms**: This chat interface where the user talks directly to you.
+- **Comms**: The communications hub with three tabs:
+  - **Chat**: The chat interface where the user talks directly to you.
+  - **Mail**: A fully integrated email client. You can read, reply to, and compose emails.
+  - **Calendar**: An integrated calendar. You can view events and create new ones.
 - **Bushido**: The behavioral rules/directives that govern agent decisions.
 - **Kaizen**: The continuous improvement and optimization system.
 - **Torii**: The security and governance portal.
 
-Note: You now have Native Skills (Tools) injected into your capabilities. If the user asks you to spawn a samurai, update models, etc. use the provided tools directly instead of redirecting them, IF the tools are available to you.
+Note: You now have Native Skills (Tools) injected into your capabilities. If the user asks you to spawn a samurai, update models, read emails, send emails, check the calendar, etc. use the provided tools directly instead of redirecting them, IF the tools are available to you.
 
 CONSTITUTIONAL DIRECTIVES (from Kaizen — you must follow these):
 {gov['rules_text']}
@@ -648,6 +665,18 @@ YOUR CAPABILITIES:
 - Help the user understand and configure their Shogun system
 - Reason about tasks, suggest which Samurai agents would be best for a given workflow
 - Help with code, analysis, writing, and general knowledge
+- **Email**: Fetch inbox messages, read full email contents, compose and send emails, and reply to messages using the mail tools (fetch_inbox, read_email, send_email)
+- **Calendar**: View upcoming events and create new calendar events using the calendar tools (list_calendar_events, create_calendar_event)
+- **Cron Jobs**: List, create, and delete Bushido schedules (cron jobs) using the schedule tools (list_cron_jobs, create_cron_job, delete_cron_job)
+
+IMPORTANT — EMAIL, CALENDAR & CRON JOB TOOLS:
+You have DIRECT access to the operator's email inbox, calendar, and cron job schedules through your native tools.
+When the user asks you to check their mail, read an email, reply to a message, send an email,
+check the calendar, create an event, list schedules, or create/delete a cron job — USE YOUR TOOLS.
+Do NOT say you cannot access email, calendar, or schedules. You DO have these tools. Use them.
+- To reply to an email: first use read_email to get the full message, then use send_email with the sender's address and an appropriate subject (e.g. "Re: <original subject>").
+- Always confirm with the user before sending an email on their behalf, unless they explicitly told you to send it.
+- For cron jobs: use list_cron_jobs to show existing schedules, create_cron_job to add new ones, and delete_cron_job to remove custom ones.
 
 BEHAVIOUR:
 - Be conversational, warm, and genuinely helpful
@@ -750,6 +779,20 @@ BEHAVIOUR:
         except Exception:
             pass
 
+    # ── 7c. Prompt injection for non-tool-calling models ──────────
+    # When the model doesn't support the structured tools API, we inject
+    # tool descriptions into the system prompt and rely on text-based parsing.
+    _prompt_injected_tools = False
+    if active_tools and not _model_supports_tools:
+        from shogun.services.native_skills import generate_tool_prompt
+        _tool_prompt = generate_tool_prompt(active_tools)
+        # Inject into the system prompt (first message)
+        messages[0]["content"] += "\n\n" + _tool_prompt
+        _prompt_injected_tools = True
+        logger.info(f"[Shogun] Prompt-injected {len(active_tools)} tools (model does not support structured tools)")
+        # Clear active_tools so they're not sent via API — text parser will handle calls
+        active_tools = []
+
     # ── EU AI Act: Derive use-case context ─────────────────
     _security_tier = "guarded"
     if _policy_name:
@@ -814,13 +857,16 @@ BEHAVIOUR:
     timestamp = datetime.now().isoformat()
 
     async def generate():
-        nonlocal messages
+        nonlocal messages, active_tools
         # Metadata event: lets frontend show model badge immediately
         yield f"data: {json.dumps({'type': 'meta', 'model': model_name, 'provider': provider_name, 'timestamp': timestamp, 'reason': res_reason, 'search': bool(_search_model)})}\n\n"
+
+        _tool_retry_used = False  # only retry once
 
         while True:
             assistant_tokens: list[str] = []
             tool_calls_buffer: dict = {}
+            _retry_without_tools = False
 
             req_json = {
                 "model": model_name,
@@ -842,60 +888,85 @@ BEHAVIOUR:
                         if resp.status_code >= 400:
                             body_bytes = await resp.aread()
                             err = body_bytes.decode(errors="replace")[:300]
-                            # ── EVENT: Model Error ────────────────
-                            try:
-                                await EL.emit_model_event(
-                                    "model.error", f"LLM API error {resp.status_code}: {err[:100]}",
-                                    result="error", severity="error",
-                                    model_used=model_name, provider_used=provider_name,
-                                    trace_id=_trace_id, agent_id=_agent_id_str,
-                                    detail={"status_code": resp.status_code, "error": err},
-                                )
-                                # ── EVENT: Incident — Model API Error ───
-                                await EL.emit_incident_event(
-                                    "incident.model_api_error",
-                                    f"Model API returned HTTP {resp.status_code}",
-                                    severity="error", risk_score="high",
-                                    trace_id=_trace_id, agent_id=_agent_id_str,
-                                    detail={"model": model_name, "provider": provider_name, "status_code": resp.status_code, "error": err[:200]},
-                                )
-                            except Exception:
-                                pass
-                            yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ LLM error ({resp.status_code}): {err}'})}\n\n"
-                            yield "data: [DONE]\n\n"
-                            return
 
-                        async for line in resp.aiter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data_str = line[6:].strip()
-                            if data_str == "[DONE]":
-                                break
-                                
-                            try:
-                                chunk = json.loads(data_str)
-                                delta = chunk["choices"][0]["delta"]
-                                
-                                # Process tool calls from streaming
-                                if "tool_calls" in delta:
-                                    for tcall in delta["tool_calls"]:
-                                        idx = tcall["index"]
-                                        if idx not in tool_calls_buffer:
-                                            tool_calls_buffer[idx] = {"id": tcall.get("id"), "type": "function", "function": {"name": tcall["function"].get("name", ""), "arguments": ""}}
-                                        else:
-                                            tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"].get("arguments", "")
+                            # ── Retry without tools on invalid tool call arguments ──
+                            if resp.status_code == 400 and "invalid tool call" in err.lower() and not _tool_retry_used:
+                                import logging as _logging
+                                _logging.getLogger("shogun.agents").warning("[Shogun] 400 invalid tool call — retrying without tools")
+                                active_tools = []
+                                _tool_retry_used = True
+                                _retry_without_tools = True
+                                # Strip any tool-related messages so the model gets a clean conversation
+                                messages = [m for m in messages if m.get("role") not in ("tool",) and "tool_calls" not in m]
+
+                            if not _retry_without_tools:
+                                # ── EVENT: Model Error ────────────────
+                                try:
+                                    await EL.emit_model_event(
+                                        "model.error", f"LLM API error {resp.status_code}: {err[:100]}",
+                                        result="error", severity="error",
+                                        model_used=model_name, provider_used=provider_name,
+                                        trace_id=_trace_id, agent_id=_agent_id_str,
+                                        detail={"status_code": resp.status_code, "error": err},
+                                    )
+                                    # ── EVENT: Incident — Model API Error ───
+                                    await EL.emit_incident_event(
+                                        "incident.model_api_error",
+                                        f"Model API returned HTTP {resp.status_code}",
+                                        severity="error", risk_score="high",
+                                        trace_id=_trace_id, agent_id=_agent_id_str,
+                                        detail={"model": model_name, "provider": provider_name, "status_code": resp.status_code, "error": err[:200]},
+                                    )
+                                except Exception:
+                                    pass
+                                yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ LLM error ({resp.status_code}): {err}'})}\n\n"
+                                yield "data: [DONE]\n\n"
+                                return
+
+                        if not _retry_without_tools:
+                            _inside_think = False  # Track <think>...</think> blocks
+                            async for line in resp.aiter_lines():
+                                if not line.startswith("data: "):
+                                    continue
+                                data_str = line[6:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                    
+                                try:
+                                    chunk = json.loads(data_str)
+                                    delta = chunk["choices"][0]["delta"]
+                                    
+                                    # Process tool calls from streaming
+                                    if "tool_calls" in delta:
+                                        for tcall in delta["tool_calls"]:
+                                            idx = tcall["index"]
+                                            if idx not in tool_calls_buffer:
+                                                tool_calls_buffer[idx] = {"id": tcall.get("id"), "type": "function", "function": {"name": tcall["function"].get("name", ""), "arguments": ""}}
+                                            else:
+                                                tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"].get("arguments", "")
+                                            
+                                            # Yield action notice initially
+                                            if tcall.get("id"):
+                                                func_name = tool_calls_buffer[idx]["function"]["name"]
+                                                yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
+                                    
+                                    content = delta.get("content") or ""
+                                    if content:
+                                        # ── Handle <think> blocks ──
+                                        # Some reasoning models output <think>...</think> blocks.
+                                        # Track them in assistant_tokens but don't yield to frontend.
+                                        if "<think>" in content:
+                                            _inside_think = True
+                                        if _inside_think:
+                                            assistant_tokens.append(content)
+                                            if "</think>" in content:
+                                                _inside_think = False
+                                            continue  # don't yield thinking tokens
                                         
-                                        # Yield action notice initially
-                                        if tcall.get("id"):
-                                            func_name = tool_calls_buffer[idx]["function"]["name"]
-                                            yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
-                                
-                                content = delta.get("content") or ""
-                                if content:
-                                    assistant_tokens.append(content)
-                                    yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                            except Exception:
-                                pass  # skip malformed chunks
+                                        assistant_tokens.append(content)
+                                        yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+                                except Exception:
+                                    pass  # skip malformed chunks
 
             except httpx.ConnectError:
                 yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ Cannot connect to {base_url}. Is {provider.provider_type} running?'})}\n\n"
@@ -906,11 +977,16 @@ BEHAVIOUR:
                 yield "data: [DONE]\n\n"
                 return
 
-            if assistant_tokens:
-                _append_chat_log("assistant", "".join(assistant_tokens))
-                messages.append({"role": "assistant", "content": "".join(assistant_tokens)})
+            # If we're retrying without tools, restart the loop immediately
+            if _retry_without_tools:
+                continue
 
-            # Tool execution cycle
+            if assistant_tokens:
+                full_text = "".join(assistant_tokens)
+                _append_chat_log("assistant", full_text)
+                messages.append({"role": "assistant", "content": full_text})
+
+            # ── Structured tool calls (OpenAI format) ──
             if tool_calls_buffer:
                 tool_calls_array = list(tool_calls_buffer.values())
                 
@@ -972,6 +1048,84 @@ BEHAVIOUR:
 
                 # Continue the loop to hit LLM again with the tool results
                 continue
+
+            # ── Fallback: parse text-based <tool_call> blocks ──
+            # Some models (e.g. Gemma4) output tool calls as text instead of
+            # using the structured OpenAI format. Parse and execute them.
+            full_text = "".join(assistant_tokens) if assistant_tokens else ""
+            # Strip <think>...</think> blocks before parsing tool calls
+            import re as _re
+            full_text_clean = _re.sub(r"<think>.*?</think>", "", full_text, flags=_re.DOTALL).strip()
+            if "<tool_call>" in full_text_clean and "</tool_call>" in full_text_clean:
+                import logging as _logging
+                _log = _logging.getLogger("shogun.agents")
+                # Step 1: Extract each <tool_call>...</tool_call> block (non-greedy)
+                _block_pattern = _re.compile(r"<tool_call>(.*?)</tool_call>", _re.DOTALL)
+                _blocks = _block_pattern.findall(full_text_clean)
+                # Step 2: Parse function name + args from each block
+                _func_pattern = _re.compile(r"(\w+)\s*\(([\s\S]*)\)\s*$", _re.DOTALL)
+                _tc_matches = []
+                for _block in _blocks:
+                    _m = _func_pattern.match(_block.strip())
+                    if _m:
+                        _tc_matches.append((_m.group(1), _m.group(2).strip()))
+                _log.info(f"[Shogun] Text-mode tool calls found: {len(_tc_matches)} — {[m[0] for m in _tc_matches]}")
+                if _tc_matches:
+                    _text_tool_results = []
+                    async for db in get_db():
+                        for func_name, raw_args in _tc_matches:
+                            # Parse arguments from various formats
+                            args = {}
+                            raw_args = raw_args.strip()
+                            if raw_args:
+                                try:
+                                    # Try JSON first: func({"key": "val"})
+                                    args = json.loads(raw_args)
+                                except json.JSONDecodeError:
+                                    # Try key=value pairs: func(key="val", key2="val2")
+                                    # or func(folder={"INBOX"}, uid={"12345"})
+                                    _kv_pattern = _re.compile(
+                                        r'(\w+)\s*=\s*(?:'
+                                        r'\{?"([^}]*?)"\}?'    # key={"value"} or key="value"
+                                        r"|'([^']*?)'"         # key='value'
+                                        r'|(\S+)'              # key=value (no quotes)
+                                        r')',
+                                    )
+                                    for m in _kv_pattern.finditer(raw_args):
+                                        k = m.group(1)
+                                        v = m.group(2) or m.group(3) or m.group(4) or ""
+                                        args[k] = v
+                                _log.info(f"[Shogun] Text-mode tool '{func_name}' parsed args: {args}")
+
+                            yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
+                            res_str = await execute_native_tool(func_name, args, db)
+                            _text_tool_results.append((func_name, args, res_str))
+                            _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
+
+                            try:
+                                _tool_result = json.loads(res_str)
+                                _tool_status = _tool_result.get("status", "unknown")
+                            except Exception:
+                                _tool_status = "unknown"
+                            try:
+                                await EL.emit_tool_event(
+                                    "tool.executed", f"Native tool '{func_name}' executed (text-mode)",
+                                    tool_name=func_name,
+                                    result="success" if _tool_status == "success" else "error",
+                                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                    model_used=model_name, provider_used=provider_name,
+                                    detail={"args": {k: str(v)[:200] for k, v in args.items()}, "result_status": _tool_status, "mode": "text_parse"},
+                                )
+                            except Exception:
+                                pass
+                        break  # Only one DB session needed
+
+                    # Feed results back as a user message with tool outputs
+                    _results_text = "\n\n".join(
+                        f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _text_tool_results
+                    )
+                    messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
+                    continue
             
             # If no tool calls occurred or we are done, terminate loop
             break

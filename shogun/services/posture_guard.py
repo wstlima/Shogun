@@ -107,6 +107,12 @@ async def get_posture_tool_filter() -> dict[str, Any]:
         - shell_enabled: bool
         - max_active_subagents: int
         - active_tier: str
+        - comms_read_email: bool
+        - comms_send_email: bool
+        - comms_read_calendar: bool
+        - comms_create_events: bool
+        - comms_list_cron: bool
+        - comms_manage_cron: bool
 
     The caller uses these to strip tools from the LLM's available tool list.
     """
@@ -119,6 +125,12 @@ async def get_posture_tool_filter() -> dict[str, Any]:
         "shell_enabled": posture.get("shell_enabled", False),
         "max_active_subagents": posture.get("max_active_subagents", 5),
         "active_tier": posture.get("active_tier", "tactical"),
+        "comms_read_email": posture.get("comms_read_email", True),
+        "comms_send_email": posture.get("comms_send_email", True),
+        "comms_read_calendar": posture.get("comms_read_calendar", True),
+        "comms_create_events": posture.get("comms_create_events", True),
+        "comms_list_cron": posture.get("comms_list_cron", True),
+        "comms_manage_cron": posture.get("comms_manage_cron", False),
     }
 
 
@@ -143,6 +155,30 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
             if not posture.get("skill_auto_install", False):
                 denied.append(name)
                 continue
+
+        # ── Comms: Email tools ──
+        if name in ("fetch_inbox", "read_email") and not posture.get("comms_read_email", True):
+            denied.append(name)
+            continue
+        if name == "send_email" and not posture.get("comms_send_email", True):
+            denied.append(name)
+            continue
+
+        # ── Comms: Calendar tools ──
+        if name == "list_calendar_events" and not posture.get("comms_read_calendar", True):
+            denied.append(name)
+            continue
+        if name == "create_calendar_event" and not posture.get("comms_create_events", True):
+            denied.append(name)
+            continue
+
+        # ── Comms: Cron job tools ──
+        if name == "list_cron_jobs" and not posture.get("comms_list_cron", True):
+            denied.append(name)
+            continue
+        if name in ("create_cron_job", "delete_cron_job") and not posture.get("comms_manage_cron", False):
+            denied.append(name)
+            continue
 
         allowed.append(tool)
 

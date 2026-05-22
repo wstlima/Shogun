@@ -529,8 +529,8 @@ export const MailView = () => {
             onClick={() => { if (!sendingEmail) setShowCompose(false); }}
           />
 
-          <div className="relative w-full max-w-2xl bg-[#09090e] border border-shogun-border rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center p-5 border-b border-shogun-border/30 bg-[#0a0a0f]/40">
+          <div className="relative w-full max-w-lg bg-[#09090e] border border-shogun-border rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center px-5 py-3 border-b border-shogun-border/30 bg-[#0a0a0f]/40">
               <h3 className="text-sm font-bold text-shogun-text uppercase tracking-widest flex items-center gap-2">
                 <Send className="w-4 h-4 text-shogun-blue" />
                 Compose Directive
@@ -544,7 +544,7 @@ export const MailView = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSend} className="p-5 flex-1 flex flex-col gap-4 overflow-y-auto max-h-[70vh]">
+            <form onSubmit={handleSend} className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[55vh]">
               {errorMsg && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-xs font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -609,11 +609,11 @@ export const MailView = () => {
                 <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Body *</label>
                 <textarea
                   required
-                  rows={8}
+                  rows={4}
                   placeholder="Write message contents..."
                   value={composeBody}
                   onChange={e => setComposeBody(e.target.value)}
-                  className="w-full flex-1 min-h-[150px] bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono resize-y"
+                  className="w-full flex-1 min-h-[80px] bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-shogun-blue outline-none font-mono resize-y"
                 />
               </div>
 

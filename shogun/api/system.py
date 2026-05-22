@@ -236,6 +236,31 @@ async def pull_model_stream(
     )
 
 
+@router.delete("/delete-model")
+async def delete_ollama_model(
+    model: str = Query(..., description="Ollama model tag to delete, e.g. llama3.2:3b"),
+    base_url: str = Query("http://localhost:11434", description="Ollama base URL"),
+):
+    """Delete a locally pulled Ollama model to free disk space."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(
+                f"{base_url}/api/delete",
+                json={"name": model},
+            )
+            if resp.status_code == 200:
+                return {"success": True, "message": f"Model '{model}' deleted successfully."}
+            else:
+                err = resp.text[:300]
+                return {"success": False, "message": f"Ollama returned {resp.status_code}: {err}"}
+    except httpx.ConnectError:
+        return {"success": False, "message": f"Cannot connect to Ollama at {base_url}. Is it running?"}
+    except Exception as exc:
+        return {"success": False, "message": str(exc)[:300]}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # EXPORT / IMPORT BACKUP
 # ─────────────────────────────────────────────────────────────────────────────
