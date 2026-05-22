@@ -1,7 +1,7 @@
 {
-  "version": "1.1.9",
-  "build": 21,
+  "version": "1.2.0",
+  "build": 22,
   "channel": "stable",
-  "released": "2026-05-04T10:18:00Z",
-  "changelog": "Fix setup wizard model registration (remap frontend UUIDs to DB UUIDs), add model-name fallback in chat endpoint, auto-heal stale model refs in Tenshu profile, fix start.bat venv detection (.venv support), and re-create desktop shortcut with icon."
+  "released": "2026-05-22T10:25:00Z",
+  "changelog": "Integrate cron jobs (Bushido schedules) with the Calendar, add controllable agent heartbeat cadence slider settings, and implement lightweight, secure email body previews in the message list."
 }

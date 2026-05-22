@@ -152,11 +152,126 @@ async def deregister_schedule(schedule_id: uuid.UUID) -> None:
         log.debug("Bushido: schedule %s not in APScheduler (already absent)", schedule_id)
 
 
+async def _run_heartbeat() -> None:
+    """Background task to run system heartbeat diagnostics and check emails."""
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.agent import Agent
+    from shogun.services.email_service import EmailService
+    from shogun.services.event_logger import EventLogger
+    from datetime import datetime, timezone
+
+    log.info("System heartbeat firing...")
+
+    async with async_session_factory() as session:
+        # 1. Update heartbeat on active agents
+        from sqlalchemy import select
+        try:
+            result = await session.execute(
+                select(Agent).where(Agent.is_deleted == False, Agent.status == "active")
+            )
+            agents = result.scalars().all()
+            now = datetime.now(timezone.utc)
+            for agent in agents:
+                agent.last_heartbeat_at = now
+            log.info("Heartbeat updated for %d active agent(s)", len(agents))
+        except Exception as exc:
+            log.error("Failed to update agent heartbeats: %s", exc)
+            agents = []
+
+        # 2. Check emails if account exists & perm_read_mail is enabled
+        email_sync_success = False
+        try:
+            email_svc = EmailService(session)
+            email_acc = await email_svc.get_account()
+            if email_acc and email_acc.is_active and email_acc.perm_read_mail:
+                # Fetch folders to confirm connection is good
+                await email_svc.fetch_folders()
+                email_acc.last_sync_at = datetime.now(timezone.utc)
+                email_sync_success = True
+                log.info("Email account %s checked successfully", email_acc.email_address)
+        except Exception as exc:
+            log.warning("Email check failed during heartbeat: %s", exc)
+
+        await session.commit()
+
+        # 3. Log a system event
+        try:
+            await EventLogger.emit_system_event(
+                event_type="system.heartbeat",
+                action=f"System heartbeat processed. Active agents: {len(agents)}. Email synced: {email_sync_success}",
+                detail={
+                    "agent_count": len(agents),
+                    "email_sync_success": email_sync_success
+                }
+            )
+        except Exception as exc:
+            log.warning("Failed to emit heartbeat event: %s", exc)
+
+
+async def register_heartbeat_job(session) -> None:
+    """Read heartbeat frequency from primary Shogun agent settings and schedule heartbeat job."""
+    from sqlalchemy import select
+    from shogun.db.models.agent import Agent
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    sched = get_scheduler()
+    if sched.get_job("system_heartbeat"):
+        sched.remove_job("system_heartbeat")
+
+    frequency = 15
+    try:
+        result = await session.execute(
+            select(Agent).where(
+                Agent.agent_type == "shogun",
+                Agent.is_primary == True,
+                Agent.is_deleted == False
+            )
+        )
+        shogun = result.scalars().first()
+        if shogun and shogun.bushido_settings:
+            frequency = shogun.bushido_settings.get("heartbeat_frequency", 15)
+    except Exception as exc:
+        log.warning("Failed to read heartbeat frequency from DB, using 15: %s", exc)
+
+    trigger = IntervalTrigger(minutes=frequency)
+    sched.add_job(
+        _run_heartbeat,
+        trigger=trigger,
+        id="system_heartbeat",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+    log.info("System heartbeat scheduled every %d minutes", frequency)
+
+
+async def reschedule_heartbeat(minutes: int) -> None:
+    """Reschedule the heartbeat job dynamically with the new frequency in minutes."""
+    sched = get_scheduler()
+    if sched.get_job("system_heartbeat"):
+        sched.remove_job("system_heartbeat")
+
+    from apscheduler.triggers.interval import IntervalTrigger
+    trigger = IntervalTrigger(minutes=minutes)
+    sched.add_job(
+        _run_heartbeat,
+        trigger=trigger,
+        id="system_heartbeat",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+    log.info("Rescheduled system heartbeat to run every %d minutes", minutes)
+
+
 async def sync_all_schedules(session) -> int:
     """Load all BushidoSchedule rows from DB and sync APScheduler.
 
     Called on startup. Returns number of enabled schedules registered.
     """
+    try:
+        await register_heartbeat_job(session)
+    except Exception as exc:
+        log.warning("Failed to register system heartbeat job: %s", exc)
+
     from sqlalchemy import select
     from shogun.db.models.bushido import BushidoSchedule
 

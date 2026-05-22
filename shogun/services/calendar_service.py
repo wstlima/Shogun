@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 from typing import Any
 
@@ -80,52 +80,168 @@ class CalendarService(BaseService[EmailAccount]):
         return result.scalars().first()
 
     async def get_events(self, start_date: datetime, end_date: datetime) -> list[CalendarEventResponse]:
-        """Fetch events in a date range via CalDAV."""
+        """Fetch events in a date range via CalDAV and dynamic Bushido schedules."""
         acc = await self.get_account()
         if not acc:
             raise HTTPException(status_code=404, detail="No email/calendar account configured")
         if not acc.perm_read_calendar:
             raise HTTPException(status_code=403, detail="Permission denied: perm_read_calendar is disabled")
-        if acc.calendar_provider == "none" or not acc.caldav_url:
-            return []
 
-        password = decrypt_password(acc.encrypted_password)
+        # 1. Fetch CalDAV events if configured
+        caldav_events = []
+        if acc.calendar_provider != "none" and acc.caldav_url:
+            password = decrypt_password(acc.encrypted_password)
 
-        def _fetch():
-            client = caldav.DAVClient(
-                url=acc.caldav_url,
-                username=acc.username,
-                password=password,
-            )
-            principal = client.principal()
-            calendars = principal.calendars()
+            def _fetch():
+                client = caldav.DAVClient(
+                    url=acc.caldav_url,
+                    username=acc.username,
+                    password=password,
+                )
+                principal = client.principal()
+                calendars = principal.calendars()
 
-            parsed_events = []
-            for cal in calendars:
-                events = cal.date_search(start=start_date, end=end_date)
-                for ev in events:
-                    try:
-                        info = parse_ical(ev.data)
-                        if "id" not in info:
-                            continue
-                        parsed_events.append(CalendarEventResponse(
-                            id=info["id"],
-                            title=info.get("title", "(No Title)"),
-                            start=info["start"],
-                            end=info.get("end", info["start"]),
-                            location=info.get("location"),
-                            description=info.get("description"),
-                            all_day=info.get("all_day", False),
-                            color=acc.provider,
-                        ))
-                    except Exception:
-                        pass
-            return parsed_events
+                parsed_events = []
+                for cal in calendars:
+                    events = cal.date_search(start=start_date, end=end_date)
+                    for ev in events:
+                        try:
+                            info = parse_ical(ev.data)
+                            if "id" not in info:
+                                continue
+                            parsed_events.append(CalendarEventResponse(
+                                id=info["id"],
+                                title=info.get("title", "(No Title)"),
+                                start=info["start"],
+                                end=info.get("end", info["start"]),
+                                location=info.get("location"),
+                                description=info.get("description"),
+                                all_day=info.get("all_day", False),
+                                color=acc.provider,
+                            ))
+                        except Exception:
+                            pass
+                return parsed_events
 
+            try:
+                caldav_events = await asyncio.to_thread(_fetch)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to fetch CalDAV events: %s", e)
+
+        # 2. Fetch enabled Bushido schedules and calculate occurrences
+        cron_events = []
         try:
-            return await asyncio.to_thread(_fetch)
+            from shogun.db.models.bushido import BushidoSchedule
+            stmt = select(BushidoSchedule).where(BushidoSchedule.is_enabled == True)
+            result = await self.session.execute(stmt)
+            schedules = result.scalars().all()
+
+            start_utc = start_date
+            if start_utc.tzinfo is None:
+                start_utc = start_utc.replace(tzinfo=timezone.utc)
+            else:
+                start_utc = start_utc.astimezone(timezone.utc)
+
+            end_utc = end_date
+            if end_utc.tzinfo is None:
+                end_utc = end_utc.replace(tzinfo=timezone.utc)
+            else:
+                end_utc = end_utc.astimezone(timezone.utc)
+
+            for sched in schedules:
+                occs = []
+                if sched.frequency == "one-off":
+                    if sched.schedule_datetime:
+                        try:
+                            dt = datetime.fromisoformat(sched.schedule_datetime)
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            else:
+                                dt = dt.astimezone(timezone.utc)
+                            if start_utc <= dt <= end_utc:
+                                occs.append(dt)
+                        except Exception:
+                            pass
+                elif sched.frequency == "hourly":
+                    min_offset = sched.minute_offset or 0
+                    curr = start_utc.replace(minute=min_offset, second=0, microsecond=0)
+                    if curr < start_utc:
+                        curr += timedelta(hours=1)
+                    while curr <= end_utc:
+                        occs.append(curr)
+                        curr += timedelta(hours=1)
+                elif sched.frequency == "nightly":
+                    hour, minute = 2, 0
+                    if sched.schedule_time:
+                        try:
+                            h_str, m_str = sched.schedule_time.split(":")
+                            hour, minute = int(h_str), int(m_str)
+                        except Exception:
+                            pass
+                    curr = start_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if curr < start_utc:
+                        curr += timedelta(days=1)
+                    while curr <= end_utc:
+                        occs.append(curr)
+                        curr += timedelta(days=1)
+                elif sched.frequency == "weekly":
+                    hour, minute = 2, 0
+                    if sched.schedule_time:
+                        try:
+                            h_str, m_str = sched.schedule_time.split(":")
+                            hour, minute = int(h_str), int(m_str)
+                        except Exception:
+                            pass
+                    days_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+                    active_wdays = []
+                    if sched.schedule_days:
+                        for d in sched.schedule_days:
+                            d_clean = d.lower()[:3]
+                            if d_clean in days_map:
+                                active_wdays.append(days_map[d_clean])
+                    if not active_wdays:
+                        active_wdays = [0, 2, 4]
+                    curr = start_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if curr < start_utc:
+                        curr += timedelta(days=1)
+                    while curr <= end_utc:
+                        if curr.weekday() in active_wdays:
+                            occs.append(curr)
+                        curr += timedelta(days=1)
+                elif sched.frequency == "monthly":
+                    hour, minute = 2, 0
+                    if sched.schedule_time:
+                        try:
+                            h_str, m_str = sched.schedule_time.split(":")
+                            hour, minute = int(h_str), int(m_str)
+                        except Exception:
+                            pass
+                    target_day = sched.schedule_day or 1
+                    curr = start_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if curr < start_utc:
+                        curr += timedelta(days=1)
+                    while curr <= end_utc:
+                        if curr.day == target_day:
+                            occs.append(curr)
+                        curr += timedelta(days=1)
+
+                for occ in occs:
+                    cron_events.append(CalendarEventResponse(
+                        id=f"cron_{sched.id}_{occ.strftime('%Y%m%dT%H%M%SZ')}",
+                        title=f"🤖 Cron: {sched.name}",
+                        start=occ,
+                        end=occ + timedelta(minutes=30),
+                        location="Shogun Operations",
+                        description=f"Job Type: {sched.job_type}\nFrequency: {sched.frequency}\nInstruction: {sched.task_instruction or 'None'}",
+                        all_day=False,
+                        color="cron_job",
+                    ))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar: {str(e)}")
+            import logging
+            logging.getLogger(__name__).warning("Failed to construct cron events: %s", e)
+
+        return caldav_events + cron_events
 
     async def create_event(self, data: CalendarEventCreate) -> CalendarEventResponse:
         """Create an event via CalDAV."""
@@ -190,6 +306,8 @@ END:VCALENDAR"""
 
     async def update_event(self, event_id: str, data: CalendarEventCreate) -> CalendarEventResponse:
         """Update an event by deleting and re-creating it with the same ID."""
+        if event_id.startswith("cron_"):
+            raise HTTPException(status_code=400, detail="Cannot edit system cron job events from the calendar. Please manage them from the Operations dashboard.")
         acc = await self.get_account()
         if not acc:
             raise HTTPException(status_code=404, detail="No email/calendar account configured")
@@ -262,6 +380,8 @@ END:VCALENDAR"""
 
     async def delete_event(self, event_id: str) -> dict[str, Any]:
         """Delete an event via CalDAV."""
+        if event_id.startswith("cron_"):
+            raise HTTPException(status_code=400, detail="Cannot delete system cron job events from the calendar. Please manage them from the Operations dashboard.")
         acc = await self.get_account()
         if not acc:
             raise HTTPException(status_code=404, detail="No email/calendar account configured")

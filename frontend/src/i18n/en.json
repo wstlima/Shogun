@@ -836,6 +836,8 @@
     "memory_consolidation_desc": "Frequency of episodic-to-semantic memory transformation.",
     "exploration_variance": "Exploration Variance",
     "exploration_variance_desc": "Controls how much the agent explores novel approaches vs. sticking to proven patterns.",
+    "heartbeat_frequency": "Heartbeat Frequency",
+    "heartbeat_frequency_desc": "Interval in minutes for system heartbeat updates, checking cron jobs, and syncing emails.",
     "reset_to_baseline": "Reset To Baseline",
     "save_calibration": "Save Calibration",
     "saving": "Saving...",

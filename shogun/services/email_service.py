@@ -267,7 +267,7 @@ class EmailService(BaseService[EmailAccount]):
             
             # Select folder
             mail.select(folder)
-            status, messages = mail.search(None, "ALL")
+            status, messages = mail.uid("search", None, "ALL")
             if status != "OK" or not messages[0]:
                 mail.logout()
                 return [], 0
@@ -286,54 +286,113 @@ class EmailService(BaseService[EmailAccount]):
                 return [], total
 
             uid_seq = b",".join(page_uids).decode()
-            # Fetch headers + flags
-            status, fetch_data = mail.fetch(uid_seq, "(RFC822.HEADER FLAGS)")
+            # Fetch headers + flags + mime structure + body preview snippet (first 500 bytes)
+            status, fetch_data = mail.uid("fetch", uid_seq, "(RFC822.HEADER FLAGS BODY.PEEK[1.MIME] BODY.PEEK[1]<0.500>)")
             if status != "OK":
                 mail.logout()
                 return [], total
 
-            parsed_messages = []
+            messages_dict = {}
             current_uid = None
-            current_header_bytes = b""
-            current_flags = []
 
-            # imaplib returns lists of tuples/bytes. Let's parse them.
-            # e.g., [(b'1 (UID 123 RFC822.HEADER {456}', b'Headers...', b' FLAGS (\\Seen))')]
-            i = 0
-            while i < len(fetch_data):
-                item = fetch_data[i]
+            for item in fetch_data:
                 if isinstance(item, tuple):
                     meta_str = item[0].decode("utf-8", errors="ignore")
                     uid_match = re.search(r"UID\s+(\d+)", meta_str, re.IGNORECASE)
                     if uid_match:
                         current_uid = uid_match.group(1)
+                        if current_uid not in messages_dict:
+                            messages_dict[current_uid] = {
+                                "uid": current_uid,
+                                "header_bytes": b"",
+                                "mime_bytes": b"",
+                                "body_bytes": b"",
+                                "flags_str": ""
+                            }
                     
-                    header_content = item[1]
-                    msg = email.message_from_bytes(header_content)
+                    if current_uid:
+                        flags_match = re.search(r"FLAGS\s+\((.*?)\)", meta_str, re.IGNORECASE)
+                        if flags_match:
+                            messages_dict[current_uid]["flags_str"] = flags_match.group(1)
+                            
+                        if "RFC822.HEADER" in meta_str:
+                            messages_dict[current_uid]["header_bytes"] = item[1]
+                        elif "BODY[1.MIME]" in meta_str or "BODY.PEEK[1.MIME]" in meta_str:
+                            messages_dict[current_uid]["mime_bytes"] = item[1]
+                        elif "BODY[1]" in meta_str or "BODY.PEEK[1]" in meta_str:
+                            messages_dict[current_uid]["body_bytes"] = item[1]
+                elif isinstance(item, bytes):
+                    item_str = item.decode("utf-8", errors="ignore")
+                    uid_match = re.search(r"UID\s+(\d+)", item_str, re.IGNORECASE)
+                    if uid_match:
+                        current_uid = uid_match.group(1)
+                        if current_uid not in messages_dict:
+                            messages_dict[current_uid] = {
+                                "uid": current_uid,
+                                "header_bytes": b"",
+                                "mime_bytes": b"",
+                                "body_bytes": b"",
+                                "flags_str": ""
+                            }
+                    flags_match = re.search(r"FLAGS\s+\((.*?)\)", item_str, re.IGNORECASE)
+                    if current_uid and flags_match:
+                        messages_dict[current_uid]["flags_str"] = flags_match.group(1)
+
+            parsed_messages = []
+            for uid_bytes in page_uids:
+                uid_str = uid_bytes.decode()
+                if uid_str in messages_dict:
+                    msg_data = messages_dict[uid_str]
                     
-                    # Look ahead or parse metadata for FLAGS
-                    flags_match = re.search(r"FLAGS\s+\((.*?)\)", meta_str, re.IGNORECASE)
-                    flags_str = flags_match.group(1) if flags_match else ""
-                    
-                    # Fallback flags checking in remaining parts if tuple structure varies
-                    is_read = "\\Seen" in flags_str
-                    
+                    # Parse standard headers
+                    msg = email.message_from_bytes(msg_data["header_bytes"])
                     subject = parse_header_str(msg.get("Subject", "(No Subject)"))
                     from_addr = parse_header_str(msg.get("From", "(Unknown Sender)"))
                     to_addr = parse_header_str(msg.get("To", "(Unknown Recipient)"))
                     date_str = parse_header_str(msg.get("Date", ""))
+                    is_read = "\\Seen" in msg_data["flags_str"]
+                    
+                    # Generate and decode body preview
+                    preview = ""
+                    if msg_data["body_bytes"]:
+                        # Use the MIME headers of part 1 if available, otherwise fallback to the main headers
+                        mime_headers = msg_data["mime_bytes"] if msg_data["mime_bytes"] else msg_data["header_bytes"]
+                        virtual_part_bytes = mime_headers + b"\r\n\r\n" + msg_data["body_bytes"]
+                        try:
+                            part = email.message_from_bytes(virtual_part_bytes)
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                charset = part.get_content_charset() or "utf-8"
+                                text = payload.decode(charset, errors="replace")
+                            else:
+                                text = ""
+                        except Exception:
+                            # Direct decode fallback
+                            try:
+                                text = msg_data["body_bytes"].decode("utf-8", errors="replace")
+                            except Exception:
+                                text = ""
+                        
+                        # Strip HTML tags
+                        text = re.sub(r"<[^>]*>", " ", text)
+                        # Normalize whitespace
+                        text = re.sub(r"\s+", " ", text).strip()
+                        preview = text[:150]
 
+                    # Detect attachments from headers
+                    content_type = msg.get("Content-Type", "")
+                    has_attachments = "multipart/mixed" in content_type.lower()
+                    
                     parsed_messages.append({
-                        "uid": current_uid or str(len(parsed_messages)),
+                        "uid": uid_str,
                         "from_address": from_addr,
                         "to_address": to_addr,
                         "subject": subject,
                         "date": date_str,
-                        "body_preview": "",  # preview fetched separately or left empty
+                        "body_preview": preview,
                         "is_read": is_read,
-                        "has_attachments": False,
+                        "has_attachments": has_attachments,
                     })
-                i += 1
 
             mail.logout()
             return parsed_messages, total

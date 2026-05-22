@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { 
   Mail, RefreshCw, Send, Trash2, Plus, 
   ChevronLeft, ChevronRight, AlertCircle, ShieldAlert, 
@@ -38,6 +39,7 @@ interface FullMessage extends MessageSummary {
 }
 
 export const MailView = () => {
+  const navigate = useNavigate();
   // states
   const [account, setAccount] = useState<EmailAccount | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
@@ -225,7 +227,7 @@ export const MailView = () => {
         </p>
         <button
           onClick={() => {
-            window.location.hash = '#/katana';
+            navigate('/katana');
           }}
           className="px-5 py-2.5 bg-shogun-blue hover:bg-shogun-blue/90 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
         >

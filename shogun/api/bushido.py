@@ -37,6 +37,7 @@ DEFAULT_CALIBRATION = {
     "reflection_intensity": 70,
     "consolidation_rate": 45,
     "exploration_variance": 24,
+    "heartbeat_frequency": 15,
 }
 
 
@@ -144,6 +145,7 @@ async def get_calibration(
         "reflection_intensity": settings.get("reflection_intensity", DEFAULT_CALIBRATION["reflection_intensity"]),
         "consolidation_rate": settings.get("consolidation_rate", DEFAULT_CALIBRATION["consolidation_rate"]),
         "exploration_variance": settings.get("exploration_variance", DEFAULT_CALIBRATION["exploration_variance"]),
+        "heartbeat_frequency": settings.get("heartbeat_frequency", DEFAULT_CALIBRATION["heartbeat_frequency"]),
     })
 
 
@@ -154,6 +156,9 @@ async def save_calibration(
 ):
     """Save Bushido calibration settings to the Shogun's bushido_settings."""
     from shogun.db.models.agent import Agent
+    import logging
+    log = logging.getLogger(__name__)
+
     filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
     records, _ = await agent_svc.get_all(filters=filters)
 
@@ -166,13 +171,22 @@ async def save_calibration(
     current["reflection_intensity"] = body.get("reflection_intensity", current.get("reflection_intensity", 70))
     current["consolidation_rate"] = body.get("consolidation_rate", current.get("consolidation_rate", 45))
     current["exploration_variance"] = body.get("exploration_variance", current.get("exploration_variance", 24))
+    current["heartbeat_frequency"] = body.get("heartbeat_frequency", current.get("heartbeat_frequency", 15))
 
     await agent_svc.update(shogun.id, bushido_settings=current)
+
+    # Reschedule heartbeat job dynamically
+    from shogun.scheduler import reschedule_heartbeat
+    try:
+        await reschedule_heartbeat(current["heartbeat_frequency"])
+    except Exception as exc:
+        log.warning("Failed to reschedule heartbeat on save: %s", exc)
 
     return ApiResponse(data={
         "reflection_intensity": current["reflection_intensity"],
         "consolidation_rate": current["consolidation_rate"],
         "exploration_variance": current["exploration_variance"],
+        "heartbeat_frequency": current["heartbeat_frequency"],
         "message": "Calibration saved.",
     })
 
@@ -183,6 +197,9 @@ async def reset_calibration(
 ):
     """Reset Bushido calibration to baseline defaults."""
     from shogun.db.models.agent import Agent
+    import logging
+    log = logging.getLogger(__name__)
+
     filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
     records, _ = await agent_svc.get_all(filters=filters)
 
@@ -193,6 +210,13 @@ async def reset_calibration(
     current = shogun.bushido_settings or {}
     current.update(DEFAULT_CALIBRATION)
     await agent_svc.update(shogun.id, bushido_settings=current)
+
+    # Reschedule heartbeat job back to default
+    from shogun.scheduler import reschedule_heartbeat
+    try:
+        await reschedule_heartbeat(DEFAULT_CALIBRATION["heartbeat_frequency"])
+    except Exception as exc:
+        log.warning("Failed to reschedule heartbeat on reset: %s", exc)
 
     return ApiResponse(data={
         **DEFAULT_CALIBRATION,

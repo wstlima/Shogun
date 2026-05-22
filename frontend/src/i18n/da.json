@@ -800,6 +800,8 @@
     "memory_consolidation_desc": "Frekvens for episodisk-til-semantisk hukommelsestransformation.",
     "exploration_variance": "Udforskningsvarians",
     "exploration_variance_desc": "Styrer, hvor meget agenten udforsker nye tilgange vs. fastholder afprøvede mønstre.",
+    "heartbeat_frequency": "Heartbeat-frekvens",
+    "heartbeat_frequency_desc": "Intervallet (i minutter) hvor systemet tjekker for cron-jobs, e-mails og aktive agenter.",
     "reset_to_baseline": "Nulstil Til Baseline",
     "save_calibration": "Gem Kalibrering",
     "saving": "Gemmer...",

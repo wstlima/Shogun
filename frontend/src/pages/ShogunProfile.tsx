@@ -20,7 +20,7 @@ import {
   GripVertical,
 } from 'lucide-react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
@@ -51,6 +51,7 @@ export const ShogunProfile = () => {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [runningJobs, setRunningJobs] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   
   const [shogunData, setShogunData] = useState<any>({
@@ -160,6 +161,13 @@ export const ShogunProfile = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'operations') {
+      setActiveTab('operations');
+    }
+  }, [location.search]);
 
   const fetchData = async () => {
     setLoading(true);

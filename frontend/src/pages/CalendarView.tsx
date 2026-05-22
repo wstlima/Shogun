@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { 
   Calendar, ChevronLeft, ChevronRight, Plus, Trash2, Edit3, 
-  Clock, MapPin, X, RefreshCw, ShieldAlert, AlertCircle
+  Clock, MapPin, X, RefreshCw, ShieldAlert, AlertCircle, Settings
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -32,6 +33,7 @@ interface CalendarEvent {
 }
 
 export const CalendarView = () => {
+  const navigate = useNavigate();
   const [account, setAccount] = useState<EmailAccount | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
   
@@ -388,7 +390,7 @@ export const CalendarView = () => {
           To manage schedules and CalDAV events, configure your Calendar provider in Katana settings.
         </p>
         <button
-          onClick={() => { window.location.hash = '#/katana'; }}
+          onClick={() => { navigate('/katana'); }}
           className="px-5 py-2.5 bg-shogun-blue hover:bg-shogun-blue/90 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
         >
           Go to Katana Settings
@@ -477,6 +479,13 @@ export const CalendarView = () => {
             ))}
           </div>
 
+          <button
+            onClick={() => navigate('/shogun?tab=operations')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all border border-purple-500/20 shadow-[0_0_10px_rgba(147,51,234,0.3)] hover:shadow-[0_0_15px_rgba(147,51,234,0.5)]"
+          >
+            <Plus className="w-4 h-4" /> Create Task
+          </button>
+
           {account.perm_create_events && (
             <button
               onClick={() => openCreateModal()}
@@ -556,9 +565,11 @@ export const CalendarView = () => {
                           }}
                           className={cn(
                             "px-2 py-1 rounded text-[10px] font-medium truncate border transition-all text-left",
-                            event.all_day 
-                              ? "bg-shogun-gold/15 border-shogun-gold/30 text-shogun-gold hover:bg-shogun-gold/25"
-                              : "bg-shogun-blue/15 border-shogun-blue/30 text-shogun-blue hover:bg-shogun-blue/25"
+                            event.color === 'cron_job'
+                              ? "bg-gradient-to-r from-purple-950/40 to-indigo-950/40 border-purple-500/30 text-purple-200 hover:from-purple-900/50 hover:to-indigo-900/50 shadow-[0_0_8px_rgba(168,85,247,0.15)]"
+                              : event.all_day 
+                                ? "bg-shogun-gold/15 border-shogun-gold/30 text-shogun-gold hover:bg-shogun-gold/25"
+                                : "bg-shogun-blue/15 border-shogun-blue/30 text-shogun-blue hover:bg-shogun-blue/25"
                           )}
                           title={`${event.title} (${new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
                         >
@@ -633,9 +644,11 @@ export const CalendarView = () => {
                           }}
                           className={cn(
                             "p-2.5 rounded-xl border transition-all text-left flex flex-col gap-1 shadow-lg hover:scale-[1.02]",
-                            event.all_day 
-                              ? "bg-shogun-gold/10 border-shogun-gold/30 text-shogun-gold hover:bg-shogun-gold/15"
-                              : "bg-shogun-blue/10 border-shogun-blue/30 text-shogun-blue hover:bg-shogun-blue/15"
+                            event.color === 'cron_job'
+                              ? "bg-gradient-to-br from-purple-950/30 to-indigo-950/30 border-purple-500/40 text-purple-200 hover:bg-purple-900/40 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                              : event.all_day 
+                                ? "bg-shogun-gold/10 border-shogun-gold/30 text-shogun-gold hover:bg-shogun-gold/15"
+                                : "bg-shogun-blue/10 border-shogun-blue/30 text-shogun-blue hover:bg-shogun-blue/15"
                           )}
                         >
                           <span className="text-xs font-bold leading-snug line-clamp-2">{event.title}</span>
@@ -684,9 +697,11 @@ export const CalendarView = () => {
                       onClick={() => openViewModal(event)}
                       className={cn(
                         "p-4 rounded-2xl border transition-all cursor-pointer hover:bg-shogun-card/45 flex flex-col md:flex-row md:items-center justify-between gap-4",
-                        event.all_day 
-                          ? "bg-shogun-gold/5 border-shogun-gold/20 text-shogun-gold"
-                          : "bg-shogun-blue/5 border-shogun-blue/20 text-shogun-blue"
+                        event.color === 'cron_job'
+                          ? "bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border-purple-500/30 text-purple-200 hover:from-purple-950/35 hover:to-indigo-950/35"
+                          : event.all_day 
+                            ? "bg-shogun-gold/5 border-shogun-gold/20 text-shogun-gold"
+                            : "bg-shogun-blue/5 border-shogun-blue/20 text-shogun-blue"
                       )}
                     >
                       <div className="space-y-1.5 flex-1 min-w-0">
@@ -714,17 +729,29 @@ export const CalendarView = () => {
                       </div>
 
                       <div className="flex gap-2 self-end md:self-center shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openViewModal(event);
-                            switchEditMode();
-                          }}
-                          disabled={!account.perm_edit_events}
-                          className="px-3 py-1.5 text-[10px] font-bold border border-shogun-border text-shogun-subdued hover:text-shogun-text rounded-lg hover:bg-white/5 transition-all disabled:opacity-40"
-                        >
-                          Edit
-                        </button>
+                        {event.color === 'cron_job' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate('/shogun?tab=operations');
+                            }}
+                            className="px-3 py-1.5 text-[10px] font-bold border border-purple-500/30 text-purple-300 hover:text-purple-200 hover:border-purple-500/50 rounded-lg hover:bg-purple-500/10 transition-all"
+                          >
+                            Configure
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openViewModal(event);
+                              switchEditMode();
+                            }}
+                            disabled={!account.perm_edit_events}
+                            className="px-3 py-1.5 text-[10px] font-bold border border-shogun-border text-shogun-subdued hover:text-shogun-text rounded-lg hover:bg-white/5 transition-all disabled:opacity-40"
+                          >
+                            Edit
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -798,23 +825,40 @@ export const CalendarView = () => {
 
                 {/* Footer Controls for View Mode */}
                 <div className="flex justify-between items-center pt-2 border-t border-shogun-border/20 gap-3">
-                  {account.perm_delete_events ? (
-                    <button
-                      onClick={handleDeleteEvent}
-                      disabled={submittingEvent}
-                      className="flex items-center gap-1.5 px-4 py-2 border border-red-500/20 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
-                    >
-                      <Trash2 className="w-4 h-4" /> Delete Event
-                    </button>
-                  ) : <div />}
+                  {selectedEvent.color === 'cron_job' ? (
+                    <>
+                      <div />
+                      <button
+                        onClick={() => {
+                          setShowEventModal(false);
+                          navigate('/shogun?tab=operations');
+                        }}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(147,51,234,0.3)]"
+                      >
+                        <Settings className="w-4 h-4" /> Configure Cron Job
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {account.perm_delete_events ? (
+                        <button
+                          onClick={handleDeleteEvent}
+                          disabled={submittingEvent}
+                          className="flex items-center gap-1.5 px-4 py-2 border border-red-500/20 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete Event
+                        </button>
+                      ) : <div />}
 
-                  {account.perm_edit_events && (
-                    <button
-                      onClick={switchEditMode}
-                      className="flex items-center gap-1.5 px-5 py-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
-                    >
-                      <Edit3 className="w-4 h-4" /> Edit Event
-                    </button>
+                      {account.perm_edit_events && (
+                        <button
+                          onClick={switchEditMode}
+                          className="flex items-center gap-1.5 px-5 py-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
+                        >
+                          <Edit3 className="w-4 h-4" /> Edit Event
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
