@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
         await EventLogger.emit_system_event(
             "system.startup", "Shogun server started",
             detail={
-                "version": "1.3.0",
+                "version": "1.3.1",
                 "platform": platform.system(),
                 "python": platform.python_version(),
             },

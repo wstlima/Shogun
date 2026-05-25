@@ -82,27 +82,59 @@ async def install_chromium() -> dict[str, Any]:
     import sys
 
     def _do_install():
-        return subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+        steps = []
+
+        # Step 1: Ensure playwright Python package is installed
+        try:
+            import playwright  # noqa: F401
+            steps.append({"step": "pip_install", "status": "skipped", "message": "playwright already installed"})
+        except ImportError:
+            log.info("Mado: Installing playwright Python package...")
+            pip_result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "playwright>=1.44.0"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if pip_result.returncode != 0:
+                return {
+                    "success": False,
+                    "error": f"Failed to install playwright package: {pip_result.stderr[-500:]}",
+                    "steps": [{"step": "pip_install", "status": "failed", "stderr": pip_result.stderr[-500:]}],
+                }
+            steps.append({"step": "pip_install", "status": "ok", "message": "playwright package installed"})
+
+        # Step 2: Install Chromium browser
+        log.info("Mado: Downloading and installing Chromium browser...")
+        browser_result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
             capture_output=True,
             text=True,
             timeout=300,
         )
+        if browser_result.returncode != 0:
+            steps.append({"step": "chromium_install", "status": "failed", "stderr": browser_result.stderr[-500:]})
+            return {
+                "success": False,
+                "error": f"Chromium install failed: {browser_result.stderr[-500:]}",
+                "steps": steps,
+            }
+
+        steps.append({"step": "chromium_install", "status": "ok", "message": "Chromium browser installed"})
+        log.info("Mado: Chromium browser installed successfully")
+        return {
+            "success": True,
+            "stdout": browser_result.stdout[-500:] if browser_result.stdout else "",
+            "steps": steps,
+        }
 
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, _do_install)
-        success = result.returncode == 0
-        log.info("Mado: Chromium install %s (rc=%d)", "succeeded" if success else "failed", result.returncode)
-        return {
-            "success": success,
-            "stdout": result.stdout[-1000:] if result.stdout else "",
-            "stderr": result.stderr[-1000:] if result.stderr else "",
-        }
-    except FileNotFoundError:
-        return {"success": False, "error": "Python executable not found"}
+        log.info("Mado: Install result — success=%s", result.get("success"))
+        return result
     except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Installation timed out after 300 seconds"}
+        return {"success": False, "error": "Installation timed out (5 minutes). Check your internet connection."}
     except Exception as exc:
         return {"success": False, "error": str(exc)[:500]}
 

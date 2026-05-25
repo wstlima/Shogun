@@ -252,16 +252,19 @@ export function Mado() {
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#22c55e]/8 border border-[#22c55e]/20">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#22c55e]" />
               <span className="text-[10px] font-bold text-[#22c55e] uppercase tracking-wider">Chromium Ready</span>
+              {status.version && (
+                <span className="text-[8px] text-[#22c55e]/60 font-mono">{status.version}</span>
+              )}
             </div>
           ) : (
             <button
               onClick={installChromium}
               disabled={installing}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border transition-all duration-200 cursor-pointer disabled:opacity-50"
               style={{
-                background: `${ACCENT}10`,
-                borderColor: `${ACCENT}40`,
-                color: ACCENT,
+                background: installing ? '#0e1225' : `${ACCENT}10`,
+                borderColor: installing ? '#1a2040' : `${ACCENT}40`,
+                color: installing ? '#7a8899' : ACCENT,
               }}
             >
               {installing ? (
@@ -270,7 +273,7 @@ export function Mado() {
                 <Download className="w-3.5 h-3.5" />
               )}
               <span className="text-[10px] font-bold uppercase tracking-wider">
-                {installing ? 'Installing Chromium...' : 'Install Chromium'}
+                {installing ? 'Installing...' : 'Install Chromium'}
               </span>
             </button>
           )}
@@ -284,8 +287,27 @@ export function Mado() {
         </div>
       </div>
 
-      {/* ── Install status banner ───────────────────────────── */}
-      {installMessage && (
+      {/* ── Install progress overlay ────────────────────────── */}
+      {installing && (
+        <div className="px-6 py-4 bg-[#0e1225] border-b border-[#1a2040] flex items-center gap-4">
+          <div className="relative w-8 h-8 shrink-0">
+            <div className="absolute inset-0 rounded-full border-2 border-[#1a2040]" />
+            <div className="absolute inset-0 rounded-full border-2 border-t-[#06b6d4] animate-spin" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-[#c8d0d8]">Installing Mado Browser Engine</p>
+            <p className="text-[10px] text-[#7a8899] mt-0.5">
+              Downloading Playwright + Chromium browser. This may take 1–2 minutes...
+            </p>
+          </div>
+          <div className="text-[9px] font-mono text-[#555] uppercase tracking-wider">
+            Please wait
+          </div>
+        </div>
+      )}
+
+      {/* ── Install result banner ───────────────────────────── */}
+      {installMessage && !installing && (
         <div className={cn(
           "px-6 py-3 flex items-center gap-2 text-xs font-bold",
           installMessage.type === 'success'
