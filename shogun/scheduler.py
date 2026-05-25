@@ -288,6 +288,121 @@ async def sync_all_schedules(session) -> int:
             log.warning("Bushido: failed to register schedule %s: %s", schedule.id, exc)
 
     log.info("Bushido: synced %d/%d schedules with APScheduler", count, len(schedules))
+
+    # ── Also sync Agent Flow schedules ────────────────────────
+    try:
+        flow_count = await sync_flow_schedules(session)
+        log.info("AgentFlow: synced %d flow schedules with APScheduler", flow_count)
+    except Exception as exc:
+        log.warning("AgentFlow: failed to sync flow schedules: %s", exc)
+
+    return count
+
+
+# ── Agent Flow Schedule Support ──────────────────────────────
+
+
+def _make_flow_job_id(flow_id: uuid.UUID) -> str:
+    return f"agentflow_{flow_id}"
+
+
+async def _fire_flow_schedule(flow_id: str) -> None:
+    """Callback invoked by APScheduler when a flow schedule fires."""
+    from shogun.engine.flow_engine import start_flow_run
+
+    log.info("AgentFlow scheduler firing: flow_id=%s", flow_id)
+    try:
+        fid = uuid.UUID(flow_id)
+    except ValueError:
+        log.error("AgentFlow scheduler: invalid flow_id '%s'", flow_id)
+        return
+
+    try:
+        await start_flow_run(fid, trigger_type="scheduled")
+    except Exception as exc:
+        log.error("AgentFlow scheduled execution failed for %s: %s", flow_id, exc)
+
+
+async def register_flow_schedule(flow) -> None:
+    """Register an Agent Flow with APScheduler based on its schedule_config."""
+    sched = get_scheduler()
+    job_id = _make_flow_job_id(flow.id)
+
+    # Remove existing
+    if sched.get_job(job_id):
+        sched.remove_job(job_id)
+
+    if flow.trigger_type != "scheduled" or flow.status != "active":
+        return
+
+    schedule_config = flow.schedule_config or {}
+    frequency = schedule_config.get("frequency", "nightly")
+    time_str = schedule_config.get("schedule_time", "02:00")
+
+    try:
+        hour, minute = (int(x) for x in time_str.split(":"))
+    except (ValueError, AttributeError):
+        hour, minute = 2, 0
+
+    if frequency == "hourly":
+        offset = schedule_config.get("minute_offset", 0)
+        trigger = CronTrigger(minute=offset)
+    elif frequency == "nightly":
+        trigger = CronTrigger(hour=hour, minute=minute)
+    elif frequency == "weekly":
+        days = schedule_config.get("schedule_days", ["mon"])
+        trigger = CronTrigger(day_of_week=",".join(days), hour=hour, minute=minute)
+    elif frequency == "monthly":
+        day = schedule_config.get("schedule_day", 1)
+        trigger = CronTrigger(day=day, hour=hour, minute=minute)
+    else:
+        trigger = CronTrigger(hour=hour, minute=minute)
+
+    sched.add_job(
+        _fire_flow_schedule,
+        trigger=trigger,
+        id=job_id,
+        kwargs={"flow_id": str(flow.id)},
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    log.info(
+        "AgentFlow: registered schedule for '%s' (%s) — freq=%s at %s",
+        flow.name, flow.id, frequency, time_str,
+    )
+
+
+async def deregister_flow_schedule(flow_id: uuid.UUID) -> None:
+    """Remove a flow schedule from APScheduler."""
+    sched = get_scheduler()
+    job_id = _make_flow_job_id(flow_id)
+    if sched.get_job(job_id):
+        sched.remove_job(job_id)
+        log.info("AgentFlow: deregistered schedule for flow %s", flow_id)
+
+
+async def sync_flow_schedules(session) -> int:
+    """Load all active scheduled Agent Flows and register with APScheduler."""
+    from sqlalchemy import select
+    from shogun.db.models.agent_flow import AgentFlow
+
+    result = await session.execute(
+        select(AgentFlow).where(
+            AgentFlow.trigger_type == "scheduled",
+            AgentFlow.status == "active",
+            AgentFlow.is_deleted == False,
+        )
+    )
+    flows = result.scalars().all()
+
+    count = 0
+    for flow in flows:
+        try:
+            await register_flow_schedule(flow)
+            count += 1
+        except Exception as exc:
+            log.warning("AgentFlow: failed to register schedule for flow %s: %s", flow.id, exc)
+
     return count
 
 
@@ -307,3 +422,4 @@ async def stop_scheduler() -> None:
     if sched.running:
         sched.shutdown(wait=False)
     log.info("Bushido scheduler stopped.")
+

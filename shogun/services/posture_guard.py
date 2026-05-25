@@ -119,19 +119,98 @@ async def get_posture_tool_filter() -> dict[str, Any]:
     from shogun.api.security import _get_agent_posture
 
     posture = await _get_agent_posture()
+    tier = posture.get("active_tier", "tactical")
+
+    # Derive Agent Flow permissions from tier
+    agentflow_create = tier in ("tactical", "campaign", "ronin")
+    agentflow_execute = tier in ("tactical", "campaign", "ronin")
+    agentflow_autonomous = tier in ("campaign", "ronin")
+
     return {
         "kill_switch_active": posture.get("kill_switch_active", False),
         "skill_auto_install": posture.get("skill_auto_install", False),
         "shell_enabled": posture.get("shell_enabled", False),
         "max_active_subagents": posture.get("max_active_subagents", 5),
-        "active_tier": posture.get("active_tier", "tactical"),
+        "active_tier": tier,
         "comms_read_email": posture.get("comms_read_email", True),
         "comms_send_email": posture.get("comms_send_email", True),
         "comms_read_calendar": posture.get("comms_read_calendar", True),
         "comms_create_events": posture.get("comms_create_events", True),
         "comms_list_cron": posture.get("comms_list_cron", True),
         "comms_manage_cron": posture.get("comms_manage_cron", False),
+        "agentflow_create": agentflow_create,
+        "agentflow_execute": agentflow_execute,
+        "agentflow_autonomous": agentflow_autonomous,
+        # Mado browser automation
+        "mado_enabled": posture.get("mado_enabled", False),
+        "mado_headless_only": posture.get("mado_headless_only", True),
+        "mado_domain_allowlist": posture.get("mado_domain_allowlist", []),
+        "mado_max_sessions": posture.get("mado_max_sessions", 3),
+        "mado_autonomous_browsing": posture.get("mado_autonomous_browsing", False),
+        "mado_downloads_enabled": posture.get("mado_downloads_enabled", False),
+        "mado_uploads_enabled": posture.get("mado_uploads_enabled", False),
     }
+
+
+# ── Mado browser access gate ────────────────────────────────────────
+
+async def check_mado_access() -> None:
+    """Raise HTTP 403 if Mado browser access is disabled at current tier.
+
+    Call this before any browser automation operation.
+    """
+    from shogun.api.security import _get_agent_posture
+
+    posture = await _get_agent_posture()
+    if not posture.get("mado_enabled", False):
+        tier = posture.get("active_tier", "tactical")
+        log.warning("[PostureGuard] Mado browser access blocked (tier=%s)", tier)
+        _emit_block_event(
+            "mado_disabled",
+            f"Browser automation blocked: Mado is disabled at tier {tier.upper()}",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Security posture [{tier.upper()}] does not permit browser automation. "
+                   "Change the security tier in the Torii to enable Mado.",
+        )
+
+
+async def check_mado_session_limit() -> None:
+    """Raise HTTP 403 if creating another browser session would exceed the tier limit."""
+    from shogun.api.security import _get_agent_posture
+    from shogun.db.engine import async_session_factory
+    from shogun.services.mado_service_crud import MadoSessionService
+
+    posture = await _get_agent_posture()
+    max_sessions = posture.get("mado_max_sessions", 3)
+    tier = posture.get("active_tier", "tactical")
+
+    async with async_session_factory() as db:
+        svc = MadoSessionService(db)
+        current_count = await svc.count_active()
+
+    if current_count >= max_sessions:
+        log.warning(
+            "[PostureGuard] Mado session limit reached: %d/%d (tier=%s)",
+            current_count, max_sessions, tier,
+        )
+        _emit_block_event(
+            "mado_session_limit",
+            f"Browser session creation blocked: {current_count}/{max_sessions} active "
+            f"(tier {tier.upper()} allows max {max_sessions})",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Security posture [{tier.upper()}] allows a maximum of "
+                   f"{max_sessions} browser sessions. Currently {current_count} "
+                   "are active. Close sessions or change tier in the Torii.",
+        )
+
+
+async def get_posture_permissions() -> dict[str, Any]:
+    """Alias for get_posture_tool_filter — used by flow engine and native skills."""
+    return await get_posture_tool_filter()
 
 
 def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict], list[str]]:

@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     log_path: Path = PROJECT_ROOT / "logs"
     config_path: Path = PROJECT_ROOT / "configs"
     uploads_path: Path = PROJECT_ROOT / "data" / "uploads"
+    mado_path: Path = PROJECT_ROOT / "data" / "mado"
 
     # ── Telegram ─────────────────────────────────────────────
     telegram_bot_token: str | None = None
@@ -71,6 +72,13 @@ class Settings(BaseSettings):
             self.log_path,
             self.config_path,
             self.uploads_path,
+            # Mado browser automation directories
+            self.mado_path,
+            self.mado_path / "profiles",
+            self.mado_path / "downloads",
+            self.mado_path / "sessions",
+            self.mado_path / "cache",
+            self.mado_path / "screenshots",
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 

@@ -22,6 +22,8 @@ from shogun.services.mission_service import MissionService
 from shogun.services.audit_service import AuditService
 from shogun.services.email_service import EmailService
 from shogun.services.calendar_service import CalendarService
+from shogun.services.agent_flow_service import AgentFlowService
+from shogun.services.mado_service_crud import MadoSessionService
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -99,4 +101,12 @@ def get_email_service(db: AsyncSession = Depends(get_db)) -> EmailService:
 
 def get_calendar_service(db: AsyncSession = Depends(get_db)) -> CalendarService:
     return CalendarService(db)
+
+
+def get_agent_flow_service(db: AsyncSession = Depends(get_db)) -> AgentFlowService:
+    return AgentFlowService(db)
+
+
+def get_mado_session_service(db: AsyncSession = Depends(get_db)) -> MadoSessionService:
+    return MadoSessionService(db)
 

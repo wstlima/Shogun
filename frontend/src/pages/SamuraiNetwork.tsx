@@ -13,10 +13,12 @@ import {
   Save,
   Settings,
   Zap,
+  GitBranch,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { AgentFlow } from './AgentFlow';
 
 export const SamuraiNetwork = () => {
   const { t } = useTranslation();
@@ -26,6 +28,7 @@ export const SamuraiNetwork = () => {
   const [routingProfiles, setRoutingProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'fleet' | 'agent-flow'>('fleet');
   const [searchTerm, setSearchTerm] = useState('');
   const [editAgent, setEditAgent] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
@@ -169,14 +172,58 @@ export const SamuraiNetwork = () => {
           <p className="text-shogun-subdued text-sm mt-1">{t('samurai_network.subtitle', 'Orchestrate specialized sub-agents across the mission grid.')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={fetchAll} className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
-          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold py-2.5 px-6 rounded-lg transition-all shadow-shogun">
-            <Plus className="w-4 h-4" /> {t('samurai_network.deploy_samurai', 'DEPLOY SAMURAI')}
-          </button>
+          {activeTab === 'fleet' && (
+            <>
+              <button onClick={fetchAll} className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors">
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              </button>
+              <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold py-2.5 px-6 rounded-lg transition-all shadow-shogun">
+                <Plus className="w-4 h-4" /> {t('samurai_network.deploy_samurai', 'DEPLOY SAMURAI')}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Tab Bar */}
+      <div className="flex items-center gap-1 border-b border-shogun-border">
+        <button
+          onClick={() => setActiveTab('fleet')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            activeTab === 'fleet'
+              ? "text-shogun-gold"
+              : "text-shogun-subdued hover:text-shogun-text"
+          )}
+        >
+          <Users className="w-3.5 h-3.5" />
+          {t('samurai_network.tab_fleet', 'Fleet')}
+          {activeTab === 'fleet' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('agent-flow')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            activeTab === 'agent-flow'
+              ? "text-shogun-gold"
+              : "text-shogun-subdued hover:text-shogun-text"
+          )}
+        >
+          <GitBranch className="w-3.5 h-3.5" />
+          {t('samurai_network.tab_agent_flow', 'Agent Flow')}
+          {activeTab === 'agent-flow' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
+          )}
+        </button>
+      </div>
+
+      {/* Agent Flow Tab */}
+      {activeTab === 'agent-flow' && <AgentFlow />}
+
+      {/* Fleet Tab — existing content */}
+      {activeTab === 'fleet' && (<>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -636,6 +683,7 @@ export const SamuraiNetwork = () => {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 };

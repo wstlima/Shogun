@@ -4,7 +4,7 @@ import {
   CheckCircle2, RefreshCw, Search, Eye, X, Plus, Save,
   Trash2, Copy, Check, Activity,
   Globe, HardDrive, Terminal, Zap, Users,
-  ChevronDown, ChevronRight, Database, Mail, Calendar, Clock,
+  ChevronDown, ChevronRight, Database, Mail, Calendar, Clock, AppWindow,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -28,6 +28,10 @@ interface Posture {
   comms_create_events: boolean;
   comms_list_cron: boolean;
   comms_manage_cron: boolean;
+  mado_enabled: boolean;
+  mado_headless_only: boolean;
+  mado_max_sessions: number;
+  mado_autonomous_browsing: boolean;
 }
 
 interface Policy {
@@ -383,6 +387,7 @@ export function Torii() {
                 { icon: Mail,      label: t('torii.mail_access'), value: !posture.comms_read_email ? t('torii.disabled') : posture.comms_send_email ? t('torii.read_send') : t('torii.read_only') },
                 { icon: Calendar,  label: t('torii.calendar_access'), value: !posture.comms_read_calendar ? t('torii.disabled') : posture.comms_create_events ? t('torii.full_access') : t('torii.read_only') },
                 { icon: Clock,     label: t('torii.cron_access'), value: !posture.comms_list_cron ? t('torii.disabled') : posture.comms_manage_cron ? t('torii.full_access') : t('torii.read_only') },
+                { icon: AppWindow,  label: 'Mado Browser', value: !posture.mado_enabled ? t('torii.disabled') : posture.mado_headless_only ? 'Headless' : posture.mado_autonomous_browsing ? 'Autonomous' : 'Enabled' },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 text-shogun-subdued">

@@ -305,6 +305,98 @@ NATIVE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_agent_flow",
+            "description": "Create a new Agent Flow workflow with nodes and edges. Use this when the user asks you to build, design, or create a workflow or pipeline for orchestrating AI agents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the workflow (e.g. 'Research Pipeline', 'Content Review Flow').",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Brief description of the workflow's purpose.",
+                    },
+                    "nodes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique node ID (e.g. 'node-1', 'node-2')."},
+                                "node_type": {"type": "string", "enum": ["input", "samurai", "shogun_approval", "logic", "output", "mado_browser"], "description": "Type of node."},
+                                "label": {"type": "string", "description": "Display label for the node."},
+                                "position_x": {"type": "number", "description": "X position on canvas (start at 100, space 300 apart)."},
+                                "position_y": {"type": "number", "description": "Y position on canvas (start at 200, space 150 apart)."},
+                                "config": {"type": "object", "description": "Node-specific config (task_description, approval_mode, condition_expression, etc.)."},
+                            },
+                            "required": ["id", "node_type", "label"],
+                        },
+                        "description": "Array of workflow nodes.",
+                    },
+                    "edges": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source_node_id": {"type": "string", "description": "ID of the source node."},
+                                "target_node_id": {"type": "string", "description": "ID of the target node."},
+                                "label": {"type": "string", "description": "Optional edge label."},
+                            },
+                            "required": ["source_node_id", "target_node_id"],
+                        },
+                        "description": "Array of connections between nodes.",
+                    },
+                },
+                "required": ["name", "nodes", "edges"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse_web",
+            "description": "Browse a web page using Mado browser automation. Navigate to a URL and extract content. Requires Mado to be enabled in the Torii security settings.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to navigate to.",
+                    },
+                    "extract_type": {
+                        "type": "string",
+                        "enum": ["text", "html"],
+                        "description": "What to extract from the page: 'text' for readable content, 'html' for raw HTML.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector to extract content from a specific element.",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Take a screenshot of the current browser page. Must have navigated to a URL first using browse_web.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "full_page": {
+                        "type": "boolean",
+                        "description": "If true, capture the full scrollable page. Default: false (viewport only).",
+                    },
+                },
+            },
+        },
+    },
 ]
 
 
@@ -705,6 +797,156 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             return json.dumps({
                 "status": "success",
                 "message": f"Cron job '{record.name}' deleted successfully.",
+            })
+
+        elif name == "create_agent_flow":
+            # ── Posture enforcement: requires agentflow_autonomous ──
+            try:
+                from shogun.services.posture_guard import get_posture_permissions
+                perms = await get_posture_permissions()
+                if not perms.get("agentflow_autonomous", False):
+                    return json.dumps({
+                        "status": "error",
+                        "message": "Autonomous Agent Flow creation requires CAMPAIGN or RONIN security tier. Current tier does not permit agentflow_autonomous."
+                    })
+            except Exception:
+                pass  # If posture guard unavailable, allow
+
+            from shogun.services.agent_flow_service import AgentFlowService
+            flow_svc = AgentFlowService(db_session)
+
+            # Create the flow
+            flow_name = args.get("name", "Untitled Flow")
+            flow_desc = args.get("description", "Auto-generated by Shogun")
+            flow = await flow_svc.create(
+                name=flow_name,
+                description=flow_desc,
+                trigger_type="manual",
+            )
+
+            # Build node and edge payloads
+            nodes_data = []
+            for i, n in enumerate(args.get("nodes", [])):
+                nodes_data.append({
+                    "id": n.get("id", f"node-auto-{i}"),
+                    "node_type": n.get("node_type", "samurai"),
+                    "label": n.get("label", f"Node {i+1}"),
+                    "position_x": n.get("position_x", 100 + i * 300),
+                    "position_y": n.get("position_y", 200),
+                    "config": n.get("config", {}),
+                })
+
+            edges_data = []
+            for j, e in enumerate(args.get("edges", [])):
+                edges_data.append({
+                    "id": f"edge-auto-{j}",
+                    "source_node_id": e.get("source_node_id", ""),
+                    "target_node_id": e.get("target_node_id", ""),
+                    "source_handle": e.get("source_handle"),
+                    "target_handle": e.get("target_handle"),
+                    "label": e.get("label"),
+                    "edge_type": e.get("edge_type", "default"),
+                    "config": {},
+                })
+
+            # Save the graph
+            await flow_svc.save_flow_graph(
+                flow_id=flow.id,
+                nodes_data=nodes_data,
+                edges_data=edges_data,
+                viewport={"x": 0, "y": 0, "zoom": 0.8},
+            )
+
+            await db_session.commit()
+
+            return json.dumps({
+                "status": "success",
+                "message": f"Agent Flow '{flow_name}' created with {len(nodes_data)} nodes and {len(edges_data)} edges. Open the Samurai Network → Agent Flow tab to view and run it.",
+                "flow_id": str(flow.id),
+            })
+
+        elif name == "browse_web":
+            # ── Mado browser automation ──────────────────────────
+            from shogun.services.posture_guard import get_posture_tool_filter
+            from shogun.services import mado_service
+
+            posture = await get_posture_tool_filter()
+            if not posture.get("mado_enabled", False):
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Browser automation is disabled at tier {posture.get('active_tier', 'unknown').upper()}. Enable Mado in the Torii.",
+                })
+
+            url = args.get("url", "")
+            extract_type = args.get("extract_type", "text")
+            selector = args.get("selector")
+
+            # Use a persistent native-skill session
+            session_id = "native_skill_browser"
+            await mado_service.launch_browser(
+                session_id=session_id,
+                profile_name="native_skill",
+                mode="headless",
+            )
+
+            # Navigate
+            domain_allowlist = posture.get("mado_domain_allowlist", [])
+            nav_result = await mado_service.navigate(
+                session_id=session_id,
+                url=url,
+                domain_allowlist=domain_allowlist if domain_allowlist else None,
+            )
+
+            if nav_result.get("status") == "blocked":
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Navigation blocked: {nav_result.get('reason', 'Domain not allowed')}",
+                })
+
+            # Extract content
+            extract_result = await mado_service.extract_content(
+                session_id=session_id,
+                selector=selector,
+                extract_type=extract_type,
+            )
+
+            return json.dumps({
+                "status": "success",
+                "url": nav_result.get("url", url),
+                "title": nav_result.get("title", ""),
+                "content": extract_result.get("content", "")[:20000],
+            })
+
+        elif name == "take_screenshot":
+            # ── Mado screenshot ──────────────────────────────────
+            from shogun.services.posture_guard import get_posture_tool_filter
+            from shogun.services import mado_service
+
+            posture = await get_posture_tool_filter()
+            if not posture.get("mado_enabled", False):
+                return json.dumps({
+                    "status": "error",
+                    "message": "Browser automation is disabled. Enable Mado in the Torii.",
+                })
+
+            session_id = "native_skill_browser"
+            full_page = args.get("full_page", False)
+
+            result = await mado_service.screenshot(
+                session_id=session_id,
+                full_page=full_page,
+            )
+
+            if result.get("status") == "error":
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Screenshot failed: {result.get('error', 'No active browser session. Use browse_web first.')}",
+                })
+
+            return json.dumps({
+                "status": "success",
+                "message": f"Screenshot saved: {result.get('filename', 'unknown')}",
+                "path": result.get("path", ""),
             })
 
         else:

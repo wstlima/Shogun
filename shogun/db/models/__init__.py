@@ -24,6 +24,9 @@ from shogun.db.models.samurai_role import SamuraiRole
 from shogun.db.models.kaizen_revision import KaizenRevision
 from shogun.db.models.workspace import Workspace, WorkspacePeer, WorkspaceMessage
 from shogun.db.models.email_account import EmailAccount
+from shogun.db.models.agent_flow import AgentFlow, AgentFlowNode, AgentFlowEdge
+from shogun.db.models.agent_flow_run import AgentFlowRun
+from shogun.db.models.mado_session import MadoSession
 
 __all__ = [
     "Operator",
@@ -55,4 +58,9 @@ __all__ = [
     "WorkspacePeer",
     "WorkspaceMessage",
     "EmailAccount",
+    "AgentFlow",
+    "AgentFlowNode",
+    "AgentFlowEdge",
+    "AgentFlowRun",
+    "MadoSession",
 ]

@@ -143,3 +143,12 @@ class SecurityPostureResponse(ShogunBase):
     comms_create_events: bool = True
     comms_list_cron: bool = True
     comms_manage_cron: bool = False
+    # Mado browser automation
+    mado_enabled: bool = True
+    mado_headless_only: bool = True
+    mado_domain_allowlist: list[str] = Field(default_factory=list)
+    mado_max_sessions: int = 3
+    mado_autonomous_browsing: bool = False
+    mado_downloads_enabled: bool = True
+    mado_uploads_enabled: bool = True
+

@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
         await EventLogger.emit_system_event(
             "system.startup", "Shogun server started",
             detail={
-                "version": "1.1.7",
+                "version": "1.3.0",
                 "platform": platform.system(),
                 "python": platform.python_version(),
             },
@@ -110,6 +110,16 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    # Close all active Mado browser sessions
+    try:
+        from shogun.services.mado_service import close_all_browsers
+        closed = await close_all_browsers()
+        if closed:
+            import logging
+            logging.getLogger(__name__).info("Mado: closed %d browser sessions on shutdown", closed)
+    except Exception:
+        pass
+
     try:
         from shogun.services.event_logger import EventLogger as _EL
         import asyncio
@@ -171,6 +181,8 @@ def create_app() -> FastAPI:
     from shogun.api.backups import router as backups_router
     from shogun.api.email import router as email_router
     from shogun.api.calendar import router as calendar_router
+    from shogun.api.agent_flow import router as agent_flow_router
+    from shogun.api.mado import router as mado_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -196,6 +208,8 @@ def create_app() -> FastAPI:
     app.include_router(backups_router, prefix=prefix)
     app.include_router(email_router, prefix=prefix)
     app.include_router(calendar_router, prefix=prefix)
+    app.include_router(agent_flow_router, prefix=prefix)
+    app.include_router(mado_router, prefix=prefix)
 
     # Static serving for user uploads
     uploads_path = Path(settings.uploads_path)

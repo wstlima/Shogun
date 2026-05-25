@@ -1073,7 +1073,8 @@ BEHAVIOUR:
             _valid_tool_names = [
                 "spawn_samurai", "list_available_models", "update_model_settings", "store_memory",
                 "fetch_inbox", "read_email", "send_email", "list_calendar_events",
-                "create_calendar_event", "list_cron_jobs", "create_cron_job", "delete_cron_job"
+                "create_calendar_event", "list_cron_jobs", "create_cron_job", "delete_cron_job",
+                "create_agent_flow"
             ]
             _tool_names_pattern = "|".join(_valid_tool_names)
             

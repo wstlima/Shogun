@@ -38,6 +38,14 @@ _DEFAULT_POSTURE = {
     "comms_create_events": True,
     "comms_list_cron": True,
     "comms_manage_cron": True,
+    # Mado browser automation
+    "mado_enabled": True,
+    "mado_headless_only": True,
+    "mado_domain_allowlist": [],
+    "mado_max_sessions": 3,
+    "mado_autonomous_browsing": False,
+    "mado_downloads_enabled": True,
+    "mado_uploads_enabled": True,
 }
 
 # Constraint values that each tier enforces when selected
@@ -54,6 +62,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "comms_create_events": False,
         "comms_list_cron": False,
         "comms_manage_cron": False,
+        "mado_enabled": False,
+        "mado_headless_only": True,
+        "mado_max_sessions": 0,
+        "mado_autonomous_browsing": False,
+        "mado_downloads_enabled": False,
+        "mado_uploads_enabled": False,
     },
     "guarded": {
         "filesystem_mode": "allowlist",
@@ -67,6 +81,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "comms_create_events": False,
         "comms_list_cron": True,
         "comms_manage_cron": False,
+        "mado_enabled": True,
+        "mado_headless_only": False,
+        "mado_max_sessions": 1,
+        "mado_autonomous_browsing": False,
+        "mado_downloads_enabled": False,
+        "mado_uploads_enabled": False,
     },
     "tactical": {
         "filesystem_mode": "scoped",
@@ -80,6 +100,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "comms_create_events": True,
         "comms_list_cron": True,
         "comms_manage_cron": True,
+        "mado_enabled": True,
+        "mado_headless_only": True,
+        "mado_max_sessions": 3,
+        "mado_autonomous_browsing": False,
+        "mado_downloads_enabled": True,
+        "mado_uploads_enabled": True,
     },
     "campaign": {
         "filesystem_mode": "full",
@@ -93,6 +119,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "comms_create_events": True,
         "comms_list_cron": True,
         "comms_manage_cron": True,
+        "mado_enabled": True,
+        "mado_headless_only": False,
+        "mado_max_sessions": 5,
+        "mado_autonomous_browsing": True,
+        "mado_downloads_enabled": True,
+        "mado_uploads_enabled": True,
     },
     "ronin": {
         "filesystem_mode": "full",
@@ -106,6 +138,12 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "comms_create_events": True,
         "comms_list_cron": True,
         "comms_manage_cron": True,
+        "mado_enabled": True,
+        "mado_headless_only": False,
+        "mado_max_sessions": 10,
+        "mado_autonomous_browsing": True,
+        "mado_downloads_enabled": True,
+        "mado_uploads_enabled": True,
     },
 }
 

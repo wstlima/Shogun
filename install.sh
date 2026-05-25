@@ -100,6 +100,11 @@ echo -e "${GOLD}[4/8]${NC} Installing Python dependencies..."
 pip install . --quiet --disable-pip-version-check
 echo -e "       ${GREEN}Python dependencies installed.${NC}"
 
+# Install Mado browser engine (Playwright Chromium)
+echo "       Installing Mado browser engine (Chromium)..."
+$PYTHON_CMD -m playwright install chromium --with-deps 2>/dev/null || true
+echo -e "       ${GREEN}Mado browser engine ready.${NC}"
+
 # ── Step 5: Bootstrap database ─────────────────────────────────
 echo -e "${GOLD}[5/8]${NC} Bootstrapping database..."
 $PYTHON_CMD -c "import asyncio; from shogun.bootstrap import bootstrap; asyncio.run(bootstrap())" 2>/dev/null || true
