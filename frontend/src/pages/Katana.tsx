@@ -69,43 +69,12 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
 const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'local'];
 const isLocalProvider = (type: string) => LOCAL_PROVIDERS.includes(type);
 
-// ── Ollama curated model catalog ─────────────────────────────────
-type OllamaCategory = 'general' | 'code' | 'vision' | 'embedding';
-interface OllamaModel {
-  id: string; name: string; tag: string; size: string;
-  category: OllamaCategory; desc: string;
+// ── Ollama live search result type ───────────────────────────────
+interface OllamaSearchResult {
+  id: string; name: string; description: string;
+  sizes: string[]; capabilities: string[];
+  pulls: string; tag_count: number; updated: string;
 }
-const OLLAMA_CATALOG: OllamaModel[] = [
-  // General
-  { id: 'llama3.2:1b',          name: 'Llama 3.2',       tag: '1B',    size: '1.3 GB', category: 'general',   desc: 'Ultra-fast, great for edge devices' },
-  { id: 'llama3.2:3b',          name: 'Llama 3.2',       tag: '3B',    size: '2.0 GB', category: 'general',   desc: 'Compact, excellent reasoning' },
-  { id: 'llama3.1:8b',          name: 'Llama 3.1',       tag: '8B',    size: '4.7 GB', category: 'general',   desc: 'Best-in-class 8B open model' },
-  { id: 'gemma3:1b',            name: 'Gemma 3',         tag: '1B',    size: '815 MB', category: 'general',   desc: "Google's smallest multimodal" },
-  { id: 'gemma3:4b',            name: 'Gemma 3',         tag: '4B',    size: '3.3 GB', category: 'general',   desc: "Google's efficient 4B model" },
-  { id: 'gemma3:12b',           name: 'Gemma 3',         tag: '12B',   size: '8.1 GB', category: 'general',   desc: 'High quality, multilingual' },
-  { id: 'phi4-mini',            name: 'Phi-4 Mini',      tag: '3.8B',  size: '2.5 GB', category: 'general',   desc: "Microsoft's compact Phi-4" },
-  { id: 'phi4',                 name: 'Phi-4',           tag: '14B',   size: '9.1 GB', category: 'general',   desc: "Microsoft's flagship Phi" },
-  { id: 'mistral',              name: 'Mistral',         tag: '7B',    size: '4.1 GB', category: 'general',   desc: 'Classic Mistral 7B instruct' },
-  { id: 'qwen2.5:7b',           name: 'Qwen 2.5',        tag: '7B',    size: '4.7 GB', category: 'general',   desc: 'Alibaba multilingual model' },
-  { id: 'qwen2.5:14b',          name: 'Qwen 2.5',        tag: '14B',   size: '9.0 GB', category: 'general',   desc: 'Strong multilingual reasoning' },
-  { id: 'deepseek-r1:7b',       name: 'DeepSeek R1',     tag: '7B',    size: '4.7 GB', category: 'general',   desc: 'Reasoning-first distilled model' },
-  { id: 'deepseek-r1:14b',      name: 'DeepSeek R1',     tag: '14B',   size: '9.0 GB', category: 'general',   desc: 'Powerful open-source reasoner' },
-  // Code
-  { id: 'codellama:7b',         name: 'CodeLlama',       tag: '7B',    size: '3.8 GB', category: 'code',      desc: 'Meta code generation model' },
-  { id: 'codellama:13b',        name: 'CodeLlama',       tag: '13B',   size: '7.4 GB', category: 'code',      desc: 'Larger CodeLlama for complex tasks' },
-  { id: 'qwen2.5-coder:7b',     name: 'Qwen Coder',      tag: '7B',    size: '4.7 GB', category: 'code',      desc: 'Best open-source code specialist' },
-  { id: 'deepseek-coder:6.7b',  name: 'DeepSeek Coder',  tag: '6.7B',  size: '3.8 GB', category: 'code',      desc: 'Code generation and completion' },
-  { id: 'starcoder2:7b',        name: 'StarCoder 2',     tag: '7B',    size: '4.0 GB', category: 'code',      desc: 'Trained on 600+ programming languages' },
-  // Vision
-  { id: 'llava:7b',             name: 'LLaVA',           tag: '7B',    size: '4.5 GB', category: 'vision',    desc: 'Image understanding + chat' },
-  { id: 'llava:13b',            name: 'LLaVA',           tag: '13B',   size: '8.0 GB', category: 'vision',    desc: 'Larger, more capable vision model' },
-  { id: 'llava-phi3',           name: 'LLaVA Phi-3',     tag: '3.8B',  size: '2.9 GB', category: 'vision',    desc: 'Compact vision model' },
-  { id: 'minicpm-v',            name: 'MiniCPM-V',       tag: '8B',    size: '5.5 GB', category: 'vision',    desc: 'Strong OCR and doc understanding' },
-  // Embeddings
-  { id: 'nomic-embed-text',     name: 'Nomic Embed',     tag: 'text',  size: '274 MB', category: 'embedding', desc: 'High quality text embeddings' },
-  { id: 'mxbai-embed-large',    name: 'MXBai Embed',     tag: 'large', size: '670 MB', category: 'embedding', desc: 'SOTA for retrieval tasks' },
-  { id: 'all-minilm',           name: 'All-MiniLM',      tag: 'L6-v2', size: '45 MB',  category: 'embedding', desc: 'Ultra-lightweight sentence embedder' },
-];
 
 // ── Connector enums (mirror backend) ────────────────────────────
 const CONNECTOR_TYPES = ['api', 'tool', 'mcp', 'filesystem', 'database', 'queue', 'custom'] as const;
@@ -334,10 +303,57 @@ export function Katana() {
     }
   }, [newProvider.provider_type, newProvider.base_url, providers]);
 
-  const [pullCatalogFilter, setPullCatalogFilter] = useState<'all' | OllamaCategory>('all');
+  const [pullCatalogFilter, setPullCatalogFilter] = useState<string>('all');
   const [pullingModel, setPullingModel]           = useState<string | null>(null);
   const [pullStatus, setPullStatus]               = useState<{ status: string; percent: number } | null>(null);
   const [customPullTag, setCustomPullTag]         = useState('');
+
+  // ── Live Ollama search state ──────────────────────────────────
+  const [ollamaQuery, setOllamaQuery]             = useState('');
+  const [ollamaResults, setOllamaResults]         = useState<OllamaSearchResult[]>([]);
+  const [ollamaLoading, setOllamaLoading]         = useState(false);
+  const [ollamaPage, setOllamaPage]               = useState(1);
+  const [ollamaHasMore, setOllamaHasMore]         = useState(false);
+  const [ollamaLoadingMore, setOllamaLoadingMore] = useState(false);
+
+  const searchOllamaModels = async (query: string, page: number, append: boolean = false) => {
+    if (page === 1) setOllamaLoading(true);
+    else setOllamaLoadingMore(true);
+    try {
+      const params: Record<string, string> = {};
+      if (query.trim()) params.q = query.trim();
+      if (page > 1) params.p = String(page);
+      if (pullCatalogFilter !== 'all') params.c = pullCatalogFilter;
+      const res = await axios.get('/api/v1/system/ollama-search', { params });
+      if (res.data?.success) {
+        const data = res.data.data;
+        setOllamaResults(prev => append ? [...prev, ...data.models] : data.models);
+        setOllamaHasMore(data.has_more);
+        setOllamaPage(data.page);
+      }
+    } catch {
+      if (!append) setOllamaResults([]);
+    } finally {
+      setOllamaLoading(false);
+      setOllamaLoadingMore(false);
+    }
+  };
+
+  // Debounced search when query or filter changes
+  useEffect(() => {
+    if (!showPullPanel) return;
+    const timer = setTimeout(() => {
+      searchOllamaModels(ollamaQuery, 1, false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [ollamaQuery, pullCatalogFilter, showPullPanel]);
+
+  // Initial load when panel opens
+  useEffect(() => {
+    if (showPullPanel && ollamaResults.length === 0) {
+      searchOllamaModels('', 1, false);
+    }
+  }, [showPullPanel]);
 
   // ── Register Tool panel state ────────────────────────────────
   const [showRegisterTool, setShowRegisterTool] = useState(false);
@@ -1392,9 +1408,24 @@ export function Katana() {
                             </div>
                           )}
 
+                          {/* Search input */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-shogun-subdued/50" />
+                            <input
+                              type="text"
+                              value={ollamaQuery}
+                              onChange={e => setOllamaQuery(e.target.value)}
+                              placeholder="Search all Ollama models..."
+                              className="w-full bg-[#050508] border border-shogun-border rounded-lg pl-9 pr-3 py-2 text-xs focus:border-cyan-500/60 outline-none placeholder:text-shogun-subdued/40"
+                            />
+                            {ollamaLoading && (
+                              <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                            )}
+                          </div>
+
                           {/* Category filter */}
                           <div className="flex gap-1 flex-wrap">
-                            {(['all', 'general', 'code', 'vision', 'embedding'] as const).map(f => (
+                            {(['all', 'vision', 'tools', 'thinking', 'embedding', 'cloud'] as const).map(f => (
                               <button
                                 key={f}
                                 type="button"
@@ -1411,20 +1442,26 @@ export function Katana() {
                             ))}
                           </div>
 
-                          {/* Model grid */}
-                          <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
-                            {OLLAMA_CATALOG
-                              .filter(m => pullCatalogFilter === 'all' || m.category === pullCatalogFilter)
-                              .map(m => {
+                          {/* Model results */}
+                          <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                            {ollamaLoading && ollamaResults.length === 0 ? (
+                              <div className="flex items-center justify-center py-8 text-shogun-subdued/50">
+                                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                                <span className="text-[10px]">Searching ollama.com...</span>
+                              </div>
+                            ) : ollamaResults.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center py-8 text-shogun-subdued/50">
+                                <span className="text-[10px]">No models found</span>
+                                <span className="text-[9px] mt-1">Try a different search or use a custom tag below</span>
+                              </div>
+                            ) : (
+                              ollamaResults.map(m => {
                                 const isThis = pullingModel === m.id;
                                 const matchingLocalModel = localModels.find(model => {
                                   const normModel = model.toLowerCase();
                                   const normId = m.id.toLowerCase();
                                   if (normModel === normId) return true;
-                                  if (!normId.includes(':') && normModel.startsWith(normId + ':')) return true;
-                                  const cleanModel = normModel.replace(/^[^/]+\//, '');
-                                  if (cleanModel === normId) return true;
-                                  if (!normId.includes(':') && cleanModel.startsWith(normId + ':')) return true;
+                                  if (normModel.startsWith(normId + ':')) return true;
                                   return false;
                                 });
                                 const alreadyHave = !!matchingLocalModel;
@@ -1441,14 +1478,21 @@ export function Katana() {
                                     )}
                                   >
                                     <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-[10px] font-bold text-shogun-text truncate">{m.name}</span>
-                                        <span className="text-[8px] px-1.5 py-0.5 rounded bg-shogun-card border border-shogun-border text-shogun-subdued font-bold shrink-0">{m.tag}</span>
+                                        {m.sizes.map(s => (
+                                          <span key={s} className="text-[7px] px-1 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold shrink-0">{s}</span>
+                                        ))}
                                         {alreadyHave && <span className="text-[8px] text-green-400 font-bold shrink-0">✓ local</span>}
                                       </div>
+                                      <p className="text-[8px] text-shogun-subdued/70 truncate mt-0.5">{m.description}</p>
                                       <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[8px] font-mono text-cyan-400/60">{m.size}</span>
-                                        <span className="text-[8px] text-shogun-subdued/70 truncate">{m.desc}</span>
+                                        {m.capabilities.map(cap => (
+                                          <span key={cap} className="text-[7px] px-1 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-medium">{cap}</span>
+                                        ))}
+                                        <span className="text-[7px] text-shogun-subdued/50 font-mono">↓{m.pulls}</span>
+                                        {m.tag_count > 0 && <span className="text-[7px] text-shogun-subdued/50 font-mono">{m.tag_count} tags</span>}
+                                        {m.updated && <span className="text-[7px] text-shogun-subdued/40">{m.updated}</span>}
                                       </div>
                                     </div>
                                     <div className="ml-3 shrink-0 flex items-center gap-1">
@@ -1490,7 +1534,22 @@ export function Katana() {
                                     </div>
                                   </div>
                                 );
-                              })}
+                              })
+                            )}
+
+                            {/* Load More */}
+                            {ollamaHasMore && !ollamaLoading && (
+                              <button
+                                type="button"
+                                onClick={() => searchOllamaModels(ollamaQuery, ollamaPage + 1, true)}
+                                disabled={ollamaLoadingMore}
+                                className="w-full py-2 rounded-lg border border-shogun-border text-[9px] font-bold uppercase tracking-widest text-shogun-subdued hover:border-cyan-500/40 hover:text-cyan-400 transition-all disabled:opacity-50"
+                              >
+                                {ollamaLoadingMore
+                                  ? <><RefreshCw className="w-3 h-3 animate-spin inline mr-1" /> Loading...</>
+                                  : 'Load More Models'}
+                              </button>
+                            )}
                           </div>
 
                           {/* Custom model tag */}
@@ -1514,7 +1573,7 @@ export function Katana() {
                                 <Download className="w-3 h-3" /> {t('katana.pull')}
                               </button>
                             </div>
-                            <p className="text-[9px] text-shogun-subdued/60">Any valid Ollama model tag from <span className="text-cyan-400/70 font-mono">ollama.com/library</span></p>
+                            <p className="text-[9px] text-shogun-subdued/60">Any valid Ollama model tag from <a href="https://ollama.com/search" target="_blank" rel="noopener noreferrer" className="text-cyan-400/70 font-mono hover:text-cyan-400 transition-colors">ollama.com/search</a></p>
                           </div>
                         </div>
                       )}
@@ -1696,15 +1755,6 @@ export function Katana() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
                     {localModels.map(m => {
-                      // Check if this model is in the curated OLLAMA_CATALOG
-                      const catalogItem = OLLAMA_CATALOG.find(cat => {
-                        const lClean = m.toLowerCase().replace(/^[^/]+\//, '');
-                        const idLower = cat.id.toLowerCase();
-                        if (lClean === idLower) return true;
-                        if (!idLower.includes(':') && lClean.startsWith(idLower + ':')) return true;
-                        return false;
-                      });
-
                       return (
                         <div
                           key={m}
@@ -1715,11 +1765,6 @@ export function Katana() {
                               <span className="w-2 h-2 rounded-full bg-green-500 shrink-0 shadow-[0_0_8px_#22c55e]" />
                               <span className="text-xs font-mono text-shogun-text truncate font-semibold" title={m}>{m}</span>
                             </div>
-                            {catalogItem && (
-                              <span className="text-[9px] text-cyan-400/70 mt-1 pl-4 truncate">
-                                {catalogItem.name} ({catalogItem.desc})
-                              </span>
-                            )}
                           </div>
                           {localProviderType === 'ollama' && (
                             <button

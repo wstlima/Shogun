@@ -259,6 +259,11 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
             denied.append(name)
             continue
 
+        # ── Mado: Browser tools ──
+        if name in ("browse_web", "take_screenshot") and not posture.get("mado_enabled", False):
+            denied.append(name)
+            continue
+
         allowed.append(tool)
 
     return allowed, denied

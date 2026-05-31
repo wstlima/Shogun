@@ -327,20 +327,59 @@ async def _execute_single_node(
         return await _exec_output(config, context_str, predecessor_outputs)
     elif node_type == "mado_browser":
         return await _exec_mado_browser(config, context_str)
+    elif node_type == "email_send":
+        return await _exec_email_send(config, context_str)
     else:
         raise ValueError(f"Unknown node type: {node_type}")
 
 
 async def _exec_input(config: dict, context_str: str) -> str:
-    """Input node — returns its configuration as initial context."""
+    """Input node — returns its configuration as initial context.
+
+    Handles multiple input types:
+    - manual: uses manual_input text or description
+    - document: reads uploaded file content from disk
+    - scheduled/api/event/nexus: uses description as context
+    """
+    from pathlib import Path
+    import logging
+
+    log = logging.getLogger("shogun.flow")
     description = config.get("description", "")
     input_type = config.get("input_type", "manual")
 
     output_parts = []
+
+    # Always include description if present
     if description:
         output_parts.append(description)
+
+    # Type-specific context
+    if input_type == "manual":
+        manual_input = config.get("manual_input", "")
+        if manual_input:
+            output_parts.append(manual_input)
+
+    elif input_type == "document":
+        uploaded = config.get("uploaded_file")
+        if uploaded and uploaded.get("path"):
+            file_path = Path(uploaded["path"])
+            if file_path.exists():
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                    output_parts.append(f"[Document: {uploaded.get('filename', 'unknown')}]\n{content}")
+                    log.info("[Flow] Input: read document %s (%d chars)", uploaded["filename"], len(content))
+                except Exception as exc:
+                    output_parts.append(f"[ERROR reading document: {exc}]")
+            else:
+                output_parts.append(f"[Document not found: {uploaded.get('filename', 'unknown')}]")
+        else:
+            output_parts.append("[No document uploaded yet]")
+
+    # Add any context from upstream nodes
     if context_str:
         output_parts.append(context_str)
+
     if not output_parts:
         output_parts.append(f"Workflow triggered ({input_type})")
 
@@ -594,28 +633,39 @@ async def _exec_mado_browser(config: dict, context_str: str) -> str:
 
     try:
         if action == "navigate":
-            # Substitute context placeholders in URL
-            target_url = url or context_str.strip().split("\n")[0] if context_str else ""
+            # Use URL from config first; fall back to context string
+            target_url = url or (context_str.strip().split("\n")[0] if context_str else "")
             if not target_url:
                 return "[ERROR] No URL specified for navigation"
 
+            log.info("[Mado/Flow] navigate → %s (session=%s)", target_url, flow_session_id)
             result = await mado_service.navigate(
                 session_id=flow_session_id,
                 url=target_url,
                 domain_allowlist=domain_allowlist if domain_allowlist else None,
             )
+            if result.get("status") == "error":
+                log.error("[Mado/Flow] navigate FAILED: %s", result.get('error'))
+                return f"[ERROR] Navigation failed: {result.get('error', 'Unknown')}"
             if result.get("status") == "blocked":
                 return f"[BLOCKED] {result.get('reason', 'Domain not allowed')}"
+            log.info("[Mado/Flow] navigate OK → %s", result.get('title', 'N/A'))
             return f"Navigated to: {result.get('url', target_url)}\nTitle: {result.get('title', 'N/A')}"
 
         elif action == "extract_content":
             extract_type = config.get("extract_type", "text")
+            log.info("[Mado/Flow] extract '%s' (type=%s, session=%s)", selector, extract_type, flow_session_id)
             result = await mado_service.extract_content(
                 session_id=flow_session_id,
                 selector=selector,
                 extract_type=extract_type,
             )
-            return result.get("content", "[No content extracted]")
+            content = result.get("content", "")
+            status = result.get("status", "unknown")
+            log.info("[Mado/Flow] extract result: status=%s, length=%d chars", status, len(content))
+            if not content:
+                return "[No content extracted — the page may not have matching elements]"
+            return content
 
         elif action == "screenshot":
             full_page = config.get("full_page", False)
@@ -673,6 +723,59 @@ async def _exec_mado_browser(config: dict, context_str: str) -> str:
 
     except Exception as exc:
         return f"[ERROR] Browser action '{action}' failed: {str(exc)[:500]}"
+
+
+async def _exec_email_send(config: dict, context_str: str) -> str:
+    """Email Send node — sends an email via the configured SMTP account.
+
+    Uses the existing EmailService infrastructure.  If no body_template is
+    provided the full predecessor output is used as the email body.
+    """
+    from shogun.services.email_service import EmailService
+    from shogun.schemas.channels import EmailComposeRequest
+
+    to_address = config.get("to_address", "")
+    if not to_address:
+        raise ValueError("Email Send node has no recipient (to_address)")
+
+    subject = config.get("subject", "Shogun Agent Flow — Email")
+    body_template = config.get("body_template", "")
+    cc_address = config.get("cc_address") or None
+    bcc_address = config.get("bcc_address") or None
+
+    # Build the email body
+    if body_template:
+        # Allow a simple {{context}} placeholder for predecessor output
+        body = body_template.replace("{{context}}", context_str)
+    else:
+        # No template — use the raw predecessor output as the body
+        body = context_str or "(No content from previous steps)"
+
+    # Send via EmailService
+    async with async_session_factory() as session:
+        svc = EmailService(session)
+        acc = await svc.get_account()
+        if not acc:
+            raise ValueError(
+                "No email account configured. Set up an account in the Mail page first."
+            )
+        if not acc.perm_send_mail:
+            raise ValueError(
+                "Email sending permission is disabled. Enable perm_send_mail in the Mail settings."
+            )
+
+        compose = EmailComposeRequest(
+            to_address=to_address,
+            cc_address=cc_address,
+            bcc_address=bcc_address,
+            subject=subject,
+            body=body,
+        )
+        result = await svc.send_email(compose)
+
+    status = result.get("message", "Sent")
+    log.info("Email sent to %s — %s", to_address, status)
+    return f"Email sent to {to_address}\nSubject: {subject}\nStatus: {status}"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -913,6 +1016,8 @@ async def _update_node_state(
 
         states[node_id] = node_state
         run.node_states = states
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(run, "node_states")
         await session.commit()
 
 
@@ -960,6 +1065,8 @@ async def _complete_run(
             v_str = str(v)
             truncated[k] = v_str[:5000] if len(v_str) > 5000 else v_str
         run.result_summary = truncated
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(run, "result_summary")
         await session.commit()
 
     log.info("Flow run %s COMPLETED", run_id)

@@ -10,6 +10,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import re
 import shutil
@@ -28,6 +29,21 @@ _active_browsers: dict[str, Any] = {}       # session_id → Browser
 _active_contexts: dict[str, Any] = {}       # session_id → BrowserContext
 _active_pages: dict[str, Any] = {}          # session_id → Page
 _playwright_instance: Any = None
+
+# Single-thread executor: Playwright's sync API binds to the thread where
+# sync_playwright().start() was called.  Every subsequent Playwright call
+# must happen on that SAME thread, so we pin all work to one worker.
+_pw_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="mado-pw")
+
+
+async def _run_in_pw_thread(fn, *args, **kwargs):
+    """Run *fn* on the dedicated Playwright thread."""
+    loop = asyncio.get_event_loop()
+    if kwargs:
+        import functools
+        fn = functools.partial(fn, *args, **kwargs)
+        args = ()
+    return await loop.run_in_executor(_pw_executor, fn, *args)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -140,16 +156,23 @@ async def install_chromium() -> dict[str, Any]:
 
 
 # ═══════════════════════════════════════════════════════════════
-# BROWSER LIFECYCLE
+# BROWSER LIFECYCLE  (sync Playwright in thread pool)
 # ═══════════════════════════════════════════════════════════════
 
 
-async def _get_playwright():
-    """Get or create the global Playwright instance."""
+def _get_playwright_sync():
+    """Get or create the global *sync* Playwright instance.
+
+    Called from within the thread pool — never from the async event loop.
+    On Windows + Python 3.14 the async Playwright API fails because
+    SelectorEventLoop does not support ``subprocess_exec``.  The sync API
+    uses plain ``subprocess.Popen`` which works everywhere.
+    """
     global _playwright_instance
     if _playwright_instance is None:
-        from playwright.async_api import async_playwright
-        _playwright_instance = await async_playwright().start()
+        from playwright.sync_api import sync_playwright
+        _playwright_instance = sync_playwright().start()
+        log.info("Mado: sync Playwright instance started")
     return _playwright_instance
 
 
@@ -160,19 +183,14 @@ async def launch_browser(
 ) -> dict[str, Any]:
     """Launch a Playwright Chromium browser with an isolated profile.
 
-    Args:
-        session_id: UUID string identifying this session.
-        profile_name: Directory name under mado/profiles/ for persistence.
-        mode: "headless" or "visible".
-
-    Returns:
-        Status dict with launch result.
+    Uses the *sync* Playwright API inside a thread to work around the
+    Windows / Python 3.14 asyncio subprocess limitation.
     """
     if session_id in _active_contexts:
         return {"status": "already_active", "session_id": session_id}
 
-    try:
-        pw = await _get_playwright()
+    def _do_launch():
+        pw = _get_playwright_sync()
         profile_path = settings.mado_path / "profiles" / _sanitize_name(profile_name)
         profile_path.mkdir(parents=True, exist_ok=True)
 
@@ -181,29 +199,40 @@ async def launch_browser(
 
         headless = mode == "headless"
 
-        # Launch browser with persistent context for session persistence
-        context = await pw.chromium.launch_persistent_context(
+        context = pw.chromium.launch_persistent_context(
             user_data_dir=str(profile_path),
             headless=headless,
             accept_downloads=True,
             viewport={"width": 1280, "height": 720},
-            user_agent="Shogun-Mado/1.0 (Browser Automation)",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/136.0.0.0 Safari/537.36"
+            ),
             ignore_https_errors=False,
             java_script_enabled=True,
             locale="en-US",
+            timezone_id="America/New_York",
+            geolocation={"latitude": 40.7128, "longitude": -74.0060},
+            permissions=["geolocation"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
 
-        # Get or create first page
         pages = context.pages
-        page = pages[0] if pages else await context.new_page()
+        page = pages[0] if pages else context.new_page()
 
         _active_contexts[session_id] = context
         _active_pages[session_id] = page
+        return True
+
+    try:
+        await _run_in_pw_thread(_do_launch)
 
         log.info("Mado: browser launched for session %s (profile=%s, mode=%s)",
                  session_id, profile_name, mode)
 
-        # Audit event
         await _emit_browser_event(
             "browser.launch",
             f"Browser session launched: {profile_name} ({mode})",
@@ -213,7 +242,7 @@ async def launch_browser(
         return {"status": "launched", "session_id": session_id, "mode": mode}
 
     except Exception as exc:
-        log.error("Mado: failed to launch browser for session %s: %s", session_id, exc)
+        log.error("Mado: failed to launch browser for session %s: %s", session_id, exc, exc_info=True)
         return {"status": "error", "error": str(exc)[:500]}
 
 
@@ -227,7 +256,7 @@ async def close_browser(session_id: str) -> dict[str, Any]:
         return {"status": "not_found", "session_id": session_id}
 
     try:
-        await context.close()
+        await _run_in_pw_thread(context.close)
         log.info("Mado: browser closed for session %s", session_id)
 
         await _emit_browser_event(
@@ -283,23 +312,47 @@ async def navigate(
             return {"status": "blocked", "reason": f"Domain '{domain}' is not in the allowlist"}
 
     page = _get_page(session_id)
-    try:
-        response = await page.goto(url, wait_until=wait_until, timeout=30000)
+
+    def _do_nav():
+        response = page.goto(url, wait_until=wait_until, timeout=30000)
         status_code = response.status if response else None
-        title = await page.title()
+
+        # Auto-handle Google/EU cookie consent walls
+        current_url = page.url
+        if "consent.google" in current_url or "consent.youtube" in current_url:
+            log.info("Mado: Consent wall detected at %s — auto-accepting", current_url)
+            try:
+                # Try various consent button selectors
+                for btn_selector in [
+                    "button[aria-label*='Accept']",
+                    "button:has-text('Accept all')",
+                    "button:has-text('I agree')",
+                    "form[action*='consent'] button",
+                    "#L2AGLb",  # Google's "Accept all" button ID
+                ]:
+                    btn = page.query_selector(btn_selector)
+                    if btn:
+                        btn.click()
+                        page.wait_for_load_state("domcontentloaded", timeout=15000)
+                        log.info("Mado: Consent accepted, now at %s", page.url)
+                        break
+            except Exception as consent_exc:
+                log.warning("Mado: Could not auto-accept consent: %s", consent_exc)
+
+        title = page.title()
+        return {"url": page.url, "title": title, "status_code": status_code}
+
+    try:
+        result = await _run_in_pw_thread(_do_nav)
 
         await _emit_browser_event(
             "browser.navigate",
             f"Navigated to {url}",
-            detail={"session_id": session_id, "url": url, "status": status_code, "title": title},
+            detail={"session_id": session_id, "url": url,
+                    "status": result["status_code"], "title": result["title"]},
         )
 
-        return {
-            "status": "ok",
-            "url": page.url,
-            "title": title,
-            "status_code": status_code,
-        }
+        return {"status": "ok", **result}
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -316,41 +369,67 @@ async def extract_content(
         extract_type: "text", "html", "inner_text", or "table".
     """
     page = _get_page(session_id)
-    try:
-        if selector:
-            element = await page.query_selector(selector)
-            if element is None:
-                return {"status": "not_found", "selector": selector}
 
-            if extract_type == "html":
-                content = await element.inner_html()
-            elif extract_type == "inner_text":
-                content = await element.inner_text()
-            else:
-                content = await element.text_content() or ""
+    def _do_extract():
+        parts = []
+        if selector:
+            elements = page.query_selector_all(selector)
+            if not elements:
+                log.warning("Mado: selector '%s' matched 0 elements on %s, falling back to body",
+                            selector, page.url)
+                body_text = page.inner_text("body")
+                body_text = body_text[:50000] if body_text else ""
+                return {
+                    "status": "fallback",
+                    "content": body_text,
+                    "length": len(body_text),
+                    "url": page.url,
+                    "extract_type": extract_type,
+                    "note": f"Selector '{selector}' matched no elements; extracted full page body instead.",
+                }
+
+            for el in elements:
+                try:
+                    if extract_type == "html":
+                        text = el.inner_html()
+                    elif extract_type == "inner_text":
+                        text = el.inner_text()
+                    else:
+                        text = el.text_content() or ""
+                    text = text.strip()
+                    if text:
+                        parts.append(text)
+                except Exception:
+                    continue
+
+            content = "\n".join(parts)
         else:
             if extract_type == "html":
-                content = await page.content()
+                content = page.content()
             else:
-                content = await page.inner_text("body")
+                content = page.inner_text("body")
 
-        # Truncate for safety
         content = content[:50000] if content else ""
-
-        await _emit_browser_event(
-            "browser.extract",
-            f"Extracted {extract_type} content ({len(content)} chars)",
-            detail={"session_id": session_id, "selector": selector, "type": extract_type,
-                    "length": len(content)},
-        )
-
         return {
             "status": "ok",
             "content": content,
             "length": len(content),
             "url": page.url,
             "extract_type": extract_type,
+            "elements_found": len(parts) if selector else None,
         }
+
+    try:
+        result = await _run_in_pw_thread(_do_extract)
+
+        await _emit_browser_event(
+            "browser.extract",
+            f"Extracted {extract_type} content ({result['length']} chars)",
+            detail={"session_id": session_id, "selector": selector, "type": extract_type,
+                    "length": result["length"], "elements_found": result.get("elements_found")},
+        )
+
+        return result
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -360,37 +439,35 @@ async def screenshot(
     full_page: bool = False,
     selector: str | None = None,
 ) -> dict[str, Any]:
-    """Capture a screenshot of the current page.
-
-    Returns the path to the saved screenshot file.
-    """
+    """Capture a screenshot of the current page."""
     page = _get_page(session_id)
-    try:
+
+    def _do_screenshot():
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"mado_{session_id[:8]}_{timestamp}.png"
         output_path = settings.mado_path / "screenshots" / filename
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if selector:
-            element = await page.query_selector(selector)
+            element = page.query_selector(selector)
             if element is None:
                 return {"status": "not_found", "selector": selector}
-            await element.screenshot(path=str(output_path))
+            element.screenshot(path=str(output_path))
         else:
-            await page.screenshot(path=str(output_path), full_page=full_page)
+            page.screenshot(path=str(output_path), full_page=full_page)
 
-        await _emit_browser_event(
-            "browser.screenshot",
-            f"Screenshot captured: {filename}",
-            detail={"session_id": session_id, "path": str(output_path),
-                    "full_page": full_page, "url": page.url},
-        )
+        return {"status": "ok", "path": str(output_path), "filename": filename, "url": page.url}
 
-        return {
-            "status": "ok",
-            "path": str(output_path),
-            "filename": filename,
-            "url": page.url,
-        }
+    try:
+        result = await _run_in_pw_thread(_do_screenshot)
+        if result.get("status") == "ok":
+            await _emit_browser_event(
+                "browser.screenshot",
+                f"Screenshot captured: {result['filename']}",
+                detail={"session_id": session_id, "path": result["path"],
+                        "full_page": full_page, "url": result.get("url")},
+            )
+        return result
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -398,20 +475,22 @@ async def screenshot(
 async def generate_pdf(session_id: str) -> dict[str, Any]:
     """Generate a PDF of the current page (headless only)."""
     page = _get_page(session_id)
-    try:
+
+    def _do_pdf():
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"mado_{session_id[:8]}_{timestamp}.pdf"
         output_path = settings.mado_path / "downloads" / filename
+        page.pdf(path=str(output_path), format="A4", print_background=True)
+        return {"status": "ok", "path": str(output_path), "filename": filename}
 
-        await page.pdf(path=str(output_path), format="A4", print_background=True)
-
+    try:
+        result = await _run_in_pw_thread(_do_pdf)
         await _emit_browser_event(
             "browser.pdf",
-            f"PDF generated: {filename}",
-            detail={"session_id": session_id, "path": str(output_path), "url": page.url},
+            f"PDF generated: {result['filename']}",
+            detail={"session_id": session_id, "path": result["path"], "url": page.url},
         )
-
-        return {"status": "ok", "path": str(output_path), "filename": filename}
+        return result
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -420,62 +499,65 @@ async def fill_form(
     session_id: str,
     fields: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """Fill form fields on the current page.
-
-    Each field dict should have: {"selector": "...", "value": "..."}.
-    Optional: {"type": "select" | "checkbox"} for non-text inputs.
-    """
+    """Fill form fields on the current page."""
     page = _get_page(session_id)
-    filled = 0
-    errors = []
 
-    for field in fields:
-        selector = field.get("selector", "")
-        value = field.get("value", "")
-        field_type = field.get("type", "text")
-
-        try:
-            if field_type == "select":
-                await page.select_option(selector, value)
-            elif field_type == "checkbox":
-                if value.lower() in ("true", "1", "yes"):
-                    await page.check(selector)
+    def _do_fill():
+        filled = 0
+        errors = []
+        for field in fields:
+            sel = field.get("selector", "")
+            value = field.get("value", "")
+            field_type = field.get("type", "text")
+            try:
+                if field_type == "select":
+                    page.select_option(sel, value)
+                elif field_type == "checkbox":
+                    if value.lower() in ("true", "1", "yes"):
+                        page.check(sel)
+                    else:
+                        page.uncheck(sel)
                 else:
-                    await page.uncheck(selector)
-            else:
-                await page.fill(selector, value)
-            filled += 1
-        except Exception as exc:
-            errors.append({"selector": selector, "error": str(exc)[:200]})
+                    page.fill(sel, value)
+                filled += 1
+            except Exception as exc:
+                errors.append({"selector": sel, "error": str(exc)[:200]})
+        return {"filled": filled, "errors": errors}
 
-    await _emit_browser_event(
-        "browser.form",
-        f"Filled {filled}/{len(fields)} form fields",
-        detail={"session_id": session_id, "filled": filled, "total": len(fields),
-                "errors": errors, "url": page.url},
-    )
-
-    return {
-        "status": "ok" if not errors else "partial",
-        "filled": filled,
-        "total": len(fields),
-        "errors": errors,
-    }
+    try:
+        result = await _run_in_pw_thread(_do_fill)
+        await _emit_browser_event(
+            "browser.form",
+            f"Filled {result['filled']}/{len(fields)} form fields",
+            detail={"session_id": session_id, "filled": result["filled"],
+                    "total": len(fields), "errors": result["errors"], "url": page.url},
+        )
+        return {
+            "status": "ok" if not result["errors"] else "partial",
+            "filled": result["filled"],
+            "total": len(fields),
+            "errors": result["errors"],
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)[:500]}
 
 
 async def click_element(session_id: str, selector: str) -> dict[str, Any]:
     """Click an element on the current page."""
     page = _get_page(session_id)
-    try:
-        await page.click(selector, timeout=10000)
 
+    def _do_click():
+        page.click(selector, timeout=10000)
+        return {"url": page.url}
+
+    try:
+        result = await _run_in_pw_thread(_do_click)
         await _emit_browser_event(
             "browser.click",
             f"Clicked element: {selector}",
-            detail={"session_id": session_id, "selector": selector, "url": page.url},
+            detail={"session_id": session_id, "selector": selector, "url": result["url"]},
         )
-
-        return {"status": "ok", "selector": selector, "url": page.url}
+        return {"status": "ok", "selector": selector, "url": result["url"]}
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -483,16 +565,17 @@ async def click_element(session_id: str, selector: str) -> dict[str, Any]:
 async def execute_js(session_id: str, script: str) -> dict[str, Any]:
     """Execute JavaScript on the current page."""
     page = _get_page(session_id)
-    try:
-        result = await page.evaluate(script)
 
+    def _do_eval():
+        return page.evaluate(script)
+
+    try:
+        result = await _run_in_pw_thread(_do_eval)
         await _emit_browser_event(
             "browser.execute_js",
             f"Executed JavaScript ({len(script)} chars)",
             detail={"session_id": session_id, "script_length": len(script), "url": page.url},
         )
-
-        # Serialize result
         result_str = str(result)[:10000] if result is not None else None
         return {"status": "ok", "result": result_str}
     except Exception as exc:
@@ -508,7 +591,7 @@ async def wait_for_selector(
     """Wait for an element to appear on the page."""
     page = _get_page(session_id)
     try:
-        await page.wait_for_selector(selector, timeout=timeout, state=state)
+        await _run_in_pw_thread(page.wait_for_selector, selector, timeout=timeout, state=state)
         return {"status": "ok", "selector": selector, "state": state}
     except Exception as exc:
         return {"status": "timeout", "selector": selector, "error": str(exc)[:500]}
@@ -521,21 +604,24 @@ async def upload_file(
 ) -> dict[str, Any]:
     """Upload a file to a file input element."""
     page = _get_page(session_id)
-    try:
-        file_input = await page.query_selector(selector)
+
+    def _do_upload():
+        file_input = page.query_selector(selector)
         if file_input is None:
             return {"status": "not_found", "selector": selector}
-
-        await file_input.set_input_files(file_path)
-
-        await _emit_browser_event(
-            "browser.upload",
-            f"Uploaded file: {Path(file_path).name}",
-            detail={"session_id": session_id, "selector": selector,
-                    "file": Path(file_path).name, "url": page.url},
-        )
-
+        file_input.set_input_files(file_path)
         return {"status": "ok", "file": Path(file_path).name}
+
+    try:
+        result = await _run_in_pw_thread(_do_upload)
+        if result.get("status") == "ok":
+            await _emit_browser_event(
+                "browser.upload",
+                f"Uploaded file: {result['file']}",
+                detail={"session_id": session_id, "selector": selector,
+                        "file": result["file"], "url": page.url},
+            )
+        return result
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -550,29 +636,30 @@ async def download_file(
         return {"status": "error", "error": "No active session"}
 
     page = _get_page(session_id)
-    try:
-        async with page.expect_download(timeout=30000) as download_info:
-            pass  # The download should have been triggered by a click
-        download = await download_info.value
 
+    def _do_download():
+        with page.expect_download(timeout=30000) as download_info:
+            pass
+        download = download_info.value
         dest_dir = settings.mado_path / "downloads" / _sanitize_name(profile_name)
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / download.suggested_filename
-
-        await download.save_as(str(dest_path))
-
-        await _emit_browser_event(
-            "browser.download",
-            f"Downloaded file: {download.suggested_filename}",
-            detail={"session_id": session_id, "filename": download.suggested_filename,
-                    "path": str(dest_path)},
-        )
-
+        download.save_as(str(dest_path))
         return {
             "status": "ok",
             "filename": download.suggested_filename,
             "path": str(dest_path),
         }
+
+    try:
+        result = await _run_in_pw_thread(_do_download)
+        await _emit_browser_event(
+            "browser.download",
+            f"Downloaded file: {result['filename']}",
+            detail={"session_id": session_id, "filename": result["filename"],
+                    "path": result["path"]},
+        )
+        return result
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
 
@@ -580,14 +667,15 @@ async def download_file(
 async def get_page_info(session_id: str) -> dict[str, Any]:
     """Get current page metadata (URL, title, viewport)."""
     page = _get_page(session_id)
+
+    def _do_info():
+        return {"status": "ok", "url": page.url, "title": page.title()}
+
     try:
-        return {
-            "status": "ok",
-            "url": page.url,
-            "title": await page.title(),
-        }
+        return await _run_in_pw_thread(_do_info)
     except Exception as exc:
         return {"status": "error", "error": str(exc)[:500]}
+
 
 
 # ═══════════════════════════════════════════════════════════════

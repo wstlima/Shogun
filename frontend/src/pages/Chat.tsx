@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare } from 'lucide-react';
+import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare, Zap, Shield, Target, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { MailView } from './MailView';
 import { CalendarView } from './CalendarView';
+
+type ChatMode = 'auto' | 'fast' | 'governed' | 'mission';
 
 interface Message {
   role: 'user' | 'shogun';
@@ -12,6 +14,7 @@ interface Message {
   model?: string;
   provider?: string;
   search?: boolean;
+  mode?: ChatMode;
 }
 
 interface Session {
@@ -77,6 +80,8 @@ export const ChatConsole = () => {
   const operatorName = localStorage.getItem('shogun_operator_name') || 'Daimyo';
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>('auto');
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<Session[]>(loadHistory);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
@@ -107,6 +112,7 @@ export const ChatConsole = () => {
     setMessages(updatedMessages);
     setInput('');
     setIsThinking(true);
+    setStatusText(null);
 
     const hist = updatedMessages
       .filter(m => m.role === 'user' || m.role === 'shogun')
@@ -124,7 +130,7 @@ export const ChatConsole = () => {
       const resp = await fetch('/api/v1/agents/shogun/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, history: hist.slice(0, -1) }),
+        body: JSON.stringify({ message: input, history: hist.slice(0, -1), mode: chatMode }),
       });
 
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
@@ -133,7 +139,7 @@ export const ChatConsole = () => {
       const decoder = new TextDecoder();
       let buffer = '';
       let assembled = '';
-      let meta: { model?: string; provider?: string; timestamp?: string; search?: boolean } = {};
+      let meta: { model?: string; provider?: string; timestamp?: string; search?: boolean; mode?: ChatMode } = {};
 
       while (true) {
         const { done, value } = await reader.read();
@@ -156,16 +162,19 @@ export const ChatConsole = () => {
                 model: evt.model, 
                 provider: evt.provider, 
                 timestamp: evt.timestamp,
-                search: evt.search 
+                search: evt.search,
+                mode: evt.mode,
               };
-              setIsThinking(false);
               setMessages(prev => {
                 const copy = [...prev];
                 copy[copy.length - 1] = { ...copy[copy.length - 1], ...meta };
                 return copy;
               });
+            } else if (evt.type === 'status') {
+              setStatusText(evt.content);
             } else if (evt.type === 'token') {
               setIsThinking(false);
+              setStatusText(null);
               assembled += evt.content;
               const snap = assembled;
               setMessages(prev => {
@@ -282,25 +291,51 @@ export const ChatConsole = () => {
                   )}
                 >
                   {msg.role === 'shogun' && msg.content === '' ? (
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:300ms]" />
+                    <div className="flex items-center gap-2 py-1">
+                      {statusText ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                          <span className="text-xs text-cyan-400/80 font-mono animate-pulse">{statusText}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:0ms]" />
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:150ms]" />
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:300ms]" />
+                        </>
+                      )}
                     </div>
                   ) : msg.content}
                 </div>
                 <div className="flex items-center gap-2 px-1 mt-1">
                   <span className="text-[10px] text-shogun-subdued font-bold tracking-wider">{msg.role === 'user' ? operatorName : t('chat.agent_label', 'SHOGUN')}</span>
                   <span className="text-[10px] text-shogun-subdued opacity-50">{msg.timestamp}</span>
-                  {msg.role === 'shogun' && (msg.model || msg.search) && (
-                    <div className={cn(
-                      "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                      msg.search 
-                        ? "bg-shogun-blue/10 border border-shogun-blue/30 text-shogun-blue"
-                        : "bg-shogun-card border border-shogun-border text-shogun-subdued"
-                    )}>
-                      {msg.search ? <Globe className="w-2.5 h-2.5" /> : <Bot className="w-2.5 h-2.5" />}
-                      {msg.search ? t('chat.web_search', 'Web Search') : msg.model}
+                  {msg.role === 'shogun' && (msg.model || msg.search || msg.mode) && (
+                    <div className="flex items-center gap-1.5">
+                      {msg.mode && (
+                        <div className={cn(
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                          msg.mode === 'fast'
+                            ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                            : msg.mode === 'governed'
+                              ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                              : "bg-purple-500/10 border border-purple-500/30 text-purple-400"
+                        )}>
+                          {msg.mode === 'fast' ? <Zap className="w-2.5 h-2.5" /> : msg.mode === 'governed' ? <Shield className="w-2.5 h-2.5" /> : <Target className="w-2.5 h-2.5" />}
+                          {msg.mode === 'fast' ? 'Fast' : msg.mode === 'governed' ? 'Governed' : 'Mission'}
+                        </div>
+                      )}
+                      {msg.search ? (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-shogun-blue/10 border border-shogun-blue/30 text-shogun-blue">
+                          <Globe className="w-2.5 h-2.5" />
+                          {t('chat.web_search', 'Web Search')}
+                        </div>
+                      ) : msg.model ? (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-shogun-card border border-shogun-border text-shogun-subdued">
+                          <Bot className="w-2.5 h-2.5" />
+                          {msg.model}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -311,6 +346,36 @@ export const ChatConsole = () => {
 
         {/* Input bar */}
         <div className="p-4 bg-[#050508]/50 border-t border-shogun-border shrink-0">
+          {/* Mode selector */}
+          <div className="flex items-center gap-1 mb-3">
+            {([
+              { id: 'auto' as ChatMode, label: 'Auto', icon: Sparkles, color: 'cyan', desc: 'Automatically selects the best mode' },
+              { id: 'fast' as ChatMode, label: 'Fast Chat', icon: Zap, color: 'emerald', desc: 'Conversation only — no tools or memory' },
+              { id: 'governed' as ChatMode, label: 'Governed', icon: Shield, color: 'amber', desc: 'Context-aware with memory (coming soon)' },
+              { id: 'mission' as ChatMode, label: 'Mission', icon: Target, color: 'purple', desc: 'Full agent orchestration with tools' },
+            ]).map(({ id, label, icon: Icon, color }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setChatMode(id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all",
+                  chatMode === id
+                    ? `bg-${color}-500/15 border-${color}-500/40 text-${color}-400`
+                    : "bg-transparent border-shogun-border/50 text-shogun-subdued/60 hover:border-shogun-subdued hover:text-shogun-subdued"
+                )}
+                style={chatMode === id ? {
+                  backgroundColor: color === 'cyan' ? 'rgba(6,182,212,0.15)' : color === 'emerald' ? 'rgba(16,185,129,0.15)' : color === 'amber' ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)',
+                  borderColor: color === 'cyan' ? 'rgba(6,182,212,0.4)' : color === 'emerald' ? 'rgba(16,185,129,0.4)' : color === 'amber' ? 'rgba(245,158,11,0.4)' : 'rgba(168,85,247,0.4)',
+                  color: color === 'cyan' ? 'rgb(34,211,238)' : color === 'emerald' ? 'rgb(52,211,153)' : color === 'amber' ? 'rgb(251,191,36)' : 'rgb(192,132,252)',
+                } : {}}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="relative flex items-center">
             <input
               type="text"
@@ -318,7 +383,7 @@ export const ChatConsole = () => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
               disabled={isThinking}
-              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : t('chat.placeholder', 'Enter directive for the Shogun...')}
+              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : chatMode === 'auto' ? 'Ask anything — Shogun routes automatically...' : chatMode === 'fast' ? 'Ask anything...' : chatMode === 'mission' ? 'Enter mission directive...' : 'Ask with context...'}
               className="w-full bg-shogun-card border border-shogun-border rounded-xl py-4 pl-6 pr-14 text-shogun-text placeholder:text-shogun-subdued focus:outline-none focus:border-shogun-blue focus:ring-1 focus:ring-shogun-blue/20 transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button

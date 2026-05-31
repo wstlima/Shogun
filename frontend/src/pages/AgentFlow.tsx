@@ -53,6 +53,13 @@ import {
   History,
   StopCircle,
   Globe,
+  Mail,
+  Upload,
+  FileText,
+  Link,
+  Calendar,
+  Radio,
+  Clipboard,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -120,6 +127,7 @@ const NODE_PALETTE = [
   { type: 'input',           label: 'Input',            icon: LogIn,     color: '#22c55e', desc: 'Workflow start point' },
   { type: 'output',          label: 'Output',           icon: LogOut,    color: '#f97316', desc: 'Final delivery' },
   { type: 'mado_browser',    label: 'Mado Browser',     icon: Globe,     color: '#06b6d4', desc: 'Browser automation' },
+  { type: 'email_send',      label: 'Email Send',       icon: Mail,      color: '#e879a8', desc: 'Send email via SMTP' },
 ] as const;
 
 
@@ -134,6 +142,7 @@ const nodeColors: Record<string, string> = {
   input: '#22c55e',
   output: '#f97316',
   mado_browser: '#06b6d4',
+  email_send: '#e879a8',
 };
 
 const nodeIcons: Record<string, React.ElementType> = {
@@ -143,6 +152,7 @@ const nodeIcons: Record<string, React.ElementType> = {
   input: LogIn,
   output: LogOut,
   mado_browser: Globe,
+  email_send: Mail,
 };
 
 function FlowNode({ data, selected, type }: { data: Record<string, any>; selected: boolean; type: string }) {
@@ -248,6 +258,19 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
             )}
           </>
         )}
+        {type === 'email_send' && (
+          <>
+            <div className="flex items-center gap-1">
+              <Mail className="w-2.5 h-2.5 text-[#e879a8]/70" />
+              <span className="text-[8px] font-bold text-[#e879a8]/80 truncate">
+                {config.to_address || 'No recipient'}
+              </span>
+            </div>
+            {config.subject && (
+              <p className="text-[9px] text-[#7a8899] truncate">{config.subject}</p>
+            )}
+          </>
+        )}
       </div>
 
       {/* Handles */}
@@ -317,6 +340,7 @@ const nodeTypes: NodeTypes = {
   input: FlowNode,
   output: FlowNode,
   mado_browser: FlowNode,
+  email_send: FlowNode,
 };
 
 
@@ -386,12 +410,14 @@ function NodeInspector({
   onClose,
   agents,
   routingProfiles,
+  flowId,
 }: {
   node: Node;
   onUpdate: (id: string, data: any) => void;
   onClose: () => void;
   agents: any[];
   routingProfiles: any[];
+  flowId: string;
 }) {
   const nodeType = node.type || 'samurai';
   const color = nodeColors[nodeType] || '#d4a017';
@@ -471,7 +497,7 @@ function NodeInspector({
                 value={config.task_description || ''}
                 onChange={(e) => updateConfig('task_description', e.target.value)}
                 rows={3}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none resize-none"
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none resize-y min-h-[60px]"
                 placeholder="Describe what this Samurai should do..."
               />
             </div>
@@ -642,13 +668,434 @@ function NodeInspector({
                 <option value="nexus">Nexus Task</option>
               </select>
             </div>
+
+            {/* ── Scheduled Trigger ──────────────────────── */}
+            {config.input_type === 'scheduled' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> Frequency
+                  </label>
+                  <select
+                    value={config.schedule_frequency || 'nightly'}
+                    onChange={(e) => updateConfig('schedule_frequency', e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none cursor-pointer"
+                  >
+                    <option value="hourly">Hourly</option>
+                    <option value="nightly">Daily (Nightly)</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+
+                {config.schedule_frequency !== 'hourly' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Run Time
+                    </label>
+                    <input
+                      type="time"
+                      value={config.schedule_time || '07:00'}
+                      onChange={(e) => updateConfig('schedule_time', e.target.value)}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none"
+                    />
+                  </div>
+                )}
+
+                {config.schedule_frequency === 'hourly' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Minute Offset</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={config.schedule_minute_offset ?? 0}
+                      onChange={(e) => updateConfig('schedule_minute_offset', parseInt(e.target.value) || 0)}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none"
+                      placeholder="0"
+                    />
+                    <p className="text-[8px] text-[#555]">Runs at this minute past every hour (0–59)</p>
+                  </div>
+                )}
+
+                {config.schedule_frequency === 'weekly' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Days of Week</label>
+                    <div className="flex flex-wrap gap-1">
+                      {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => {
+                        const days: string[] = config.schedule_days || ['mon', 'tue', 'wed', 'thu', 'fri'];
+                        const active = days.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              const next = active ? days.filter((d: string) => d !== day) : [...days, day];
+                              updateConfig('schedule_days', next.length ? next : [day]);
+                            }}
+                            className={cn(
+                              "px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer border",
+                              active
+                                ? "bg-[#22c55e]/15 border-[#22c55e]/40 text-[#22c55e]"
+                                : "bg-[#0a0e1a] border-[#1a2040] text-[#555] hover:border-[#2a3060]"
+                            )}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {config.schedule_frequency === 'monthly' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Day of Month</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={config.schedule_day || 1}
+                      onChange={(e) => updateConfig('schedule_day', parseInt(e.target.value) || 1)}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none"
+                    />
+                    <p className="text-[8px] text-[#555]">Day 1–28 (avoids month-length issues)</p>
+                  </div>
+                )}
+
+                <div className="bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg p-2.5">
+                  <p className="text-[9px] text-[#22c55e]/80 leading-relaxed">
+                    <strong>Note:</strong> The flow must be <strong>Activated</strong> for the schedule to register with the job scheduler. Save → then Activate from the flow list.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── Document Upload ────────────────────────── */}
+            {config.input_type === 'document' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                    <Upload className="w-3 h-3" /> Upload Document
+                  </label>
+                  <div
+                    className={cn(
+                      "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200",
+                      "hover:border-[#22c55e]/50 hover:bg-[#22c55e]/5",
+                      config.uploaded_file
+                        ? "border-[#22c55e]/30 bg-[#22c55e]/5"
+                        : "border-[#1a2040] bg-[#0a0e1a]"
+                    )}
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.pdf,.txt,.csv,.json,.md,.docx,.xlsx';
+                      input.onchange = async (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        try {
+                          const res = await axios.post(`/api/v1/agent-flows/${flowId}/upload`, formData);
+                          const data = res.data?.data;
+                          updateConfig('uploaded_file', {
+                            filename: data?.filename || file.name,
+                            size: file.size,
+                            path: data?.path || '',
+                          });
+                        } catch {
+                          updateConfig('uploaded_file', {
+                            filename: file.name,
+                            size: file.size,
+                            path: '',
+                            error: 'Upload failed',
+                          });
+                        }
+                      };
+                      input.click();
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const file = e.dataTransfer.files?.[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        const res = await axios.post(`/api/v1/agent-flows/${flowId}/upload`, formData);
+                        const data = res.data?.data;
+                        updateConfig('uploaded_file', {
+                          filename: data?.filename || file.name,
+                          size: file.size,
+                          path: data?.path || '',
+                        });
+                      } catch {
+                        updateConfig('uploaded_file', {
+                          filename: file.name,
+                          size: file.size,
+                          path: '',
+                          error: 'Upload failed',
+                        });
+                      }
+                    }}
+                  >
+                    {config.uploaded_file ? (
+                      <div className="space-y-1">
+                        <FileText className="w-6 h-6 mx-auto text-[#22c55e]" />
+                        <p className="text-[10px] font-bold text-[#c8d0d8] truncate">{config.uploaded_file.filename}</p>
+                        <p className="text-[8px] text-[#555]">
+                          {(config.uploaded_file.size / 1024).toFixed(1)} KB
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); updateConfig('uploaded_file', null); }}
+                          className="text-[8px] text-[#ef4444] hover:text-[#ef4444]/80 font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 py-2">
+                        <Upload className="w-6 h-6 mx-auto text-[#555]" />
+                        <p className="text-[10px] text-[#7a8899] font-bold">
+                          Drag & drop or click to upload
+                        </p>
+                        <p className="text-[8px] text-[#555]">
+                          PDF, TXT, CSV, JSON, MD, DOCX, XLSX
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Manual Input ──────────────────────────── */}
+            {(!config.input_type || config.input_type === 'manual') && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Initial Context</label>
+                <textarea
+                  value={config.manual_input || ''}
+                  onChange={(e) => updateConfig('manual_input', e.target.value)}
+                  rows={3}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none resize-y min-h-[60px]"
+                  placeholder="Enter initial context or instructions for the flow..."
+                />
+                <p className="text-[8px] text-[#555]">This text is passed as input when the flow runs</p>
+              </div>
+            )}
+
+            {/* ── API Trigger ───────────────────────────── */}
+            {config.input_type === 'api' && (() => {
+              const [toolsLoading, setToolsLoading] = useState(false);
+              const [tools, setTools] = useState<{id: string; name: string; slug: string; base_url: string | null; connector_type: string; status: string}[]>([]);
+
+              useEffect(() => {
+                let cancelled = false;
+                setToolsLoading(true);
+                axios.get('/api/v1/tools').then((res) => {
+                  if (!cancelled) setTools(res.data?.data || []);
+                }).catch(() => {}).finally(() => { if (!cancelled) setToolsLoading(false); });
+                return () => { cancelled = true; };
+              }, []);
+
+              const selectedTool = tools.find((t) => t.id === config.api_tool_id);
+
+              return (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> API Source
+                    </label>
+                    <select
+                      value={config.api_tool_id || ''}
+                      onChange={(e) => {
+                        const tool = tools.find((t) => t.id === e.target.value);
+                        updateConfig('api_tool_id', e.target.value || null);
+                        updateConfig('api_tool_name', tool?.name || null);
+                        updateConfig('api_base_url', tool?.base_url || null);
+                      }}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none cursor-pointer"
+                    >
+                      <option value="">— Webhook (direct POST) —</option>
+                      {toolsLoading && <option disabled>Loading connectors...</option>}
+                      {tools.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.connector_type}){t.base_url ? ` · ${t.base_url}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[8px] text-[#555]">
+                      {config.api_tool_id
+                        ? 'This flow triggers via the selected API connector'
+                        : 'Select a connector or use the direct webhook URL below'}
+                    </p>
+                  </div>
+
+                  {selectedTool && (
+                    <div className="bg-[#06b6d4]/5 border border-[#06b6d4]/20 rounded-lg p-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-[#06b6d4]">{selectedTool.name}</span>
+                        <span className={cn(
+                          "text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                          selectedTool.status === 'active' ? "text-green-400 bg-green-500/10" : "text-[#555] bg-[#0a0e1a]"
+                        )}>{selectedTool.status}</span>
+                      </div>
+                      {selectedTool.base_url && (
+                        <p className="text-[8px] text-[#555] font-mono truncate">{selectedTool.base_url}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                      <Link className="w-3 h-3" /> Webhook URL
+                    </label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/api/v1/agent-flows/${flowId}/runs`}
+                        className="flex-1 bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-[10px] text-[#7a8899] font-mono outline-none select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/api/v1/agent-flows/${flowId}/runs`);
+                        }}
+                        className="p-2 bg-[#0a0e1a] border border-[#1a2040] rounded-lg hover:border-[#22c55e]/40 transition-colors cursor-pointer"
+                        title="Copy URL"
+                      >
+                        <Clipboard className="w-3 h-3 text-[#7a8899]" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg p-2.5 space-y-1.5">
+                    <p className="text-[9px] text-[#22c55e]/80 leading-relaxed">
+                      <strong>Usage:</strong> Send a <code className="bg-[#0a0e1a] px-1 py-0.5 rounded text-[8px]">POST</code> request with a JSON body to trigger this flow.
+                    </p>
+                    <pre className="text-[8px] text-[#555] font-mono bg-[#0a0e1a] p-2 rounded overflow-x-auto">
+{`POST /api/v1/agent-flows/${flowId}/runs
+Content-Type: application/json
+
+{ "trigger_type": "api" }`}
+                    </pre>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* ── Event-Based Trigger ───────────────────── */}
+            {config.input_type === 'event' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                    <Radio className="w-3 h-3" /> Event Source
+                  </label>
+                  <select
+                    value={config.event_source || 'email'}
+                    onChange={(e) => updateConfig('event_source', e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none cursor-pointer"
+                  >
+                    <option value="email">Email Received</option>
+                    <option value="bushido">Bushido Schedule</option>
+                    <option value="system">System Event</option>
+                    <option value="custom">Custom Event</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Event Filter</label>
+                  <input
+                    type="text"
+                    value={config.event_filter || ''}
+                    onChange={(e) => updateConfig('event_filter', e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none"
+                    placeholder={
+                      config.event_source === 'email' ? 'from:*@client.com' :
+                      config.event_source === 'system' ? 'event_type:agent.deployed' :
+                      'filter expression...'
+                    }
+                  />
+                  <p className="text-[8px] text-[#555]">Optional filter to narrow which events trigger this flow</p>
+                </div>
+                <div className="bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg p-2.5 space-y-1">
+                  <p className="text-[9px] text-[#22c55e]/80 leading-relaxed">
+                    <strong>How it works:</strong> When a matching event is captured by the Shogun Event Logger, this flow will be triggered automatically.
+                  </p>
+                  <p className="text-[8px] text-[#555] leading-relaxed">
+                    Events are emitted by all subsystems — email sync, agent actions, Bushido schedules, browser automation, and system heartbeats.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* ── Nexus Task ────────────────────────────── */}
+            {config.input_type === 'nexus' && (() => {
+              // Load workspaces on mount if not cached
+              const [wsLoading, setWsLoading] = useState(false);
+              const [workspaces, setWorkspaces] = useState<{id: string; name: string; topic: string | null}[]>([]);
+
+              useEffect(() => {
+                let cancelled = false;
+                setWsLoading(true);
+                axios.get('/api/v1/workspaces').then((res) => {
+                  if (!cancelled) setWorkspaces(res.data?.data || []);
+                }).catch(() => {}).finally(() => { if (!cancelled) setWsLoading(false); });
+                return () => { cancelled = true; };
+              }, []);
+
+              return (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Nexus Workspace
+                    </label>
+                    <select
+                      value={config.nexus_workspace_id || ''}
+                      onChange={(e) => updateConfig('nexus_workspace_id', e.target.value)}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none cursor-pointer"
+                    >
+                      <option value="">— Select workspace —</option>
+                      {wsLoading && <option disabled>Loading...</option>}
+                      {workspaces.map((ws) => (
+                        <option key={ws.id} value={ws.id}>
+                          {ws.name}{ws.topic ? ` (${ws.topic})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Trigger on Message Type</label>
+                    <select
+                      value={config.nexus_message_type || 'task'}
+                      onChange={(e) => updateConfig('nexus_message_type', e.target.value)}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none cursor-pointer"
+                    >
+                      <option value="task">Task messages</option>
+                      <option value="proposal">Proposals</option>
+                      <option value="signal">Signals / Alerts</option>
+                      <option value="any">Any message</option>
+                    </select>
+                    <p className="text-[8px] text-[#555]">This flow triggers when a matching message arrives in the workspace</p>
+                  </div>
+                  <div className="bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg p-2.5 space-y-1">
+                    <p className="text-[9px] text-[#22c55e]/80 leading-relaxed">
+                      <strong>How it works:</strong> When a <code className="bg-[#0a0e1a] px-1 py-0.5 rounded text-[8px]">{config.nexus_message_type || 'task'}</code> message arrives in the linked workspace, the message content is passed as input to this flow.
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Description — always shown */}
             <div className="space-y-1.5">
               <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Description</label>
               <textarea
                 value={config.description || ''}
                 onChange={(e) => updateConfig('description', e.target.value)}
                 rows={2}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none resize-none"
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#22c55e] transition-colors outline-none resize-y min-h-[44px]"
                 placeholder="Describe the input..."
               />
             </div>
@@ -719,16 +1166,109 @@ function NodeInspector({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">CSS Selector</label>
-              <input
-                type="text"
-                value={config.selector || ''}
-                onChange={(e) => updateConfig('selector', e.target.value)}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-[10px] text-[#06b6d4] font-mono focus:border-[#06b6d4] transition-colors outline-none"
-                placeholder="e.g., .main-content, #article, table"
-              />
-            </div>
+            {/* Smart selector — presets + natural language + advanced raw */}
+            {(() => {
+              const EXTRACT_PRESETS: { value: string; label: string; selector: string; desc: string }[] = [
+                { value: 'headlines',    label: '📰 All Headlines',       selector: 'h1, h2, h3, h4, article h2, article h3',         desc: 'Grabs all headline text from the page' },
+                { value: 'links',        label: '🔗 All Links',           selector: 'a[href]',                                        desc: 'Extracts every link on the page with its URL' },
+                { value: 'article',      label: '📄 Article Content',     selector: 'article, [role="article"], .post-content, .entry-content, .article-body, main', desc: 'Main article text and body content' },
+                { value: 'news_cards',   label: '🗞️ News Cards',          selector: 'article a, [data-n-tid] a, c-wiz article, [jslog] h3, [jslog] h4', desc: 'News feed cards (Google News, news aggregators)' },
+                { value: 'tables',       label: '📊 Tables & Data',       selector: 'table, [role="table"], .data-table',             desc: 'Structured tables and data grids' },
+                { value: 'images',       label: '🖼️ Images',              selector: 'img[src], picture source',                       desc: 'All images with their source URLs' },
+                { value: 'lists',        label: '📋 Lists',               selector: 'ul, ol, dl, [role="list"]',                      desc: 'Bullet points, numbered lists, and definition lists' },
+                { value: 'prices',       label: '💰 Prices & Products',   selector: '[class*="price"], [data-price], .product-card, .product-title', desc: 'Product names, prices, and e-commerce data' },
+                { value: 'full_page',    label: '📜 Full Page Text',      selector: 'body',                                           desc: 'Everything visible on the page' },
+                { value: 'custom',       label: '⚙️ Custom Selector',     selector: '',                                               desc: 'Write your own CSS selector' },
+              ];
+
+              // Use config.selector_preset to track selection; fall back to matching
+              const presetValue = config.selector_preset || EXTRACT_PRESETS.find(p => p.selector === config.selector)?.value || (config.selector ? 'custom' : '');
+              const showAdvanced = config.show_advanced_selector || presetValue === 'custom';
+              const currentPreset = EXTRACT_PRESETS.find(p => p.value === presetValue);
+
+              // Batched config update — sets multiple keys in one call
+              const updateMultiConfig = (updates: Record<string, any>) => {
+                onUpdate(node.id, {
+                  ...node.data,
+                  config: { ...config, ...updates },
+                });
+              };
+
+              return (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">What to Extract</label>
+                    <select
+                      value={presetValue}
+                      onChange={(e) => {
+                        const preset = EXTRACT_PRESETS.find(p => p.value === e.target.value);
+                        if (preset && preset.value !== 'custom') {
+                          updateMultiConfig({
+                            selector: preset.selector,
+                            selector_preset: preset.value,
+                            show_advanced_selector: false,
+                          });
+                        } else {
+                          updateMultiConfig({
+                            selector_preset: 'custom',
+                            show_advanced_selector: true,
+                          });
+                        }
+                      }}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+                    >
+                      <option value="">— Choose what to extract —</option>
+                      {EXTRACT_PRESETS.map(p => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                    {currentPreset && presetValue !== 'custom' && (
+                      <p className="text-[8px] text-[#06b6d4]/70">{currentPreset.desc}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Describe What You Need</label>
+                    <textarea
+                      value={config.extract_hint || ''}
+                      onChange={(e) => updateConfig('extract_hint', e.target.value)}
+                      rows={2}
+                      className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none resize-y min-h-[40px]"
+                      placeholder='e.g. "Get all article titles and their links" or "Find product prices"'
+                    />
+                    <p className="text-[8px] text-[#555]">Optional — helps the AI understand what to look for in the extracted content</p>
+                  </div>
+
+                  {/* Advanced toggle */}
+                  <button
+                    type="button"
+                    onClick={() => updateConfig('show_advanced_selector', !showAdvanced)}
+                    className="flex items-center gap-1.5 text-[8px] font-bold text-[#555] hover:text-[#7a8899] uppercase tracking-widest transition-colors cursor-pointer"
+                  >
+                    <span className="transition-transform" style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                    Advanced: CSS Selector
+                  </button>
+
+                  {showAdvanced && (
+                    <div className="space-y-1.5">
+                      <input
+                        type="text"
+                        value={config.selector || ''}
+                        onChange={(e) => {
+                          updateMultiConfig({
+                            selector: e.target.value,
+                            selector_preset: 'custom',
+                          });
+                        }}
+                        className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-[10px] text-[#06b6d4] font-mono focus:border-[#06b6d4] transition-colors outline-none"
+                        placeholder="e.g., .main-content, #article, table"
+                      />
+                      <p className="text-[8px] text-[#555]">Raw CSS selector — for power users who know the page structure</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             <div className="space-y-1.5">
               <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Session Name</label>
@@ -797,6 +1337,73 @@ function NodeInspector({
               <p className="text-[8px] text-[#06b6d4]/80">
                 <strong>Mado 窓</strong> — Browser actions are governed by the Torii security posture.
                 Domain allowlists and session limits apply.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Email Send fields */}
+        {nodeType === 'email_send' && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">To Address</label>
+              <input
+                type="text"
+                value={config.to_address || ''}
+                onChange={(e) => updateConfig('to_address', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#e879a8] transition-colors outline-none"
+                placeholder="recipient@example.com"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">CC Address</label>
+              <input
+                type="text"
+                value={config.cc_address || ''}
+                onChange={(e) => updateConfig('cc_address', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#e879a8] transition-colors outline-none"
+                placeholder="cc@example.com"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">BCC Address</label>
+              <input
+                type="text"
+                value={config.bcc_address || ''}
+                onChange={(e) => updateConfig('bcc_address', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#e879a8] transition-colors outline-none"
+                placeholder="bcc@example.com"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Subject</label>
+              <input
+                type="text"
+                value={config.subject || ''}
+                onChange={(e) => updateConfig('subject', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#e879a8] transition-colors outline-none"
+                placeholder="Email subject line..."
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Body Template</label>
+              <textarea
+                value={config.body_template || ''}
+                onChange={(e) => updateConfig('body_template', e.target.value)}
+                rows={4}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#e879a8] transition-colors outline-none resize-none"
+                placeholder="Leave empty to use predecessor output as body. Use {{context}} to inject predecessor output into a template."
+              />
+            </div>
+
+            <div className="p-2.5 bg-[#e879a8]/5 border border-[#e879a8]/20 rounded-lg">
+              <p className="text-[8px] text-[#e879a8]/80">
+                <strong>Mail ✉</strong> — Sends via the SMTP account configured in the Mail page.
+                Requires <code className="text-[#e879a8]">perm_send_mail</code> to be enabled.
               </p>
             </div>
           </>
@@ -1015,13 +1622,44 @@ function AgentFlowCanvas({
       };
 
       await axios.put(`/api/v1/agent-flows/${flow.id}/graph`, graphPayload);
+
+      // ── Sync schedule_config from input nodes ────────────
+      const inputNode = nodes.find((n) => n.type === 'input');
+      if (inputNode) {
+        const cfg = (inputNode.data as any)?.config || {};
+        const inputType = cfg.input_type || 'manual';
+        const patch: Record<string, any> = {};
+
+        if (inputType === 'scheduled') {
+          patch.trigger_type = 'scheduled';
+          patch.schedule_config = {
+            frequency: cfg.schedule_frequency || 'nightly',
+            schedule_time: cfg.schedule_time || '07:00',
+            ...(cfg.schedule_frequency === 'weekly' && { schedule_days: cfg.schedule_days || ['mon', 'tue', 'wed', 'thu', 'fri'] }),
+            ...(cfg.schedule_frequency === 'monthly' && { schedule_day: cfg.schedule_day || 1 }),
+            ...(cfg.schedule_frequency === 'hourly' && { minute_offset: cfg.schedule_minute_offset || 0 }),
+          };
+        } else if (inputType === 'api') {
+          patch.trigger_type = 'api';
+        } else if (inputType === 'event') {
+          patch.trigger_type = 'event';
+        } else {
+          patch.trigger_type = 'manual';
+        }
+
+        // Only PATCH if trigger_type differs from current
+        if (patch.trigger_type !== flow.trigger_type || patch.schedule_config) {
+          await axios.patch(`/api/v1/agent-flows/${flow.id}`, patch);
+        }
+      }
+
       setDirty(false);
     } catch (err) {
       console.error('Failed to save flow:', err);
     } finally {
       setSaving(false);
     }
-  }, [flow.id, flow.name, flowName, nodes, edges, reactFlowInstance]);
+  }, [flow.id, flow.name, flow.trigger_type, flowName, nodes, edges, reactFlowInstance]);
 
   // ── Trigger run ──────────────────────────────────────────
   const handleRun = useCallback(async () => {
@@ -1326,6 +1964,7 @@ function AgentFlowCanvas({
           onClose={() => setSelectedNode(null)}
           agents={agents}
           routingProfiles={routingProfiles}
+          flowId={flow.id}
         />
       )}
 

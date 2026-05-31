@@ -204,11 +204,15 @@ async def pull_model_stream(
     ``{"status": "pulling manifest"}``
     ``{"status": "pulling …", "completed": 131072, "total": 4661211296}``
     ``{"status": "success"}``
+
+    After a successful pull, the model is auto-registered as an Ollama provider
+    so it immediately appears in the Katana and Shogun model dropdowns.
     """
     import httpx
     from fastapi.responses import StreamingResponse
 
     async def event_stream():
+        _pull_succeeded = False
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream(
@@ -219,11 +223,29 @@ async def pull_model_stream(
                     async for line in resp.aiter_lines():
                         if line.strip():
                             yield f"data: {line}\n\n"
+                            # Detect successful completion
+                            try:
+                                import json as _json
+                                msg = _json.loads(line)
+                                if msg.get("status") == "success":
+                                    _pull_succeeded = True
+                            except Exception:
+                                pass
         except httpx.ConnectError:
             yield f'data: {{"status":"error","error":"Cannot connect to Ollama at {base_url}. Is it running?"}}\n\n'
         except Exception as exc:
             yield f'data: {{"status":"error","error":"{str(exc)}"}}\n\n'
         finally:
+            # ── Auto-register as provider after successful pull ──
+            if _pull_succeeded:
+                try:
+                    await _auto_register_ollama_provider(model, base_url)
+                    yield f'data: {{"status":"registered","message":"Model \'{model}\' registered as provider"}}\n\n'
+                except Exception as reg_exc:
+                    import logging
+                    logging.getLogger("shogun.system").warning(
+                        "Auto-register failed for %s: %s", model, reg_exc
+                    )
             yield 'data: {"status":"done"}\n\n'
 
     return StreamingResponse(
@@ -234,6 +256,50 @@ async def pull_model_stream(
             "X-Accel-Buffering": "no",   # disable nginx buffering if present
         },
     )
+
+
+async def _auto_register_ollama_provider(model_name: str, base_url: str):
+    """Register a pulled Ollama model as a provider if it doesn't already exist."""
+    import json as _json
+    from shogun.db.engine import async_session_factory
+    from sqlalchemy import text
+
+    async with async_session_factory() as session:
+        # Check if already registered
+        result = await session.execute(
+            text("SELECT id FROM model_providers WHERE name = :name AND provider_type = 'ollama'"),
+            {"name": model_name},
+        )
+        if result.scalar_one_or_none():
+            return  # Already registered
+
+        # Create new provider entry
+        new_id = str(uuid.uuid4())
+        slug = model_name.replace(":", "-").replace("/", "-").replace(".", "-")
+        from datetime import datetime
+        now = datetime.now().isoformat()
+
+        await session.execute(
+            text("""
+                INSERT INTO model_providers (
+                    id, provider_type, name, slug, base_url, auth_type, is_local,
+                    status, health_status, config, created_at, updated_at, created_by, updated_by
+                ) VALUES (
+                    :id, 'ollama', :name, :slug, :base_url, 'none', 1,
+                    'connected', 'healthy', :config, :now, :now, 'system', 'system'
+                )
+            """),
+            {
+                "id": new_id, "name": model_name, "slug": slug,
+                "base_url": base_url, "config": _json.dumps({}), "now": now,
+            },
+        )
+        await session.commit()
+
+        import logging
+        logging.getLogger("shogun.system").info(
+            "Auto-registered Ollama model '%s' as provider (ID: %s)", model_name, new_id
+        )
 
 
 @router.get("/local-models", response_model=ApiResponse)
@@ -252,6 +318,14 @@ async def get_local_models(
                 if resp.status_code == 200:
                     data = resp.json()
                     models = [m.get("name") or m.get("model") for m in data.get("models", [])]
+
+                    # ── Auto-sync providers with Ollama ──
+                    # Register new models, remove stale providers
+                    try:
+                        await _sync_ollama_providers(models, base_url)
+                    except Exception:
+                        pass  # Non-fatal
+
                     return ApiResponse(success=True, data=models)
                 else:
                     return ApiResponse(
@@ -286,12 +360,182 @@ async def get_local_models(
         )
 
 
+async def _sync_ollama_providers(ollama_models: list[str], base_url: str):
+    """Sync the model_providers table with Ollama's actual model list.
+
+    - Registers any models present in Ollama but missing from providers.
+    - Removes provider entries for models no longer in Ollama.
+    """
+    import json as _json
+    import logging
+    from shogun.db.engine import async_session_factory
+    from sqlalchemy import text
+
+    _log = logging.getLogger("shogun.system")
+
+    async with async_session_factory() as session:
+        # Get currently registered Ollama providers
+        result = await session.execute(
+            text("SELECT id, name FROM model_providers WHERE provider_type = 'ollama'")
+        )
+        registered = {row[1]: row[0] for row in result.fetchall()}
+
+        ollama_set = set(ollama_models)
+        registered_set = set(registered.keys())
+
+        # Register new models
+        new_models = ollama_set - registered_set
+        for model_name in new_models:
+            new_id = str(uuid.uuid4())
+            slug = model_name.replace(":", "-").replace("/", "-").replace(".", "-")
+            from datetime import datetime
+            now = datetime.now().isoformat()
+            await session.execute(
+                text("""
+                    INSERT INTO model_providers (
+                        id, provider_type, name, slug, base_url, auth_type, is_local,
+                        status, health_status, config, created_at, updated_at, created_by, updated_by
+                    ) VALUES (
+                        :id, 'ollama', :name, :slug, :base_url, 'none', 1,
+                        'connected', 'healthy', :config, :now, :now, 'system', 'system'
+                    )
+                """),
+                {"id": new_id, "name": model_name, "slug": slug,
+                 "base_url": base_url, "config": _json.dumps({}), "now": now},
+            )
+            _log.info("Auto-registered Ollama model '%s' (synced from CLI)", model_name)
+
+        # Remove stale providers (models no longer in Ollama)
+        stale_models = registered_set - ollama_set
+        for model_name in stale_models:
+            await session.execute(
+                text("DELETE FROM model_providers WHERE id = :id"),
+                {"id": registered[model_name]},
+            )
+            _log.info("Removed stale Ollama provider '%s' (no longer installed)", model_name)
+
+        if new_models or stale_models:
+            await session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OLLAMA MODEL SEARCH (live from ollama.com)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/ollama-search", response_model=ApiResponse)
+async def search_ollama_models(
+    q: str = Query("", description="Search query"),
+    p: int = Query(1, ge=1, description="Page number"),
+    c: str = Query("", description="Capability filter (vision, tools, thinking, embedding, cloud)"),
+):
+    """Search the Ollama model registry at ollama.com/search.
+
+    Returns parsed model data including name, description, sizes,
+    capabilities, pull counts, and tags — proxied to avoid CORS.
+    """
+    import re
+    import httpx
+    import logging
+
+    _log = logging.getLogger("shogun.system")
+
+    params: dict[str, str] = {}
+    if q.strip():
+        params["q"] = q.strip()
+    if p > 1:
+        params["p"] = str(p)
+    if c.strip():
+        params["c"] = c.strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                "https://ollama.com/search",
+                params=params,
+                headers={"User-Agent": "Shogun/1.0 (model-search)"},
+            )
+            if resp.status_code != 200:
+                return ApiResponse(
+                    success=False, data=[],
+                    meta={"error": f"Ollama returned {resp.status_code}"}
+                )
+            html = resp.text
+    except httpx.ConnectError:
+        return ApiResponse(
+            success=False, data=[],
+            meta={"error": "Cannot connect to ollama.com. Check your internet."}
+        )
+    except Exception as exc:
+        return ApiResponse(
+            success=False, data=[],
+            meta={"error": str(exc)[:300]}
+        )
+
+    # ── Parse model entries from HTML ──
+    # Each model is in a <li x-test-model> block with an <a href="/library/{name}">
+    models: list[dict] = []
+
+    # Split by model list items
+    model_blocks = re.split(r'<li\s+x-test-model', html)
+
+    for block in model_blocks[1:]:  # skip the first chunk (before first model)
+        model: dict = {}
+
+        # Name: <span x-test-search-response-title>gemma4</span>
+        name_match = re.search(r'x-test-search-response-title[^>]*>([^<]+)<', block)
+        model["name"] = name_match.group(1).strip() if name_match else "unknown"
+
+        # Description: <p class="...break-words...">description text</p>
+        desc_match = re.search(r'break-words[^>]*>([^<]+)<', block)
+        model["description"] = desc_match.group(1).strip() if desc_match else ""
+
+        # Sizes: <span x-test-size ...>e4b</span>
+        sizes = re.findall(r'x-test-size[^>]*>([^<]+)<', block)
+        model["sizes"] = [s.strip() for s in sizes]
+
+        # Capabilities: <span x-test-capability ...>vision</span>
+        caps = re.findall(r'x-test-capability[^>]*>([^<]+)<', block)
+        # Also check for cloud badge
+        if 'cloud' in block.lower() and re.search(r'text-cyan-\d+[^>]*>cloud<', block):
+            caps.append("cloud")
+        model["capabilities"] = [c.strip() for c in caps]
+
+        # Pulls: <span x-test-pull-count>11.3M</span>
+        pulls_match = re.search(r'x-test-pull-count[^>]*>([^<]+)<', block)
+        model["pulls"] = pulls_match.group(1).strip() if pulls_match else "0"
+
+        # Tags count: <span x-test-tag-count>34</span>
+        tags_match = re.search(r'x-test-tag-count[^>]*>([^<]+)<', block)
+        model["tag_count"] = int(tags_match.group(1).strip()) if tags_match else 0
+
+        # Updated: <span x-test-updated>1 week ago</span>
+        updated_match = re.search(r'x-test-updated[^>]*>([^<]+)<', block)
+        model["updated"] = updated_match.group(1).strip() if updated_match else ""
+
+        # Default pull ID: use the model name (user can specify tags)
+        model["id"] = model["name"]
+
+        models.append(model)
+
+    # Check for pagination: if there's a "Next" link or more pages
+    has_more = bool(re.search(r'aria-label="Next Page"', html)) or bool(re.search(r'Next\s*</a>', html))
+    # Alternative: check for page links beyond current
+    if not has_more:
+        has_more = bool(re.search(rf'[?&]p={p + 1}', html))
+
+    _log.info("Ollama search q=%s p=%s: found %d models, has_more=%s", q, p, len(models), has_more)
+
+    return ApiResponse(
+        success=True,
+        data={"models": models, "page": p, "has_more": has_more, "query": q},
+    )
+
 @router.delete("/delete-model")
 async def delete_ollama_model(
     model: str = Query(..., description="Ollama model tag to delete, e.g. llama3.2:3b"),
     base_url: str = Query("http://localhost:11434", description="Ollama base URL"),
 ):
-    """Delete a locally pulled Ollama model to free disk space."""
+    """Delete a locally pulled Ollama model and remove its provider registration."""
     import httpx
 
     try:
@@ -302,7 +546,19 @@ async def delete_ollama_model(
                 json={"name": model},
             )
             if resp.status_code == 200:
-                return {"success": True, "message": f"Model '{model}' deleted successfully."}
+                # Auto-deregister the provider
+                try:
+                    from shogun.db.engine import async_session_factory
+                    from sqlalchemy import text as _text
+                    async with async_session_factory() as session:
+                        await session.execute(
+                            _text("DELETE FROM model_providers WHERE name = :name AND provider_type = 'ollama'"),
+                            {"name": model},
+                        )
+                        await session.commit()
+                except Exception:
+                    pass  # Non-fatal — provider entry may not exist
+                return {"success": True, "message": f"Model '{model}' deleted and deregistered."}
             else:
                 err = resp.text[:300]
                 return {"success": False, "message": f"Ollama returned {resp.status_code}: {err}"}

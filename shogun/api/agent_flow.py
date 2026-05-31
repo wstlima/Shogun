@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -248,3 +248,333 @@ async def cancel_run(
             detail="Run not found or already completed",
         )
     return ApiResponse(data={"cancelled": True})
+
+
+# ── Document Upload for Input Nodes ──────────────────────────
+
+
+@router.post("/{flow_id}/upload", response_model=ApiResponse)
+async def upload_flow_document(
+    flow_id: uuid.UUID,
+    file: UploadFile = File(...),
+    svc: AgentFlowService = Depends(get_agent_flow_service),
+):
+    """Upload a document file for a Document Upload input node.
+
+    The file is stored under ``{shogun_data}/flows/{flow_id}/uploads/``
+    and can be read by the flow engine at execution time.
+    """
+    from pathlib import Path
+    from shogun.config import settings
+
+    # Verify flow exists
+    flow = await svc.get_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Agent Flow not found")
+
+    # Validate file
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    allowed_extensions = {".pdf", ".txt", ".csv", ".json", ".md", ".docx", ".xlsx"}
+    ext = Path(file.filename).suffix.lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{ext}' not allowed. Accepted: {', '.join(sorted(allowed_extensions))}",
+        )
+
+    # Save file
+    upload_dir = Path(settings.data_dir) / "flows" / str(flow_id) / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use a safe filename
+    safe_name = file.filename.replace("..", "_").replace("/", "_").replace("\\", "_")
+    dest_path = upload_dir / safe_name
+
+    content = await file.read()
+    dest_path.write_bytes(content)
+
+    return ApiResponse(data={
+        "filename": safe_name,
+        "size": len(content),
+        "path": str(dest_path),
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# EXAMPLE FLOW SEEDING
+# ═══════════════════════════════════════════════════════════════
+
+
+@router.post("/seed-examples", response_model=ApiResponse, status_code=201)
+async def seed_example_flows(
+    svc: AgentFlowService = Depends(get_agent_flow_service),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create pre-built example flows to showcase Shogun capabilities.
+
+    Currently seeds:
+      - **AI News Digest** — Mado browses AI news sites, Samurai compiles
+        a newsletter, and the result is emailed to Michael@alphahorizon.io.
+      - Also creates the "News Editor" Samurai agent used by the flow.
+    """
+    from shogun.services.agent_service import AgentService
+
+    created = []
+
+    # ── 1. Create or find the "News Editor" Samurai agent ───────
+    from shogun.db.models.agent import Agent as AgentModel
+
+    agent_svc = AgentService(db)
+
+    # Check if agent already exists (including soft-deleted — slug has unique constraint)
+    existing = await db.execute(
+        select(AgentModel).where(AgentModel.slug == "news-editor").limit(1)
+    )
+    editor_agent = existing.scalar_one_or_none()
+
+    if editor_agent:
+        # Reactivate if soft-deleted
+        if editor_agent.is_deleted:
+            editor_agent.is_deleted = False
+            editor_agent.deleted_at = None
+            editor_agent.status = "draft"
+            await db.flush()
+    else:
+        editor_agent = await agent_svc.create(
+            agent_type="samurai",
+            name="News Editor",
+            slug="news-editor",
+            description=(
+                "A specialist Samurai agent that compiles raw news data into "
+                "polished, well-structured newsletter digests. Expert at "
+                "summarising articles, categorising by source, and writing "
+                "professional yet approachable email copy."
+            ),
+            memory_scope={
+                "episodic": True,
+                "semantic": True,
+                "procedural": True,
+                "persona": True,
+                "skills": True,
+            },
+            spawn_policy="manual",
+            avatar_url="/shogun-avatar.png",
+            tags=["news", "editor", "newsletter", "ai-digest"],
+        )
+
+    editor_agent_id = str(editor_agent.id)
+
+    # ── 2. AI News Digest Flow ─────────────────────────────────
+    flow = await svc.create(
+        name="AI News Digest",
+        description=(
+            "Automated AI news pipeline: Mado scans TechCrunch and The Verge "
+            "for the latest AI stories, a Samurai agent compiles the findings "
+            "into a polished newsletter, and sends it to Michael@alphahorizon.io."
+        ),
+        trigger_type="scheduled",
+        status="draft",
+    )
+
+    # Node IDs (client-side, will be remapped by save_flow_graph)
+    n_trigger   = "node-trigger"
+    n_nav_gn    = "node-nav-google-news"
+    n_nav_ai    = "node-nav-ai-news"
+    n_ext_gn    = "node-extract-google-news"
+    n_ext_ai    = "node-extract-ai-news"
+    n_compiler  = "node-compiler"
+    n_email     = "node-email"
+    n_output    = "node-output"
+
+    nodes_data = [
+        {
+            "id": n_trigger,
+            "node_type": "input",
+            "label": "Daily Trigger",
+            "position_x": 0,
+            "position_y": 200,
+            "config": {
+                "input_type": "scheduled",
+                "description": "Daily AI news scan — triggers the Mado browser agents to scrape the latest AI articles from top tech publications.",
+            },
+        },
+        {
+            "id": n_nav_gn,
+            "node_type": "mado_browser",
+            "label": "Browse Google News AI",
+            "position_x": 320,
+            "position_y": 80,
+            "config": {
+                "action": "navigate",
+                "url": "https://news.google.com/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
+                "session_name": "news_google",
+                "browser_mode": "headless",
+            },
+        },
+        {
+            "id": n_nav_ai,
+            "node_type": "mado_browser",
+            "label": "Browse AI News",
+            "position_x": 320,
+            "position_y": 320,
+            "config": {
+                "action": "navigate",
+                "url": "https://www.artificialintelligence-news.com/",
+                "session_name": "news_ainews",
+                "browser_mode": "headless",
+            },
+        },
+        {
+            "id": n_ext_gn,
+            "node_type": "mado_browser",
+            "label": "Extract Google News Headlines",
+            "position_x": 620,
+            "position_y": 80,
+            "config": {
+                "action": "extract_content",
+                "selector": "article a, [data-n-tid] a, c-wiz article, [jslog] h3, [jslog] h4",
+                "extract_type": "text",
+                "session_name": "news_google",
+            },
+        },
+        {
+            "id": n_ext_ai,
+            "node_type": "mado_browser",
+            "label": "Extract AI News Articles",
+            "position_x": 620,
+            "position_y": 320,
+            "config": {
+                "action": "extract_content",
+                "selector": "h2 a, h3 a, .post-title a, .entry-title a, article h2, article h3",
+                "extract_type": "text",
+                "session_name": "news_ainews",
+            },
+        },
+        {
+            "id": n_compiler,
+            "node_type": "samurai",
+            "label": "Compile Newsletter",
+            "position_x": 940,
+            "position_y": 200,
+            "config": {
+                "agent_id": editor_agent_id,
+                "task_description": (
+                    "You are an AI news editor. From the scraped article headlines and "
+                    "summaries provided by the previous steps, compile a professional, "
+                    "concise AI news digest email.\n\n"
+                    "Format the email with:\n"
+                    "- A friendly greeting to Michael\n"
+                    "- Sections for each source (Google News, AI News)\n"
+                    "- Bullet points with brief 1-2 sentence summaries per story\n"
+                    "- A closing note from the Shogun AI team\n\n"
+                    "Keep it scannable and informative. Use markdown formatting."
+                ),
+                "expected_output": "A formatted newsletter-style email body in markdown",
+                "timeout": 120,
+                "retry_count": 1,
+                "failure_action": "retry",
+            },
+        },
+        {
+            "id": n_email,
+            "node_type": "email_send",
+            "label": "Send to Michael",
+            "position_x": 1260,
+            "position_y": 200,
+            "config": {
+                "to_address": "Michael@alphahorizon.io",
+                "subject": "🤖 Your Daily AI News Digest — Shogun",
+                "body_template": "",
+            },
+        },
+        {
+            "id": n_output,
+            "node_type": "output",
+            "label": "Delivery Log",
+            "position_x": 1540,
+            "position_y": 200,
+            "config": {
+                "output_type": "artifact",
+                "format": "markdown",
+            },
+        },
+    ]
+
+    edges_data = [
+        # Trigger → both navigation nodes (parallel)
+        {
+            "source_node_id": n_trigger,
+            "target_node_id": n_nav_gn,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        {
+            "source_node_id": n_trigger,
+            "target_node_id": n_nav_ai,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        # Navigate → Extract (each branch)
+        {
+            "source_node_id": n_nav_gn,
+            "target_node_id": n_ext_gn,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        {
+            "source_node_id": n_nav_ai,
+            "target_node_id": n_ext_ai,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        # Both extractions → Compiler (merge)
+        {
+            "source_node_id": n_ext_gn,
+            "target_node_id": n_compiler,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        {
+            "source_node_id": n_ext_ai,
+            "target_node_id": n_compiler,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        # Compiler → Email
+        {
+            "source_node_id": n_compiler,
+            "target_node_id": n_email,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+        # Email → Output
+        {
+            "source_node_id": n_email,
+            "target_node_id": n_output,
+            "edge_type": "default",
+            "label": None,
+            "config": {},
+        },
+    ]
+
+    saved = await svc.save_flow_graph(
+        flow_id=flow.id,
+        nodes_data=nodes_data,
+        edges_data=edges_data,
+        viewport={"x": 50, "y": 50, "zoom": 0.75},
+    )
+    created.append(AgentFlowListItem.model_validate(saved))
+
+    return ApiResponse(
+        data=created,
+        meta={"message": f"Seeded {len(created)} example flow(s)"},
+    )
