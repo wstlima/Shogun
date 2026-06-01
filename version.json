@@ -1,8 +1,8 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "name": "Shogun OS",
-  "build": 25,
+  "build": 26,
   "channel": "stable",
-  "released": "2026-06-01T09:02:00Z",
-  "changelog": "Fix Mission Mode end-to-end tool pipeline: fix text-parser tool name resolution when prompt injection clears active_tools, fix continue-scope bug causing model to skip second call after tool execution, rewrite stream chunk parser to handle <think> and <tool_call> tags split across token boundaries, add pre-call diagnostics and parser trace logging."
+  "released": "2026-06-01T11:52:00Z",
+  "changelog": "Fix auto-mode chat classifier: add missing mission keywords ('check', 'find', TLD fragments like '.com'/'.org', URL prefixes, and live-data words 'weather'/'latest'/'news'/'stock') so queries referencing websites or real-time data correctly route to Mission Mode instead of falling through to Fast Chat."
 }

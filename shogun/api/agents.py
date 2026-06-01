@@ -311,7 +311,12 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         # Web browsing / search
         "browse", "visit", "search", "look up", "google",
         "fetch", "scrape", "navigate", "open ", "url",
-        "website", "web page",
+        "website", "web page", "check ", "find ",
+        # Domain / URL references (catches "nfl.com", "example.org", etc.)
+        ".com", ".org", ".net", ".io", ".gov", ".edu",
+        "http://", "https://", "www.",
+        # Live-data / real-time queries
+        "weather", "latest", "news", "stock", "price of", "score",
         # Cron/scheduling
         "cron", "job", "workflow",
         # Execution/system
