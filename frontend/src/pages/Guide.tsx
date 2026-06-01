@@ -427,6 +427,25 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">The trash icon in the top right <strong>archives</strong> the current session to history and starts a fresh conversation. Your old messages are not lost — they are kept in the History drawer and can be restored at any time.</p>
                    </div>
                 </div>
+
+                {/* Comms Sub-sections: Agent Flow, Mail, Calendar */}
+                <div className="mt-8 space-y-4">
+                   <div className="text-xs font-bold text-shogun-subdued uppercase tracking-widest pl-1 border-l-2 border-shogun-blue/40 ml-1">Also available from Comms</div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="shogun-card space-y-2 border-l-2 border-violet-400/40">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><Workflow className="w-4 h-4 text-violet-400" /> Agent Flow — Workflow Builder</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">A visual drag-and-drop canvas for designing multi-step AI pipelines. Build workflows by chaining six node types: <strong>Input</strong> (entry point), <strong>Samurai</strong> (sub-agent delegation), <strong>Shogun Approval</strong> (human confirmation gate), <strong>Logic</strong> (conditional routing), <strong>Mado Browser</strong> (web automation), and <strong>Output</strong> (final result). Connect nodes with directed edges to define execution order. Workflows are saved to the database and can be loaded, edited, or executed at any time. You can also ask the Shogun to build workflows for you via the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_agent_flow</code> native skill.</p>
+                      </div>
+                      <div className="shogun-card space-y-2 border-l-2 border-sky-400/40">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-sky-400" /> Mail — Email Client</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">A full IMAP/SMTP email client built into Comms. Browse your inbox with sender, subject, date, and preview. Click any message to read the full content. <strong>Compose</strong> new emails with To, CC, BCC, subject, and body. Reply to existing messages with quoted context. Navigate between folders (Inbox, Sent, Drafts). Configure your email account in the system settings. The Shogun can also manage email via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">fetch_inbox</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">read_email</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">send_email</code>.</p>
+                      </div>
+                      <div className="shogun-card space-y-2 border-l-2 border-emerald-400/40 md:col-span-2">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><CalendarDays className="w-4 h-4 text-emerald-400" /> Calendar — Event Management</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">CalDAV calendar integration. View your upcoming events on a timeline with titles, times, locations, and descriptions. Create new events by specifying a title, start/end time, location, and optional description. Supports all-day events. Connect a CalDAV server in the system settings. The Shogun can query and create events via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">list_calendar_events</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_calendar_event</code>.</p>
+                      </div>
+                   </div>
+                </div>
              </section>
 
              {/* ═══════════════════════════════════════════════════════════════ */}
