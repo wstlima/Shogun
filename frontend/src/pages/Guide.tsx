@@ -428,22 +428,15 @@ export function Guide() {
                    </div>
                 </div>
 
-                {/* Comms Sub-sections: Agent Flow, Mail, Calendar */}
-                <div className="mt-8 space-y-4">
-                   <div className="text-xs font-bold text-shogun-subdued uppercase tracking-widest pl-1 border-l-2 border-shogun-blue/40 ml-1">Also available from Comms</div>
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="shogun-card space-y-2 border-l-2 border-violet-400/40">
-                         <div className="font-bold text-shogun-text flex items-center gap-2"><Workflow className="w-4 h-4 text-violet-400" /> Agent Flow — Workflow Builder</div>
-                         <p className="text-xs text-shogun-subdued leading-relaxed">A visual drag-and-drop canvas for designing multi-step AI pipelines. Build workflows by chaining six node types: <strong>Input</strong> (entry point), <strong>Samurai</strong> (sub-agent delegation), <strong>Shogun Approval</strong> (human confirmation gate), <strong>Logic</strong> (conditional routing), <strong>Mado Browser</strong> (web automation), and <strong>Output</strong> (final result). Connect nodes with directed edges to define execution order. Workflows are saved to the database and can be loaded, edited, or executed at any time. You can also ask the Shogun to build workflows for you via the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_agent_flow</code> native skill.</p>
-                      </div>
-                      <div className="shogun-card space-y-2 border-l-2 border-sky-400/40">
-                         <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-sky-400" /> Mail — Email Client</div>
-                         <p className="text-xs text-shogun-subdued leading-relaxed">A full IMAP/SMTP email client built into Comms. Browse your inbox with sender, subject, date, and preview. Click any message to read the full content. <strong>Compose</strong> new emails with To, CC, BCC, subject, and body. Reply to existing messages with quoted context. Navigate between folders (Inbox, Sent, Drafts). Configure your email account in the system settings. The Shogun can also manage email via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">fetch_inbox</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">read_email</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">send_email</code>.</p>
-                      </div>
-                      <div className="shogun-card space-y-2 border-l-2 border-emerald-400/40 md:col-span-2">
-                         <div className="font-bold text-shogun-text flex items-center gap-2"><CalendarDays className="w-4 h-4 text-emerald-400" /> Calendar — Event Management</div>
-                         <p className="text-xs text-shogun-subdued leading-relaxed">CalDAV calendar integration. View your upcoming events on a timeline with titles, times, locations, and descriptions. Create new events by specifying a title, start/end time, location, and optional description. Supports all-day events. Connect a CalDAV server in the system settings. The Shogun can query and create events via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">list_calendar_events</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_calendar_event</code>.</p>
-                      </div>
+                {/* Mail & Calendar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                   <div className="shogun-card space-y-2 border-l-2 border-sky-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-sky-400" /> Mail — Email Client</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">A full IMAP/SMTP email client built into Comms. Browse your inbox with sender, subject, date, and preview. Click any message to read the full content. <strong>Compose</strong> new emails with To, CC, BCC, subject, and body. Reply to existing messages with quoted context. Navigate between folders (Inbox, Sent, Drafts). Configure your email account in the system settings. The Shogun can also manage email via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">fetch_inbox</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">read_email</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">send_email</code>.</p>
+                   </div>
+                   <div className="shogun-card space-y-2 border-l-2 border-emerald-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><CalendarDays className="w-4 h-4 text-emerald-400" /> Calendar — Event Management</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">CalDAV calendar integration. View your upcoming events on a timeline with titles, times, locations, and descriptions. Create new events by specifying a title, start/end time, location, and optional description. Supports all-day events. Connect a CalDAV server in the system settings. The Shogun can query and create events via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">list_calendar_events</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_calendar_event</code>.</p>
                    </div>
                 </div>
              </section>
@@ -515,6 +508,31 @@ export function Guide() {
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Package className="w-4 h-4 text-shogun-blue" /> "Deploy Samurai" Button</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">The blue button in the top right. Opens a form where you choose a <strong>Role</strong> from the pre-defined Samurai roles list, give it a <strong>custom name</strong>, choose a <strong>Spawn Policy</strong> (Manual, Auto, or Scheduled), optionally assign a <strong>Routing Profile</strong>, and write a description. Click "Deploy Samurai" to create it.</p>
+                   </div>
+                </div>
+
+                {/* Agent Flow sub-section */}
+                <div className="mt-8 space-y-4">
+                   <div className="text-xs font-bold text-shogun-subdued uppercase tracking-widest pl-1 border-l-2 border-shogun-gold/40 ml-1">Samurai Orchestration</div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="shogun-card space-y-2 border-l-2 border-violet-400/40">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><Workflow className="w-4 h-4 text-violet-400" /> Agent Flow — Workflow Builder</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">A visual drag-and-drop canvas for designing multi-step AI pipelines using your Samurai. Build workflows by chaining six node types:</p>
+                         <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                            <li><strong>Input:</strong> The entry point — accepts user text, data, or triggers.</li>
+                            <li><strong>Samurai:</strong> Delegates a task to a specific sub-agent.</li>
+                            <li><strong>Shogun Approval:</strong> Pauses the flow for human confirmation.</li>
+                            <li><strong>Logic:</strong> A conditional gate — routes based on a condition.</li>
+                            <li><strong>Mado Browser:</strong> Automates a web browsing action.</li>
+                            <li><strong>Output:</strong> Collects and presents the workflow's result.</li>
+                         </ul>
+                      </div>
+                      <div className="shogun-card space-y-2 border-l-2 border-violet-400/40">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><GitBranch className="w-4 h-4 text-violet-400" /> Canvas, Execution & AI Creation</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">Position nodes freely on the visual canvas and draw directed edges between them. Edges define execution order — data flows from source to target. The canvas supports pan, zoom, and node reordering. Workflows are saved to the database.</p>
+                         <p className="text-xs text-shogun-subdued leading-relaxed mt-2">Click <strong>Execute</strong> to run a workflow. Nodes process in topological order, passing outputs as inputs to the next. Shogun Approval nodes pause until you confirm.</p>
+                         <p className="text-xs text-shogun-subdued leading-relaxed mt-2">You can also ask the Shogun to <strong>build workflows for you</strong> via the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_agent_flow</code> native skill.</p>
+                      </div>
                    </div>
                 </div>
              </section>
@@ -683,6 +701,37 @@ export function Guide() {
                    <div className="shogun-card space-y-2 md:col-span-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><RefreshCw className="w-4 h-4 text-shogun-blue" /> Reflection Trigger</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">A button to manually trigger a reflection cycle. The system will analyze recent interactions, evaluate model performance, check memory health, and produce a set of actionable insights. Results appear in the Insight Stream.</p>
+                   </div>
+                </div>
+             </section>
+
+             {/* ═══════════════════════════════════════════════════════════════ */}
+             {/* MADO (BROWSER AUTOMATION) */}
+             {/* ═══════════════════════════════════════════════════════════════ */}
+             <section className="space-y-6">
+                <div className="flex items-center gap-3 border-b-2 border-cyan-400/40 pb-3">
+                   <AppWindow className="w-6 h-6 text-cyan-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">Mado — The Browser Layer</h4>
+                      <p className="text-xs text-shogun-subdued">Secure browser automation. Your AI can browse the web, extract content, and take screenshots.</p>
+                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-cyan-400" /> Browse Web</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The Shogun can navigate to any URL using the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">browse_web</code> native skill. It loads the full page via Playwright (a real browser engine), then extracts the content as readable text or raw HTML. You can optionally pass a CSS selector to target a specific element on the page.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Camera className="w-4 h-4 text-cyan-400" /> Screenshots</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">After navigating to a page, the Shogun can take a screenshot using <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">take_screenshot</code>. Choose between viewport-only or full-page capture. Screenshots are saved locally and can be used in mission reports or sent via Telegram.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" /> Security Integration</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado respects the Torii security posture. Browser automation must be explicitly enabled in the agent's permission set. In <strong>SHRINE</strong> and <strong>GUARDED</strong> tiers, Mado is disabled entirely. In <strong>TACTICAL</strong> and above, it can be toggled on per-policy.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" /> Session Management</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Browser sessions are managed automatically. When Shogun shuts down, all active Playwright browser instances are cleanly closed. The Mado page in the sidebar shows the current session status and lets you manually manage active browser contexts.</p>
                    </div>
                 </div>
              </section>
@@ -864,115 +913,6 @@ export function Guide() {
                    <div className="shogun-card space-y-2 border-l-2 border-amber-500/40">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><FileText className="w-4 h-4 text-amber-400" /> Restore & Recovery</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Every backup in the list has a <strong>Restore</strong> button. Clicking it overwrites your current database and config files with the backup's contents. A restart is required afterwards. Use this to roll back after a bad config change, recover from corruption, or migrate to a new machine.</p>
-                   </div>
-                </div>
-             </section>
-
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             {/* 14. MADO (BROWSER AUTOMATION) */}
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
-                <div className="flex items-center gap-3 border-b-2 border-cyan-400/40 pb-3">
-                   <AppWindow className="w-6 h-6 text-cyan-400" />
-                   <div>
-                      <h4 className="text-xl font-bold uppercase tracking-widest">Mado — The Browser Layer</h4>
-                      <p className="text-xs text-shogun-subdued">Secure browser automation. Your AI can browse the web, extract content, and take screenshots.</p>
-                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-cyan-400" /> Browse Web</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">The Shogun can navigate to any URL using the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">browse_web</code> native skill. It loads the full page via Playwright (a real browser engine), then extracts the content as readable text or raw HTML. You can optionally pass a CSS selector to target a specific element on the page.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Camera className="w-4 h-4 text-cyan-400" /> Screenshots</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">After navigating to a page, the Shogun can take a screenshot using <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">take_screenshot</code>. Choose between viewport-only or full-page capture. Screenshots are saved locally and can be used in mission reports or sent via Telegram.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" /> Security Integration</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado respects the Torii security posture. Browser automation must be explicitly enabled in the agent's permission set. In <strong>SHRINE</strong> and <strong>GUARDED</strong> tiers, Mado is disabled entirely. In <strong>TACTICAL</strong> and above, it can be toggled on per-policy. This prevents the AI from browsing the web without explicit operator authorization.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" /> Session Management</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Browser sessions are managed automatically. When Shogun shuts down, all active Playwright browser instances are cleanly closed. The Mado page in the sidebar shows the current session status and lets you manually manage active browser contexts.</p>
-                   </div>
-                </div>
-             </section>
-
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             {/* 15. AGENT FLOW (WORKFLOW BUILDER) */}
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
-                <div className="flex items-center gap-3 border-b-2 border-violet-400/40 pb-3">
-                   <Workflow className="w-6 h-6 text-violet-400" />
-                   <div>
-                      <h4 className="text-xl font-bold uppercase tracking-widest">Agent Flow — The Workflow Builder</h4>
-                      <p className="text-xs text-shogun-subdued">Design and execute multi-step AI pipelines with a visual drag-and-drop canvas.</p>
-                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Layers className="w-4 h-4 text-violet-400" /> Node Types</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Build workflows using six node types:</p>
-                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
-                         <li><strong>Input:</strong> The entry point — accepts user text, data, or triggers.</li>
-                         <li><strong>Samurai:</strong> Delegates a task to a specific sub-agent with a configurable task description.</li>
-                         <li><strong>Shogun Approval:</strong> Pauses the flow and requires human confirmation before proceeding.</li>
-                         <li><strong>Logic:</strong> A conditional gate — routes the flow based on a condition expression.</li>
-                         <li><strong>Mado Browser:</strong> Automates a web browsing action (navigate, extract, screenshot).</li>
-                         <li><strong>Output:</strong> The final result node — collects and presents the workflow's output.</li>
-                      </ul>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><GitBranch className="w-4 h-4 text-violet-400" /> Canvas & Connections</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">The visual canvas lets you position nodes freely and draw directed edges between them. Edges define the execution order — data flows from source to target. You can label edges for clarity. The canvas supports pan, zoom, and node reordering. Workflows are saved to the database and can be loaded, edited, or deleted at any time.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-violet-400" /> AI-Assisted Creation</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">You can also ask the Shogun to <strong>build workflows for you</strong> via the chat. The native skill <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_agent_flow</code> lets the AI generate complete workflows with nodes and edges programmatically. Just describe what you want and the Shogun will create it.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><RefreshCw className="w-4 h-4 text-violet-400" /> Execution</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Once a workflow is designed, click <strong>Execute</strong> to run it. The system processes nodes in topological order, passing outputs from one node as inputs to the next. Shogun Approval nodes pause execution until you confirm. Failed nodes show error details inline.</p>
-                   </div>
-                </div>
-             </section>
-
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             {/* 16. COMMS EXTENDED — MAIL & CALENDAR */}
-             {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
-                <div className="flex items-center gap-3 border-b-2 border-sky-400/40 pb-3">
-                   <Mail className="w-6 h-6 text-sky-400" />
-                   <div>
-                      <h4 className="text-xl font-bold uppercase tracking-widest">Comms Extended — Mail & Calendar</h4>
-                      <p className="text-xs text-shogun-subdued">Integrated email client and calendar. Manage your inbox and schedule directly from Shogun.</p>
-                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-sky-400" /> Email Inbox</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Connect your IMAP/SMTP email account in the system settings. Once connected, the <strong>Mail View</strong> page shows your inbox with sender, subject, date, and a body preview for each message. Click any message to read the full content. Navigate between folders (Inbox, Sent, Drafts, etc.) using the sidebar.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><FileText className="w-4 h-4 text-sky-400" /> Compose & Reply</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Click <strong>Compose</strong> to write a new email. Fill in the recipient (To), subject, and body. Optionally add CC and BCC recipients. The email is sent via your configured SMTP account. You can also reply to existing messages — the original message is quoted in the body for context.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><CalendarDays className="w-4 h-4 text-emerald-400" /> Calendar View</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Connect a CalDAV calendar server to view your events. The <strong>Calendar</strong> page shows events on a timeline with titles, times, locations, and descriptions. Create new events by specifying a title, start/end time, location, and optional description. Supports all-day events.</p>
-                   </div>
-                   <div className="shogun-card space-y-2">
-                      <div className="font-bold text-shogun-text flex items-center gap-2"><Sparkles className="w-4 h-4 text-sky-400" /> AI-Powered Email & Calendar</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Your Shogun has full access to your email and calendar via native skills. It can:</p>
-                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
-                         <li><strong>fetch_inbox:</strong> Check your inbox and list messages with previews.</li>
-                         <li><strong>read_email:</strong> Read the full content of a specific message by UID.</li>
-                         <li><strong>send_email:</strong> Compose and send an email on your behalf.</li>
-                         <li><strong>list_calendar_events:</strong> Query upcoming events within a date range.</li>
-                         <li><strong>create_calendar_event:</strong> Create new calendar events with full details.</li>
-                      </ul>
-                      <p className="text-xs text-shogun-subdued leading-relaxed mt-2">This means you can say "Check my inbox" or "Schedule a meeting for tomorrow at 2pm" in the chat, and the Shogun will handle it.</p>
                    </div>
                 </div>
              </section>
@@ -1248,11 +1188,11 @@ export function Guide() {
                 </div>
                 <div className="space-y-4">
                    {[
-                     { tier: 'SHRINE', subtitle: 'Maximum Protection', color: 'border-green-500 bg-green-500/5', badge: 'text-green-500 bg-green-500/10 border-green-500/30', desc: 'Zero-trust mode. All external connections are blocked. Agents can only process information locally with no filesystem, network, or shell access. No sub-agent spawning. Every action requires explicit human approval. Use this when you suspect a breach, while auditing, or when running highly sensitive operations.', perms: ['Filesystem: None', 'Network: None (local only)', 'Shell: Blocked', 'Sub-agents: Blocked', 'Tools: Disabled', 'Human approval: Required for everything'] },
-                     { tier: 'GUARDED', subtitle: 'Restricted Operations', color: 'border-blue-500 bg-blue-500/5', badge: 'text-blue-500 bg-blue-500/10 border-blue-500/30', desc: 'Highly restricted. Limited read-only filesystem access. Network restricted to approved endpoints only. All tool usage requires human confirmation. Sub-agents can exist but cannot auto-spawn. Suitable for production environments where safety takes priority over speed.', perms: ['Filesystem: Read-only (scoped)', 'Network: Approved endpoints only', 'Shell: Blocked', 'Sub-agents: Manual spawn only', 'Tools: With approval', 'Human approval: Most actions'] },
-                     { tier: 'TACTICAL', subtitle: 'Balanced (Default)', color: 'border-shogun-gold bg-shogun-gold/5', badge: 'text-shogun-gold bg-shogun-gold/10 border-shogun-gold/30', desc: 'The recommended default. Agents have scoped file access (read and write within designated directories), can use approved tools autonomously, and have filtered network access. Shell commands are still blocked. Sub-agents can be spawned manually. A good balance between productivity and safety.', perms: ['Filesystem: Scoped read/write', 'Network: Filtered (no raw sockets)', 'Shell: Blocked', 'Sub-agents: Manual spawn', 'Tools: Approved tools auto-allowed', 'Human approval: Dangerous actions only'] },
-                     { tier: 'CAMPAIGN', subtitle: 'High Autonomy', color: 'border-orange-500 bg-orange-500/5', badge: 'text-orange-500 bg-orange-500/10 border-orange-500/30', desc: 'Extended autonomy for advanced users. Broad filesystem access. Full internet access. Shell commands allowed with logging. Sub-agents can auto-spawn based on policies. Only use this in controlled environments where you have monitoring in place and trust the AI models you are running.', perms: ['Filesystem: Broad access', 'Network: Full internet', 'Shell: Allowed (logged)', 'Sub-agents: Auto-spawn enabled', 'Tools: All enabled', 'Human approval: Critical actions only'] },
-                     { tier: 'RONIN', subtitle: '⚠ Unrestricted', color: 'border-red-500 bg-red-500/5', badge: 'text-red-500 bg-red-500/10 border-red-500/30', desc: 'No restrictions whatsoever. Full filesystem, network, shell, and tool access with zero oversight. ONLY use this in completely isolated sandbox/test environments with no access to production data, external services, or sensitive information. This tier exists for testing and development purposes only.', perms: ['Filesystem: Unrestricted', 'Network: Unrestricted', 'Shell: Unrestricted', 'Sub-agents: Unrestricted', 'Tools: All enabled', 'Human approval: None'] },
+                     { tier: 'SHRINE', subtitle: 'Maximum Protection', color: 'border-green-500 bg-green-500/5', badge: 'text-green-500 bg-green-500/10 border-green-500/30', desc: 'Zero-trust mode. All external connections are blocked. Agents can only process information locally with no filesystem, network, or shell access. No sub-agent spawning. Every action requires explicit human approval. Use this when you suspect a breach, while auditing, or when running highly sensitive operations.', perms: ['Filesystem: None', 'Network: None (local only)', 'Shell: Blocked', 'Sub-agents: Blocked', 'Tools: Disabled', 'Mail: Disabled', 'Calendar: Disabled', 'Cron: Disabled', 'Mado Browser: Disabled', 'Human approval: Everything'] },
+                     { tier: 'GUARDED', subtitle: 'Restricted Operations', color: 'border-blue-500 bg-blue-500/5', badge: 'text-blue-500 bg-blue-500/10 border-blue-500/30', desc: 'Highly restricted. Limited read-only filesystem access. Network restricted to approved endpoints only. All tool usage requires human confirmation. Sub-agents can exist but cannot auto-spawn. Suitable for production environments where safety takes priority over speed.', perms: ['Filesystem: Read-only (scoped)', 'Network: Approved endpoints only', 'Shell: Blocked', 'Sub-agents: Manual spawn only', 'Tools: With approval', 'Mail: Read only', 'Calendar: Read only', 'Cron: View only', 'Mado Browser: Disabled', 'Human approval: Most actions'] },
+                     { tier: 'TACTICAL', subtitle: 'Balanced (Default)', color: 'border-shogun-gold bg-shogun-gold/5', badge: 'text-shogun-gold bg-shogun-gold/10 border-shogun-gold/30', desc: 'The recommended default. Agents have scoped file access (read and write within designated directories), can use approved tools autonomously, and have filtered network access. Shell commands are still blocked. Sub-agents can be spawned manually. A good balance between productivity and safety.', perms: ['Filesystem: Scoped read/write', 'Network: Filtered (no raw sockets)', 'Shell: Blocked', 'Sub-agents: Manual spawn', 'Tools: Approved auto-allowed', 'Mail: Read & Send', 'Calendar: Full access', 'Cron: View only', 'Mado Browser: Headless only', 'Human approval: Dangerous only'] },
+                     { tier: 'CAMPAIGN', subtitle: 'High Autonomy', color: 'border-orange-500 bg-orange-500/5', badge: 'text-orange-500 bg-orange-500/10 border-orange-500/30', desc: 'Extended autonomy for advanced users. Broad filesystem access. Full internet access. Shell commands allowed with logging. Sub-agents can auto-spawn based on policies. Only use this in controlled environments where you have monitoring in place and trust the AI models you are running.', perms: ['Filesystem: Broad access', 'Network: Full internet', 'Shell: Allowed (logged)', 'Sub-agents: Auto-spawn enabled', 'Tools: All enabled', 'Mail: Read & Send', 'Calendar: Full access', 'Cron: Full access', 'Mado Browser: Enabled', 'Human approval: Critical only'] },
+                     { tier: 'RONIN', subtitle: '⚠ Unrestricted', color: 'border-red-500 bg-red-500/5', badge: 'text-red-500 bg-red-500/10 border-red-500/30', desc: 'No restrictions whatsoever. Full filesystem, network, shell, and tool access with zero oversight. ONLY use this in completely isolated sandbox/test environments with no access to production data, external services, or sensitive information. This tier exists for testing and development purposes only.', perms: ['Filesystem: Unrestricted', 'Network: Unrestricted', 'Shell: Unrestricted', 'Sub-agents: Unrestricted', 'Tools: All enabled', 'Mail: Unrestricted', 'Calendar: Unrestricted', 'Cron: Full access', 'Mado Browser: Autonomous', 'Human approval: None'] },
                    ].map((item) => (
                      <div key={item.tier} className={`shogun-card border-l-4 ${item.color}`}>
                         <div className="flex flex-col md:flex-row md:items-start gap-4">
@@ -1263,7 +1203,7 @@ export function Guide() {
                               </div>
                               <p className="text-xs text-shogun-subdued leading-relaxed">{item.desc}</p>
                            </div>
-                           <div className="md:w-2/3 grid grid-cols-2 md:grid-cols-3 gap-2">
+                           <div className="md:w-2/3 grid grid-cols-2 md:grid-cols-5 gap-2">
                               {item.perms.map((perm, i) => {
                                 const [label, value] = perm.split(': ');
                                 return (
