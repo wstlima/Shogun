@@ -1,8 +1,8 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.0",
   "name": "Shogun OS",
-  "build": 26,
+  "build": 25,
   "channel": "stable",
-  "released": "2026-06-01T10:43:00Z",
-  "changelog": "Fix auto-mode routing selector: implement URL and domain name detection via regex (to properly route sites like NFL.com to Mission Mode) and add specific search/live-data keywords (weather, stock, price of, score) to Mission Mode triggers."
+  "released": "2026-06-01T09:02:00Z",
+  "changelog": "Fix Mission Mode end-to-end tool pipeline: fix text-parser tool name resolution when prompt injection clears active_tools, fix continue-scope bug causing model to skip second call after tool execution, rewrite stream chunk parser to handle <think> and <tool_call> tags split across token boundaries, add pre-call diagnostics and parser trace logging."
 }

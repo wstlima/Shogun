@@ -299,7 +299,6 @@ def _classify_chat_mode(message: str, history: list) -> dict:
     - MISSION_KEYWORDS  → tools/actions required → Mission Mode
     - GOVERNED_KEYWORDS → context/memory required → Governed Chat
     """
-    import re
     msg = message.lower()
 
     # Mission/action triggers → full pipeline (tools, agents, side effects)
@@ -312,7 +311,7 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         # Web browsing / search
         "browse", "visit", "search", "look up", "google",
         "fetch", "scrape", "navigate", "open ", "url",
-        "website", "web page", "weather", "stock", "price of", "score",
+        "website", "web page",
         # Cron/scheduling
         "cron", "job", "workflow",
         # Execution/system
@@ -336,17 +335,6 @@ def _classify_chat_mode(message: str, history: list) -> dict:
     ]
 
     mission_matched = [kw for kw in MISSION_KEYWORDS if kw in msg]
-
-    # Check for domain names (e.g. nfl.com, google.com, example.co.uk) or URL prefixes
-    url_pattern = re.compile(
-        r'(https?://[^\s]+)|'
-        r'(www\.[^\s]+)|'
-        r'\b[a-zA-Z0-9.-]+\.(com|org|net|io|gov|edu|co|info|biz|tv|cc|me|dk|uk|ca|de|jp|fr|au)\b'
-    )
-    url_match = url_pattern.search(msg)
-    if url_match:
-        mission_matched.append(url_match.group(0))
-
     governed_matched = [kw for kw in GOVERNED_KEYWORDS if kw in msg]
 
     # Mission takes priority over governed
