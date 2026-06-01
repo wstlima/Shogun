@@ -13,6 +13,34 @@ NATIVE_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "echo_tool",
+            "description": "A debug tool that echoes back exactly what you send it. Use this to verify that the tool execution pipeline is working.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The text to echo back.",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tool_list_debug",
+            "description": "A debug tool that returns a list of all tools available to the current mission context.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "spawn_samurai",
             "description": "Spawn a new Samurai agent in the Dojo.",
             "parameters": {
@@ -520,6 +548,18 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             return json.dumps({
                 "status": "success", 
                 "message": f"Samurai '{args['name']}' successfully spawned at tier '{args['security_tier']}' with Kaizen governance applied."
+            })
+            
+        elif name == "echo_tool":
+            return json.dumps({
+                "status": "success",
+                "echoed_text": args.get("text", "")
+            })
+            
+        elif name == "tool_list_debug":
+            return json.dumps({
+                "status": "success",
+                "available_tools": [t["function"]["name"] for t in NATIVE_TOOLS]
             })
             
         elif name == "list_available_models":

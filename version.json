@@ -1,8 +1,8 @@
 {
-  "version": "1.3.2",
+  "version": "1.4.0",
   "name": "Shogun OS",
-  "build": 24,
+  "build": 25,
   "channel": "stable",
-  "released": "2026-05-22T11:34:00Z",
-  "changelog": "Fix local model listing and delete button base URL resolution fallback bug, enable deletion of custom model tags, and optimize streaming and orchestrator tool calling."
+  "released": "2026-06-01T09:02:00Z",
+  "changelog": "Fix Mission Mode end-to-end tool pipeline: fix text-parser tool name resolution when prompt injection clears active_tools, fix continue-scope bug causing model to skip second call after tool execution, rewrite stream chunk parser to handle <think> and <tool_call> tags split across token boundaries, add pre-call diagnostics and parser trace logging."
 }

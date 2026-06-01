@@ -1256,9 +1256,12 @@ BEHAVIOUR:
                 pass
 
         # ── 7c. Prompt injection for non-tool-calling models ──────────
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Tools loaded: {len(active_tools)}'})}\n\n"
+        
         # When the model doesn't support the structured tools API, we inject
         # tool descriptions into the system prompt and rely on text-based parsing.
         _prompt_injected_tools = False
+        _active_tool_names = [t["function"]["name"] for t in active_tools]
         if active_tools and not _model_supports_tools:
             from shogun.services.native_skills import generate_tool_prompt
             _tool_prompt = generate_tool_prompt(active_tools)
@@ -1268,6 +1271,14 @@ BEHAVIOUR:
             logger.info(f"[Shogun] Prompt-injected {len(active_tools)} tools (model does not support structured tools)")
             # Clear active_tools so they're not sent via API — text parser will handle calls
             active_tools = []
+            
+        # Log Torii / Tool permission decisions
+        logger.info(f"[MISSION] Torii Decisions - Policy ID: {_policy_name}, Posture: {_active_tier}")
+        for tool in NATIVE_TOOLS:
+            tname = tool["function"]["name"]
+            allowed = tname in _active_tool_names
+            reason = "Granted by policy" if allowed else "Denied by policy/posture constraints"
+            logger.info(f"[MISSION] Tool '{tname}': Allowed={allowed}, Reason='{reason}'")
 
         # ── EU AI Act: Derive use-case context ─────────────────
         _security_tier = "guarded"
@@ -1332,6 +1343,18 @@ BEHAVIOUR:
         _append_chat_log("user", user_msg)
         timestamp = datetime.now().isoformat()
 
+        # ── Pre-Call Diagnostics Logging ──
+        logger.info(
+            f"[MISSION] Request Context - Mode: Mission, "
+            f"Provider: {provider_name}, Model: {model_name}\n"
+            f"[MISSION] Tool Count: {len(_active_tool_names)}, "
+            f"Tools Passed to Model: {bool(_active_tool_names)}\n"
+            f"[MISSION] Tool Names: {_active_tool_names}\n"
+            f"[MISSION] Security Posture: {_active_tier} (Policy ID: {_policy_name})\n"
+            f"[MISSION] Tool Call Strategy: {'native' if _model_supports_tools else 'json_prompt' if _prompt_injected_tools else 'none'}\n"
+            f"[MISSION] Streaming: True"
+        )
+
         # ── Meta event — emit now that model is resolved ───────
         timestamp = datetime.now().isoformat()
         yield f"data: {json.dumps({'type': 'meta', 'model': model_name, 'provider': provider_name, 'timestamp': timestamp, 'reason': res_reason, 'search': bool(_search_model), 'mode': 'mission'})}\n\n"
@@ -1340,6 +1363,7 @@ BEHAVIOUR:
         yield f"data: {json.dumps({'type': 'status', 'content': 'Calling model...'})}\n\n"
 
         _tool_retry_used = False  # only retry once
+        _any_tool_executed = False
 
         while True:
             assistant_tokens: list[str] = []
@@ -1405,12 +1429,17 @@ BEHAVIOUR:
                             _inside_think = False  # Track <think>...</think> blocks
                             _inside_tool_call = False  # Track <tool_call>...</tool_call> blocks
                             _yield_buffer = ""  # Buffer for detecting <tool_call> tags split across tokens
+                            _first_token_received = False
                             async for line in resp.aiter_lines():
                                 if not line.startswith("data: "):
                                     continue
                                 data_str = line[6:].strip()
                                 if data_str == "[DONE]":
                                     break
+                                    
+                                if not _first_token_received:
+                                    _first_token_received = True
+                                    yield f"data: {json.dumps({'type': 'status', 'content': 'Model responded. Checking for tool requests...'})}\n\n"
                                     
                                 try:
                                     chunk = json.loads(data_str)
@@ -1445,53 +1474,70 @@ BEHAVIOUR:
                                     
                                     content = delta.get("content") or ""
                                     if content:
-                                        # ── Handle <think> blocks ──
-                                        # Some reasoning models output <think>...</think> blocks.
-                                        # Track them in assistant_tokens but don't yield to frontend.
-                                        if "<think>" in content:
-                                            _inside_think = True
-                                        if _inside_think:
-                                            assistant_tokens.append(content)
-                                            if "</think>" in content:
-                                                _inside_think = False
-                                            continue  # don't yield thinking tokens
-                                        
-                                        # ── Handle <tool_call> blocks (buffered) ──
-                                        # Models that don't support structured tool calling
-                                        # emit <tool_call>...</tool_call> as text. Use a
-                                        # yield buffer to handle tags split across tokens.
-                                        if _inside_tool_call:
-                                            assistant_tokens.append(content)
-                                            if "</tool_call>" in content:
-                                                _inside_tool_call = False
-                                            continue  # don't yield tool call tokens to frontend
-                                        
-                                        # Accumulate in yield buffer
                                         _yield_buffer += content
                                         
-                                        # Check if buffer contains a complete <tool_call> tag
-                                        if "<tool_call>" in _yield_buffer:
-                                            _inside_tool_call = True
-                                            before, after = _yield_buffer.split("<tool_call>", 1)
-                                            if before.strip():
+                                        # ── Handle <think> blocks ──
+                                        if _inside_think:
+                                            assistant_tokens.append(content)
+                                            if "</think>" in _yield_buffer:
+                                                _inside_think = False
+                                                _yield_buffer = _yield_buffer.split("</think>", 1)[1]
+                                            else:
+                                                _yield_buffer = _yield_buffer[-7:]
+                                            continue
+                                        elif "<think>" in _yield_buffer:
+                                            before, after = _yield_buffer.split("<think>", 1)
+                                            if before:
                                                 assistant_tokens.append(before)
                                                 yield f"data: {json.dumps({'type': 'token', 'content': before})}\n\n"
-                                            assistant_tokens.append("<tool_call>" + after)
-                                            _yield_buffer = ""
+                                            _inside_think = True
+                                            assistant_tokens.append("<think>")
+                                            if after:
+                                                assistant_tokens.append(after)
+                                            if "</think>" in after:
+                                                _inside_think = False
+                                                _yield_buffer = after.split("</think>", 1)[1]
+                                            else:
+                                                _yield_buffer = after[-7:]
+                                            continue
+                                            
+                                        # ── Handle <tool_call> blocks ──
+                                        if _inside_tool_call:
+                                            assistant_tokens.append(content)
+                                            if "</tool_call>" in _yield_buffer:
+                                                _inside_tool_call = False
+                                                _yield_buffer = _yield_buffer.split("</tool_call>", 1)[1]
+                                            else:
+                                                _yield_buffer = _yield_buffer[-11:]
+                                            continue
+                                        elif "<tool_call>" in _yield_buffer:
+                                            before, after = _yield_buffer.split("<tool_call>", 1)
+                                            if before:
+                                                assistant_tokens.append(before)
+                                                yield f"data: {json.dumps({'type': 'token', 'content': before})}\n\n"
+                                            _inside_tool_call = True
+                                            assistant_tokens.append("<tool_call>")
+                                            if after:
+                                                assistant_tokens.append(after)
                                             if "</tool_call>" in after:
                                                 _inside_tool_call = False
+                                                _yield_buffer = after.split("</tool_call>", 1)[1]
+                                            else:
+                                                _yield_buffer = after[-11:]
                                             continue
-                                        
-                                        # Check if buffer suffix could be start of <tool_call>
-                                        _tag = "<tool_call>"
+                                            
+                                        # ── Check if suffix could be start of <think> or <tool_call> ──
                                         _might_be_tag = False
-                                        for _i in range(1, len(_tag)):
-                                            if _yield_buffer.endswith(_tag[:_i]):
-                                                _might_be_tag = True
+                                        for _tag in ("<think>", "<tool_call>"):
+                                            for _i in range(1, len(_tag)):
+                                                if _yield_buffer.endswith(_tag[:_i]):
+                                                    _might_be_tag = True
+                                                    break
+                                            if _might_be_tag:
                                                 break
                                         
                                         if _might_be_tag:
-                                            continue  # keep buffering, don't flush yet
+                                            continue
                                         
                                         # Safe to flush entire buffer to frontend
                                         assistant_tokens.append(_yield_buffer)
@@ -1501,12 +1547,12 @@ BEHAVIOUR:
                                     logger.warning("[Shogun] Error parsing stream chunk: %s", chunk_exc, exc_info=True)
 
                             # Flush remaining yield buffer after stream ends
-                            if _yield_buffer and not _inside_tool_call:
+                            if _yield_buffer and not _inside_tool_call and not _inside_think:
                                 assistant_tokens.append(_yield_buffer)
                                 yield f"data: {json.dumps({'type': 'token', 'content': _yield_buffer})}\n\n"
                                 _yield_buffer = ""
                             elif _yield_buffer:
-                                # Was part of a tool call — save but don't yield
+                                # Was part of a tool call or thought — save but don't yield
                                 assistant_tokens.append(_yield_buffer)
                                 _yield_buffer = ""
 
@@ -1549,6 +1595,7 @@ BEHAVIOUR:
                             
                         # Execute
                         res_str = await execute_native_tool(func_name, args, db)
+                        _any_tool_executed = True
                         messages.append({"role": "tool", "tool_call_id": tcall["id"], "name": func_name, "content": res_str})
 
                         # ── EVENT: Tool Executed ──────────────
@@ -1588,6 +1635,8 @@ BEHAVIOUR:
                             pass
                     break # Only one DB session needed
 
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Tool completed. Drafting answer...'})}\n\n"
+
                 # Continue the loop to hit LLM again with the tool results
                 continue
 
@@ -1599,13 +1648,8 @@ BEHAVIOUR:
             import re as _re
             full_text_clean = _re.sub(r"<think>.*?</think>", "", full_text, flags=_re.DOTALL).strip()
             
-            _valid_tool_names = [
-                "spawn_samurai", "list_available_models", "update_model_settings", "store_memory",
-                "fetch_inbox", "read_email", "send_email", "list_calendar_events",
-                "create_calendar_event", "list_cron_jobs", "create_cron_job", "delete_cron_job",
-                "create_agent_flow", "browse_web", "take_screenshot"
-            ]
-            _tool_names_pattern = "|".join(_valid_tool_names)
+            _valid_tool_names = _active_tool_names if _active_tool_names else []
+            _tool_names_pattern = "|".join(_valid_tool_names) if _valid_tool_names else "NO_TOOLS"
             
             _tc_matches = []
             
@@ -1625,7 +1669,7 @@ BEHAVIOUR:
                             _tc_matches.append((_func_name, _m.group(2).strip()))
             
             # 2. If no <tool_call> blocks matched, fall back to matching code blocks and text patterns
-            if not _tc_matches:
+            if not _tc_matches and _valid_tool_names:
                 _code_block_pattern = _re.compile(r"```[a-zA-Z0-9]*\s*\n(.*?)\n\s*```", _re.DOTALL)
                 _code_blocks = _code_block_pattern.findall(full_text_clean)
                 
@@ -1653,6 +1697,17 @@ BEHAVIOUR:
             
             import logging as _logging
             _log = _logging.getLogger("shogun.agents")
+            
+            # ── Parser Diagnostics ──
+            if not tool_calls_buffer and _active_tool_names:
+                _log.info(
+                    f"[MISSION] Parser Diagnostics - Tool call detected: {bool(_deduped_tc_matches)}, "
+                    f"Tool names: {[m[0] for m in _deduped_tc_matches] if _deduped_tc_matches else []}\n"
+                    f"[MISSION] Raw output preview: {full_text_clean[:200].replace(chr(10), ' ')}"
+                )
+                if not _deduped_tc_matches:
+                    _log.info("[MISSION] Parse Error: No valid tool_call block or regex match found.")
+            
             if _deduped_tc_matches:
                 _log.info(f"[Shogun] Text-mode tool calls found: {len(_deduped_tc_matches)} — {[m[0] for m in _deduped_tc_matches]}")
                 _text_tool_results = []
@@ -1700,6 +1755,7 @@ BEHAVIOUR:
 
                             yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                             res_str = await execute_native_tool(func_name, args, db)
+                            _any_tool_executed = True
                             _text_tool_results.append((func_name, args, res_str))
                             _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
 
@@ -1719,16 +1775,26 @@ BEHAVIOUR:
                                 )
                             except Exception:
                                 pass
-                        break  # Only one DB session needed
+                    break  # Only one DB session needed
 
-                    # Feed results back as a user message with tool outputs
-                    _results_text = "\n\n".join(
-                        f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _text_tool_results
-                    )
-                    messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
-                    continue
+                # Feed results back as a user message with tool outputs
+                # (IMPORTANT: this must be OUTSIDE the `async for db` block
+                #  so that `continue` targets the outer `while True` loop)
+                _results_text = "\n\n".join(
+                    f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _text_tool_results
+                )
+                messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
+                
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Tool completed. Drafting answer...'})}\n\n"
+                continue  # ← NOW correctly continues the `while True` loop
             
             # If no tool calls occurred or we are done, terminate loop
+            _tool_required = bool(_active_tool_names) and classification and classification.get("task_type") in ("search", "skill", "agent")
+            if _tool_required and not _deduped_tc_matches and not tool_calls_buffer and not _any_tool_executed:
+                _log.warning(f"[Shogun] Mission failed gracefully. Expected tool call but none detected.")
+                yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No valid tool call detected.'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Mission completed.'})}\n\n"
             break
 
         # ── EVENT: Response Complete ─────────────────────
