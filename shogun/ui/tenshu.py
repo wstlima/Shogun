@@ -1178,7 +1178,10 @@ def _build_page_chat():
 def _build_page_guide():
     """Help & Guide page — framework documentation."""
     gr.Markdown("## Shogun — Framework Guide")
-    gr.Markdown("*New to Shogun? This guide explains the core architecture and how to master your autonomous workspace.*")
+    gr.Markdown(
+        "*New to Shogun? This guide explains the core architecture and how to master your autonomous workspace.*\n\n"
+        "📺 **Video Guides**: [youtube.com/@ShogunAIAgents](https://www.youtube.com/@ShogunAIAgents)"
+    )
 
     with gr.Row():
         with gr.Column():
@@ -1194,25 +1197,35 @@ def _build_page_guide():
                 "2. **The Samurai**: Specialized agents created by Shogun to handle specific domains (Coding, Research, etc.).\n"
                 "3. **The Katana**: The tools, models, and APIs that agents use to interact with the world.\n"
                 "4. **The Dojo**: Where skills are learned and registered (OpenClaw integration).\n"
-                "5. **Archives**: Long-term memory storage enabling session-to-session persistence."
+                "5. **Archives**: Long-term memory storage enabling session-to-session persistence.\n"
+                "6. **Mado**: Browser automation layer — web browsing, screenshots, and content extraction via Playwright.\n"
+                "7. **Agent Flow**: Visual drag-and-drop workflow builder for multi-agent pipelines.\n"
+                "8. **Nexus**: Agent-to-Agent collaboration — shared workspaces across Shogun instances."
             )
 
         with gr.Column():
             gr.Markdown("### 🚀 Quick Start")
             gr.Markdown(
-                "1. **Katana**: First, add an LLM provider (OpenAI, Anthropic, or Ollama) in the Katana tab.\n"
+                "1. **Katana**: First, add an LLM provider (OpenAI, Anthropic, Google, OpenRouter, or Ollama) in the Katana tab.\n"
                 "2. **Shogun**: Select your primary model and define your Shogun's persona.\n"
                 "3. **Torii**: Set your security tier. 'Guarded' is recommended for initial use.\n"
                 "4. **Samurai**: Spawn your first specialist to begin executing missions."
             )
 
-            gr.Markdown("### 📜 The Bushido & Kaizen")
+            gr.Markdown("### 📜 Governance & Security")
             gr.Markdown(
                 "- **Kaizen** is the Constitution. It defines the 'laws' your agents cannot break.\n"
-                "- **Bushido** is the Reflection engine. It's an automated loop where agents review their "
-                "past actions to improve their importance scores and strategy."
+                "- **Bushido** is the Reflection engine. Agents review past actions to improve strategy.\n"
+                "- **Torii** is the Security Gateway. 5 tiers from SHRINE (zero-trust) to RONIN (unrestricted).\n"
+                "- **Logs** is the Compliance Dashboard. NIS2, SOC2, and EU AI Act-ready audit trail."
             )
 
+            gr.Markdown("### 📧 Comms — Mail & Calendar")
+            gr.Markdown(
+                "- Connect your **IMAP/SMTP** email for inbox management, compose & reply.\n"
+                "- Connect a **CalDAV** calendar to view and create events.\n"
+                "- The Shogun can read, send, and manage emails & events via native skills."
+            )
 
 
 # ── Page registry ────────────────────────────────────────────
