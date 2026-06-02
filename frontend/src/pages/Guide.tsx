@@ -734,7 +734,157 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">Browser sessions are managed automatically. When Shogun shuts down, all active Playwright browser instances are cleanly closed. The Mado page in the sidebar shows the current session status and lets you manually manage active browser contexts.</p>
                    </div>
                 </div>
+
+                {/* ── MADO PRACTICAL GUIDE ───────────────────────── */}
+                <div className="mt-8 space-y-4">
+                   <div className="text-xs font-bold text-cyan-400 uppercase tracking-widest pl-1 border-l-2 border-cyan-400/40 ml-1">Practical How-To Guide — Using Mado Step by Step</div>
+
+                   {/* Step 1: Setup */}
+                   <div className="shogun-card space-y-3 border-l-2 border-cyan-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-cyan-400 font-mono text-sm">01</span> First-Time Setup — Install Chromium</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Before Mado can work, you need the browser engine. This is a <strong>one-time setup</strong>:</p>
+                      <ol className="text-xs text-shogun-subdued space-y-1 ml-4 list-decimal">
+                         <li>Navigate to <strong>Mado</strong> in the sidebar.</li>
+                         <li>If Chromium is not installed, you'll see a <strong>"Install Chromium"</strong> button in the top-right corner.</li>
+                         <li>Click it. The system will download and install Playwright + Chromium (1–2 minutes depending on connection).</li>
+                         <li>Once complete, the badge changes to a green <strong>"Chromium Ready"</strong> indicator with the version number.</li>
+                      </ol>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Security Note:</strong> Mado must be enabled in your Torii security posture. At <strong>SHRINE</strong> and <strong>GUARDED</strong> tiers, Mado is completely disabled. You need at least <strong>TACTICAL</strong> (headless only) or higher.</p>
+                   </div>
+
+                   {/* Step 2: Create a Session */}
+                   <div className="shogun-card space-y-3 border-l-2 border-cyan-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-cyan-400 font-mono text-sm">02</span> Creating a Browser Session</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">A session is an isolated browser instance with its own profile (cookies, history, storage). Think of it like a separate browser window.</p>
+                      <ol className="text-xs text-shogun-subdued space-y-1 ml-4 list-decimal">
+                         <li>On the Mado page, go to the <strong>Sessions</strong> tab and click <strong>"+ New Session"</strong>.</li>
+                         <li><strong>Session Name:</strong> A friendly display name (e.g., "Research Browser" or "Daily News Monitor").</li>
+                         <li><strong>Profile Name:</strong> A unique identifier used for persistent storage on disk (e.g., "research_agent"). Cookies and login sessions survive restarts.</li>
+                         <li><strong>Browser Mode:</strong> Choose between <strong>Headless</strong> (invisible, faster, works on servers) or <strong>Visible</strong> (shows a real browser window — great for debugging and demos, but requires a display).</li>
+                         <li>Click <strong>Create</strong>. The session appears in the list with a status indicator.</li>
+                      </ol>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Tip:</strong> Create separate sessions for different purposes — a "Research" session, a "Monitoring" session, etc. Each has isolated cookies and profiles.</p>
+                   </div>
+
+                   {/* Scenario A: Chat-Driven Browsing */}
+                   <div className="shogun-card space-y-3 border-l-2 border-emerald-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-emerald-400 font-mono text-sm">A</span> Scenario: Browse the Web via Chat</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The easiest way to use Mado — just ask your Shogun in the chat. Behind the scenes, it uses the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">browse_web</code> native skill.</p>
+                      <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                         <p className="text-[10px] text-cyan-400/80 font-bold uppercase tracking-widest">Example Chat Prompts</p>
+                         <div className="space-y-1">
+                            <p className="text-xs text-shogun-text font-mono">"Browse https://news.ycombinator.com and give me the top 5 stories"</p>
+                            <p className="text-xs text-shogun-text font-mono">"Go to https://example.com/pricing and extract the pricing table"</p>
+                            <p className="text-xs text-shogun-text font-mono">"Visit https://github.com/trending and summarize what's popular today"</p>
+                            <p className="text-xs text-shogun-text font-mono">"Browse https://weather.com and tell me the forecast for Copenhagen"</p>
+                         </div>
+                      </div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><strong>What happens:</strong> The Shogun launches a headless browser session (if not already running), navigates to the URL, auto-accepts cookie consent walls (Google/YouTube), extracts the page content as text, and returns it in the chat — up to 20,000 characters.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><strong>Targeting specific content:</strong> Add a CSS selector to extract only what you need:</p>
+                      <p className="text-xs text-shogun-text font-mono bg-shogun-bg rounded px-2 py-1">"Browse https://en.wikipedia.org/wiki/Shogun and extract the text from the #mw-content-text selector"</p>
+                   </div>
+
+                   {/* Scenario B: Take a Screenshot */}
+                   <div className="shogun-card space-y-3 border-l-2 border-emerald-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-emerald-400 font-mono text-sm">B</span> Scenario: Screenshot a Web Page</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">After browsing to a page, you can ask the Shogun to take a screenshot:</p>
+                      <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                         <p className="text-[10px] text-cyan-400/80 font-bold uppercase tracking-widest">Example Chat Sequence</p>
+                         <div className="space-y-1">
+                            <p className="text-xs text-shogun-text font-mono">1. "Browse https://my-dashboard.example.com/analytics"</p>
+                            <p className="text-xs text-shogun-text font-mono">2. "Now take a screenshot of this page"</p>
+                            <p className="text-xs text-shogun-text font-mono">3. "Take a full-page screenshot" <span className="text-shogun-subdued">(captures entire scrollable page)</span></p>
+                         </div>
+                      </div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Screenshots are saved to the <strong>Mado → Screenshots</strong> tab with a timestamp. You can view all captured images there. Files are stored at <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">data/mado/screenshots/</code>.</p>
+                   </div>
+
+                   {/* Scenario C: Quick Actions UI */}
+                   <div className="shogun-card space-y-3 border-l-2 border-violet-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-violet-400 font-mono text-sm">C</span> Scenario: Using the Quick Actions Panel</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The <strong>Quick Actions</strong> tab on the Mado page gives you direct control over browser sessions — no chat needed:</p>
+                      <ol className="text-xs text-shogun-subdued space-y-1 ml-4 list-decimal">
+                         <li>Go to the <strong>Quick Actions</strong> tab.</li>
+                         <li>Select a session from the <strong>Active Session</strong> dropdown.</li>
+                         <li>Enter a URL in the <strong>Navigate to URL</strong> field and click <strong>Go</strong>. The result shows the page title and final URL.</li>
+                         <li>Click <strong>Screenshot</strong> to capture the current page — it's saved to the Screenshots gallery instantly.</li>
+                         <li>Click <strong>Extract Text</strong> to pull the full page content as readable text. The result appears in the output panel below (up to 3,000 chars).</li>
+                      </ol>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Best for:</strong> Quick manual inspections, testing whether a URL loads correctly before automating it, or grabbing content from a specific page without typing a full chat prompt.</p>
+                   </div>
+
+                   {/* Scenario D: Agent Flow with Mado */}
+                   <div className="shogun-card space-y-3 border-l-2 border-violet-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-violet-400 font-mono text-sm">D</span> Scenario: Multi-Step Automation with Agent Flow</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">For complex workflows, combine Mado with Agent Flow — the visual workflow builder:</p>
+                      <div className="bg-shogun-bg rounded-lg p-3 space-y-3">
+                         <p className="text-[10px] text-cyan-400/80 font-bold uppercase tracking-widest">Example: Daily Competitor Price Check</p>
+                         <div className="space-y-1 text-xs text-shogun-subdued">
+                            <p><strong>Input Node →</strong> "Check competitor prices"</p>
+                            <p><strong>Mado Browser Node →</strong> Navigate to competitor's pricing page</p>
+                            <p><strong>Samurai Node →</strong> "Analyze the pricing data and compare to our current prices"</p>
+                            <p><strong>Logic Node →</strong> If prices changed → proceed, else → skip</p>
+                            <p><strong>Samurai Node →</strong> "Draft a summary email of pricing changes"</p>
+                            <p><strong>Output Node →</strong> Final report</p>
+                         </div>
+                      </div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-2">The <strong>Mado Browser node</strong> in Agent Flow supports: navigate to a URL, extract content (text/HTML), and take screenshots. Chain it with Samurai nodes for AI analysis and Logic nodes for conditional routing.</p>
+                   </div>
+
+                   {/* Scenario E: Form Filling */}
+                   <div className="shogun-card space-y-3 border-l-2 border-amber-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-amber-400 font-mono text-sm">E</span> Scenario: Filling Forms &amp; Clicking Elements</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado supports full interaction with web pages — not just reading them. Via the API, you can:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Fill forms:</strong> Provide a list of <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">{'{'}selector, value, type{'}'}</code> objects. Supports text inputs, dropdowns (<code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">select</code>), and checkboxes.</li>
+                         <li><strong>Click elements:</strong> Click any element by CSS selector — buttons, links, menu items.</li>
+                         <li><strong>Wait for elements:</strong> Pause until a specific CSS selector appears on the page (with configurable timeout).</li>
+                         <li><strong>Execute JavaScript:</strong> Run custom JS scripts on the page for advanced extraction or interaction.</li>
+                         <li><strong>Upload files:</strong> Upload a local file to a file input element (requires CAMPAIGN tier or higher).</li>
+                         <li><strong>Download files:</strong> Capture a triggered download and save it locally (requires CAMPAIGN tier or higher).</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1">These actions are available through the REST API at <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/api/v1/mado/sessions/{'{'}session_id{'}'}/fill-form</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/click</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/wait</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/execute-js</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/upload</code>, and <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/download</code>.</p>
+                   </div>
+
+                   {/* Scenario F: PDF Generation */}
+                   <div className="shogun-card space-y-3 border-l-2 border-amber-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-amber-400 font-mono text-sm">F</span> Scenario: Generating PDFs from Web Pages</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado can convert any web page to a PDF document — useful for archiving, reports, or compliance evidence:</p>
+                      <ol className="text-xs text-shogun-subdued space-y-1 ml-4 list-decimal">
+                         <li>Navigate to the page you want to convert (via chat, Quick Actions, or API).</li>
+                         <li>Call the PDF endpoint: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/mado/sessions/{'{'}session_id{'}'}/pdf</code></li>
+                         <li>The PDF is generated in A4 format with background colors and saved to <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">data/mado/downloads/</code>.</li>
+                      </ol>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Note:</strong> PDF generation only works in <strong>headless</strong> mode (Chromium limitation).</p>
+                   </div>
+
+                   {/* Profiles & Persistence */}
+                   <div className="shogun-card space-y-3 border-l-2 border-cyan-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-cyan-400 font-mono text-sm">💡</span> Understanding Browser Profiles</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Each session has a <strong>profile</strong> — a persistent directory on disk that stores cookies, local storage, cache, and login sessions. This means:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Logins persist:</strong> If you log into a website in session "research_agent", next time you use that profile, you're still logged in.</li>
+                         <li><strong>Isolation:</strong> Different profiles don't share cookies or data — like using separate Chrome profiles.</li>
+                         <li><strong>Cleanup:</strong> Delete a session to close the browser. The profile data stays on disk until you manually delete it from <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">data/mado/profiles/</code>.</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Storage paths</strong> are visible on the <strong>Settings</strong> tab of the Mado page: profiles, screenshots, and downloads each have their own directory.</p>
+                   </div>
+
+                   {/* Troubleshooting */}
+                   <div className="shogun-card space-y-3 border-l-2 border-red-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-red-400 font-mono text-sm">⚠</span> Troubleshooting</div>
+                      <ul className="text-xs text-shogun-subdued space-y-2 ml-4 list-disc">
+                         <li><strong>"Browser automation is disabled"</strong> — Your Torii security tier doesn't allow Mado. Go to <strong>Torii → Security Posture</strong> and switch to TACTICAL or higher.</li>
+                         <li><strong>"Domain not in allowlist"</strong> — Your session or security policy has a domain allowlist that doesn't include the URL you're trying to visit. Edit the session's domain allowlist or update the policy in Torii.</li>
+                         <li><strong>"No active browser session"</strong> — For chat skills (<code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">take_screenshot</code>), you must first use <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">browse_web</code> to navigate to a page.</li>
+                         <li><strong>Chromium not installed</strong> — Click "Install Chromium" on the Mado page. Requires internet access for the initial download (~200 MB).</li>
+                         <li><strong>Session shows "idle" forever</strong> — The browser launches lazily. It only starts when you perform an action (navigate, screenshot, etc.). This is normal.</li>
+                         <li><strong>Visible mode not working</strong> — Visible mode requires a display. On headless servers (Linux VPS, Docker), use headless mode only.</li>
+                      </ul>
+                   </div>
+                </div>
              </section>
+
 
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 10. TORII (SECURITY) */}
