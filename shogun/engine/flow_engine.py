@@ -628,9 +628,6 @@ async def _exec_mado_browser(config: dict, context_str: str) -> str:
     if launch_result.get("status") == "error":
         return f"[ERROR] Failed to launch browser: {launch_result.get('error', 'Unknown')}"
 
-    # Get domain allowlist from posture
-    domain_allowlist = posture.get("mado_domain_allowlist", [])
-
     try:
         if action == "navigate":
             # Use URL from config first; fall back to context string
@@ -642,7 +639,6 @@ async def _exec_mado_browser(config: dict, context_str: str) -> str:
             result = await mado_service.navigate(
                 session_id=flow_session_id,
                 url=target_url,
-                domain_allowlist=domain_allowlist if domain_allowlist else None,
             )
             if result.get("status") == "error":
                 log.error("[Mado/Flow] navigate FAILED: %s", result.get('error'))

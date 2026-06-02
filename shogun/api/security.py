@@ -41,7 +41,6 @@ _DEFAULT_POSTURE = {
     # Mado browser automation
     "mado_enabled": True,
     "mado_headless_only": True,
-    "mado_domain_allowlist": [],
     "mado_max_sessions": 3,
     "mado_autonomous_browsing": False,
     "mado_downloads_enabled": True,

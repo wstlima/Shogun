@@ -144,7 +144,6 @@ async def get_posture_tool_filter() -> dict[str, Any]:
         # Mado browser automation
         "mado_enabled": posture.get("mado_enabled", False),
         "mado_headless_only": posture.get("mado_headless_only", True),
-        "mado_domain_allowlist": posture.get("mado_domain_allowlist", []),
         "mado_max_sessions": posture.get("mado_max_sessions", 3),
         "mado_autonomous_browsing": posture.get("mado_autonomous_browsing", False),
         "mado_downloads_enabled": posture.get("mado_downloads_enabled", False),

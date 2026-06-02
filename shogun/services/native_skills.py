@@ -929,12 +929,10 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 mode="headless",
             )
 
-            # Navigate
-            domain_allowlist = posture.get("mado_domain_allowlist", [])
+            # Navigate (native_skill has no domain restrictions — per-session policies apply)
             nav_result = await mado_service.navigate(
                 session_id=session_id,
                 url=url,
-                domain_allowlist=domain_allowlist if domain_allowlist else None,
             )
 
             if nav_result.get("status") == "blocked":

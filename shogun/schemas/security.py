@@ -146,7 +146,6 @@ class SecurityPostureResponse(ShogunBase):
     # Mado browser automation
     mado_enabled: bool = True
     mado_headless_only: bool = True
-    mado_domain_allowlist: list[str] = Field(default_factory=list)
     mado_max_sessions: int = 3
     mado_autonomous_browsing: bool = False
     mado_downloads_enabled: bool = True

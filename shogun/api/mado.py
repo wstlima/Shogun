@@ -198,7 +198,7 @@ async def do_navigate(
 ):
     """Navigate to a URL in the browser session."""
     from shogun.services.mado_service import navigate
-    from shogun.services.posture_guard import check_mado_access, get_posture_tool_filter
+    from shogun.services.posture_guard import check_mado_access
     from shogun.services.mado_policy_guard import check_navigate_policy, increment_page_load_count
 
     await check_mado_access()
@@ -208,9 +208,8 @@ async def do_navigate(
     record = await svc.get_by_id(session_id)
     check_navigate_policy(record, body.url)
 
-    # Get domain allowlist from Torii posture + session
-    posture = await get_posture_tool_filter()
-    allowlist = posture.get("mado_domain_allowlist", []) + (record.domain_allowlist or [])
+    # Domain allowlist comes from the session only (Torii controls on/off, not domains)
+    allowlist = record.domain_allowlist or []
 
     result = await navigate(
         session_id=str(session_id),
