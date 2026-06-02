@@ -95,6 +95,24 @@ export function Mado() {
   const [quickResult, setQuickResult] = useState<string | null>(null);
   const [quickLoading, setQuickLoading] = useState(false);
 
+  // Extract presets (mirrors Agent Flow Mado node)
+  const EXTRACT_PRESETS = [
+    { value: 'headlines',    label: '📰 All Headlines',       selector: 'h1, h2, h3, h4, article h2, article h3',         desc: 'Grabs all headline text from the page' },
+    { value: 'links',        label: '🔗 All Links',           selector: 'a[href]',                                        desc: 'Extracts every link on the page with its URL' },
+    { value: 'article',      label: '📄 Article Content',     selector: 'article, [role="article"], .post-content, .entry-content, .article-body, main', desc: 'Main article text and body content' },
+    { value: 'news_cards',   label: '🗞️ News Cards',          selector: 'article a, [data-n-tid] a, c-wiz article, [jslog] h3, [jslog] h4', desc: 'News feed cards (Google News, news aggregators)' },
+    { value: 'tables',       label: '📊 Tables & Data',       selector: 'table, [role="table"], .data-table',             desc: 'Structured tables and data grids' },
+    { value: 'images',       label: '🖼️ Images',              selector: 'img[src], picture source',                       desc: 'All images with their source URLs' },
+    { value: 'lists',        label: '📋 Lists',               selector: 'ul, ol, dl, [role="list"]',                      desc: 'Bullet points, numbered lists, and definition lists' },
+    { value: 'prices',       label: '💰 Prices & Products',   selector: '[class*="price"], [data-price], .product-card, .product-title', desc: 'Product names, prices, and e-commerce data' },
+    { value: 'full_page',    label: '📜 Full Page Text',      selector: 'body',                                           desc: 'Everything visible on the page' },
+    { value: 'custom',       label: '⚙️ Custom Selector',     selector: '',                                               desc: 'Write your own CSS selector' },
+  ];
+  const [extractPreset, setExtractPreset] = useState('');
+  const [extractSelector, setExtractSelector] = useState('');
+  const [extractHint, setExtractHint] = useState('');
+  const [showAdvancedSelector, setShowAdvancedSelector] = useState(false);
+
   // ── Data loading ──────────────────────────────────────────
 
   const loadStatus = useCallback(async () => {
@@ -203,11 +221,16 @@ export function Mado() {
     if (!quickSessionId) return;
     setQuickLoading(true);
     try {
+      const selectorToUse = extractSelector || undefined;
       const r = await axios.post(`/api/v1/mado/sessions/${quickSessionId}/extract`, {
         extract_type: 'text',
+        selector: selectorToUse,
       });
-      const content = r.data?.data?.content || '';
-      setQuickResult(content.slice(0, 3000) + (content.length > 3000 ? '\n\n... [truncated]' : ''));
+      let content = r.data?.data?.content || '';
+      if (extractHint) {
+        content = `[Extract hint: ${extractHint}]\n\n${content}`;
+      }
+      setQuickResult(content.slice(0, 5000) + (content.length > 5000 ? '\n\n... [truncated]' : ''));
     } catch (err: any) {
       setQuickResult(`❌ ${err.response?.data?.detail || 'Extraction failed'}`);
     }
@@ -545,6 +568,75 @@ export function Mado() {
                 </button>
               </div>
             </div>
+
+            {/* What to Extract — preset dropdown */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">What to Extract</label>
+              <select
+                value={extractPreset}
+                onChange={(e) => {
+                  const preset = EXTRACT_PRESETS.find(p => p.value === e.target.value);
+                  setExtractPreset(e.target.value);
+                  if (preset && preset.value !== 'custom') {
+                    setExtractSelector(preset.selector);
+                    setShowAdvancedSelector(false);
+                  } else if (preset?.value === 'custom') {
+                    setShowAdvancedSelector(true);
+                  } else {
+                    setExtractSelector('');
+                  }
+                }}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2.5 text-xs text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+              >
+                <option value="">— Choose what to extract —</option>
+                {EXTRACT_PRESETS.map(p => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              {extractPreset && extractPreset !== 'custom' && (() => {
+                const cur = EXTRACT_PRESETS.find(p => p.value === extractPreset);
+                return cur ? <p className="text-[8px] text-[#06b6d4]/70">{cur.desc}</p> : null;
+              })()}
+            </div>
+
+            {/* Describe What You Need */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Describe What You Need</label>
+              <textarea
+                value={extractHint}
+                onChange={(e) => setExtractHint(e.target.value)}
+                rows={2}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2.5 text-xs text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none resize-y min-h-[40px]"
+                placeholder='e.g. "Get all article titles and their links" or "Find product prices"'
+              />
+              <p className="text-[8px] text-[#555]">Optional — helps the AI understand what to look for in the extracted content</p>
+            </div>
+
+            {/* Advanced: CSS Selector toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvancedSelector(!showAdvancedSelector)}
+              className="flex items-center gap-1.5 text-[8px] font-bold text-[#555] hover:text-[#7a8899] uppercase tracking-widest transition-colors cursor-pointer"
+            >
+              <span className="transition-transform" style={{ transform: showAdvancedSelector ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+              Advanced: CSS Selector
+            </button>
+
+            {showAdvancedSelector && (
+              <div className="space-y-1.5">
+                <input
+                  type="text"
+                  value={extractSelector}
+                  onChange={(e) => {
+                    setExtractSelector(e.target.value);
+                    setExtractPreset('custom');
+                  }}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2.5 text-[10px] text-[#06b6d4] font-mono focus:border-[#06b6d4] transition-colors outline-none"
+                  placeholder="e.g., .main-content, #article, table"
+                />
+                <p className="text-[8px] text-[#555]">Raw CSS selector — for power users who know the page structure</p>
+              </div>
+            )}
 
             {/* Action buttons */}
             <div className="grid grid-cols-2 gap-3">
