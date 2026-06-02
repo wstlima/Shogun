@@ -41,6 +41,7 @@ import {
   ExternalLink,
   Workflow,
   Camera,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -733,6 +734,10 @@ export function Guide() {
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" /> Session Management</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Browser sessions are managed automatically. When Shogun shuts down, all active Playwright browser instances are cleanly closed. The Mado page in the sidebar shows the current session status and lets you manually manage active browser contexts.</p>
                    </div>
+                   <div className="shogun-card space-y-2 md:col-span-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-cyan-400" /> Per-Session Security Policy</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Each browser session can have its own <strong>security policy</strong> — a fine-grained sandbox controlling what the session is allowed to do. Configure HTTPS-only mode, download/upload/form-submission/JS-execution permissions (allowed, blocked, or approval-required), external navigation restrictions, and page-load limits. Session policies layer <em>inside</em> the global Torii posture: a session can only be <strong>more restrictive</strong> than the Torii tier, never less. Create and edit policies from the Mado session UI or via <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">PATCH /api/v1/mado/sessions/{'{'}id{'}'}/policy</code>.</p>
+                   </div>
                 </div>
 
                 {/* ── MADO PRACTICAL GUIDE ───────────────────────── */}
@@ -868,6 +873,26 @@ export function Guide() {
                          <li><strong>Cleanup:</strong> Delete a session to close the browser. The profile data stays on disk until you manually delete it from <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">data/mado/profiles/</code>.</li>
                       </ul>
                       <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Storage paths</strong> are visible on the <strong>Settings</strong> tab of the Mado page: profiles, screenshots, and downloads each have their own directory.</p>
+                   </div>
+
+                   {/* Security Policies */}
+                   <div className="shogun-card space-y-3 border-l-2 border-red-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-red-400" /> Configuring Per-Session Security Policies</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Each session can have a <strong>security policy</strong> — a sandbox that limits what the browser session is allowed to do. This gives you fine-grained control without changing the global Torii posture.</p>
+                      <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                         <p className="text-[10px] text-red-400/80 font-bold uppercase tracking-widest">Policy Fields</p>
+                         <ul className="text-xs text-shogun-subdued space-y-1 ml-2 list-disc">
+                            <li><strong>HTTPS Only:</strong> When enabled, the session blocks navigation to non-HTTPS URLs.</li>
+                            <li><strong>Downloads:</strong> <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">allowed</code> · <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">blocked</code> · <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">approval_required</code></li>
+                            <li><strong>Uploads:</strong> Same three modes — controls file upload actions.</li>
+                            <li><strong>Form Submission:</strong> Controls whether the session can submit forms.</li>
+                            <li><strong>External Navigation:</strong> <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">allowed</code> or <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">blocked</code> — when blocked, the session can only navigate to domains in its allowlist.</li>
+                            <li><strong>JS Execution:</strong> <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">allowed</code> or <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">blocked</code> — controls the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/execute-js</code> endpoint.</li>
+                            <li><strong>Max Page Loads:</strong> Caps the total number of navigations allowed in the session lifetime (0 = unlimited).</li>
+                         </ul>
+                      </div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Priority:</strong> The session policy is the <em>inner</em> layer. Torii is the <em>outer</em> layer. If Torii blocks downloads globally, the session policy cannot override that. A session policy can only be <strong>more restrictive</strong> than Torii — never less.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><strong>How to set:</strong> Configure the security policy when creating a session (expand the "Security Policy" section in the create modal), or edit it later via the "Edit Policy" button on any session card. You can also use the API: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">PATCH /api/v1/mado/sessions/{'{'}id{'}'}/policy</code>.</p>
                    </div>
 
                    {/* Troubleshooting */}
