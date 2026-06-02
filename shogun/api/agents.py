@@ -308,10 +308,14 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         # Communication tools
         "email", "send mail", "send me", "send an", "send a", "inbox",
         "calendar", "schedule",
-        # Web browsing / search
-        "browse", "visit", "search", "look up", "google",
+        # Web browsing / search (+ common typos)
+        "browse", "brows ", "visit", "search", "look up", "google",
         "fetch", "scrape", "navigate", "open ", "url",
         "website", "web page", "check ", "find ",
+        "wikipedia", "youtube", "reddit", "github",
+        # Extraction presets (matches natural chat like "get the headlines")
+        "extract", "headlines", "article content", "links from",
+        "tables from", "prices from", "screenshot",
         # Domain / URL references (catches "nfl.com", "example.org", etc.)
         ".com", ".org", ".net", ".io", ".gov", ".edu",
         "http://", "https://", "www.",
