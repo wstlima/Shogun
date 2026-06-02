@@ -1150,6 +1150,9 @@ When the user asks you to do something that a tool can handle — USE THE TOOL. 
 
 - **Web browsing**: When the user asks you to look up, search, browse, visit, or check a website — call browse_web(url="...") IMMEDIATELY.
   Do NOT say you cannot browse the web. You CAN. You have the Mado browser engine. USE IT.
+  When extracting specific content, use the extract_preset parameter instead of raw CSS selectors:
+  headlines, links, article, news_cards, tables, images, lists, prices, full_page.
+  Only use the 'selector' parameter if the user explicitly provides a CSS selector.
   After browsing, summarize the extracted content for the user.
 - **Email**: Use fetch_inbox, read_email, send_email. Confirm before sending.
 - **Calendar**: Use list_calendar_events, create_calendar_event.

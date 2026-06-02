@@ -387,7 +387,7 @@ NATIVE_TOOLS = [
         "type": "function",
         "function": {
             "name": "browse_web",
-            "description": "Browse a web page using Mado browser automation. Navigate to a URL and extract content. Requires Mado to be enabled in the Torii security settings.",
+            "description": "Browse a web page using Mado browser automation. Navigate to a URL and extract content. Requires Mado to be enabled in the Torii security settings. You can use 'extract_preset' to target specific types of content without knowing CSS.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -400,9 +400,14 @@ NATIVE_TOOLS = [
                         "enum": ["text", "html"],
                         "description": "What to extract from the page: 'text' for readable content, 'html' for raw HTML.",
                     },
+                    "extract_preset": {
+                        "type": "string",
+                        "enum": ["headlines", "links", "article", "news_cards", "tables", "images", "lists", "prices", "full_page"],
+                        "description": "Smart extraction preset. Use instead of 'selector' for common extraction patterns: 'headlines' for all headings, 'links' for all links, 'article' for the main article body, 'news_cards' for news feeds, 'tables' for structured data, 'images' for image sources, 'lists' for bullet/numbered lists, 'prices' for product pricing, 'full_page' for everything.",
+                    },
                     "selector": {
                         "type": "string",
-                        "description": "Optional CSS selector to extract content from a specific element.",
+                        "description": "Optional CSS selector to extract content from a specific element. Use extract_preset instead if you don't know the exact CSS selector.",
                     },
                 },
                 "required": ["url"],
@@ -920,6 +925,22 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             url = args.get("url", "")
             extract_type = args.get("extract_type", "text")
             selector = args.get("selector")
+            extract_preset = args.get("extract_preset")
+
+            # Map extract_preset to CSS selector (same presets as Mado Quick Actions)
+            PRESET_SELECTORS = {
+                "headlines":  "h1, h2, h3, h4, article h2, article h3",
+                "links":      "a[href]",
+                "article":    'article, [role="article"], .post-content, .entry-content, .article-body, main',
+                "news_cards": 'article a, [data-n-tid] a, c-wiz article, [jslog] h3, [jslog] h4',
+                "tables":     'table, [role="table"], .data-table',
+                "images":     "img[src], picture source",
+                "lists":      'ul, ol, dl, [role="list"]',
+                "prices":     '[class*="price"], [data-price], .product-card, .product-title',
+                "full_page":  "body",
+            }
+            if extract_preset and extract_preset in PRESET_SELECTORS and not selector:
+                selector = PRESET_SELECTORS[extract_preset]
 
             # Use a persistent native-skill session
             session_id = "native_skill_browser"
