@@ -17,12 +17,14 @@ from shogun.schemas.mado import (
     MadoFillFormRequest,
     MadoNavigateRequest,
     MadoScreenshotRequest,
+    MadoSecurityPolicy,
     MadoSessionCreate,
     MadoSessionListItem,
     MadoSessionResponse,
     MadoStatusResponse,
     MadoUploadRequest,
     MadoWaitRequest,
+    DEFAULT_SECURITY_POLICY,
 )
 from shogun.services.mado_service_crud import MadoSessionService
 
@@ -100,6 +102,7 @@ async def create_session(
         agent_id=body.agent_id,
         browser_mode=body.browser_mode,
         domain_allowlist=body.domain_allowlist,
+        security_policy=body.security_policy.model_dump() if body.security_policy else DEFAULT_SECURITY_POLICY.copy(),
     )
     return ApiResponse(data=MadoSessionResponse.model_validate(record))
 
@@ -131,6 +134,24 @@ async def delete_session(
     if not success:
         raise HTTPException(status_code=404, detail="Browser session not found")
     return ApiResponse(data={"deleted": True})
+
+
+@router.patch("/sessions/{session_id}/policy", response_model=ApiResponse)
+async def update_session_policy(
+    session_id: uuid.UUID,
+    body: MadoSecurityPolicy,
+    svc: MadoSessionService = Depends(get_mado_session_service),
+):
+    """Update the security policy of an existing browser session."""
+    record = await svc.get_by_id(session_id)
+    if not record or record.is_deleted:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+
+    record.security_policy = body.model_dump()
+    await svc.session.flush()
+    await svc.session.refresh(record)
+    await svc.session.commit()
+    return ApiResponse(data=MadoSessionResponse.model_validate(record))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -178,13 +199,17 @@ async def do_navigate(
     """Navigate to a URL in the browser session."""
     from shogun.services.mado_service import navigate
     from shogun.services.posture_guard import check_mado_access, get_posture_tool_filter
+    from shogun.services.mado_policy_guard import check_navigate_policy, increment_page_load_count
 
     await check_mado_access()
     await _ensure_browser_active(session_id, svc)
 
+    # Per-session policy enforcement
+    record = await svc.get_by_id(session_id)
+    check_navigate_policy(record, body.url)
+
     # Get domain allowlist from Torii posture + session
     posture = await get_posture_tool_filter()
-    record = await svc.get_by_id(session_id)
     allowlist = posture.get("mado_domain_allowlist", []) + (record.domain_allowlist or [])
 
     result = await navigate(
@@ -197,13 +222,14 @@ async def do_navigate(
     if result.get("status") == "blocked":
         raise HTTPException(status_code=403, detail=result.get("reason", "Domain blocked"))
 
-    # Update last URL
+    # Update last URL + increment page load counter
     if result.get("url"):
         await svc.update_status(
             session_id, "active",
             last_url=result["url"],
             last_active_at=datetime.now(timezone.utc),
         )
+        await increment_page_load_count(record, svc)
 
     return ApiResponse(data=result)
 
@@ -279,8 +305,16 @@ async def do_fill_form(
     """Fill form fields on the current page."""
     from shogun.services.mado_service import fill_form
     from shogun.services.posture_guard import check_mado_access
+    from shogun.services.mado_policy_guard import check_form_submit_policy
 
     await check_mado_access()
+
+    # Per-session policy enforcement
+    record = await svc.get_by_id(session_id)
+    if not record or record.is_deleted:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+    check_form_submit_policy(record)
+
     await _ensure_browser_active(session_id, svc)
 
     result = await fill_form(session_id=str(session_id), fields=body.fields)
@@ -317,8 +351,16 @@ async def do_execute_js(
     """Execute JavaScript on the current page."""
     from shogun.services.mado_service import execute_js
     from shogun.services.posture_guard import check_mado_access
+    from shogun.services.mado_policy_guard import check_js_execution_policy
 
     await check_mado_access()
+
+    # Per-session policy enforcement
+    record = await svc.get_by_id(session_id)
+    if not record or record.is_deleted:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+    check_js_execution_policy(record)
+
     await _ensure_browser_active(session_id, svc)
 
     result = await execute_js(session_id=str(session_id), script=body.script)
@@ -339,7 +381,15 @@ async def do_upload(
 
     await check_mado_access()
 
-    # Check upload permission
+    # Per-session policy enforcement
+    record = await svc.get_by_id(session_id)
+    if not record or record.is_deleted:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+
+    from shogun.services.mado_policy_guard import check_upload_policy
+    check_upload_policy(record)
+
+    # Check upload permission (global Torii)
     posture = await get_posture_tool_filter()
     if not posture.get("mado_uploads_enabled", False):
         raise HTTPException(
@@ -370,7 +420,15 @@ async def do_download(
 
     await check_mado_access()
 
-    # Check download permission
+    # Per-session policy enforcement
+    record_pre = await svc.get_by_id(session_id)
+    if not record_pre or record_pre.is_deleted:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+
+    from shogun.services.mado_policy_guard import check_download_policy
+    check_download_policy(record_pre)
+
+    # Check download permission (global Torii)
     posture = await get_posture_tool_filter()
     if not posture.get("mado_downloads_enabled", False):
         raise HTTPException(

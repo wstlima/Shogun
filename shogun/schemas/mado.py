@@ -4,11 +4,51 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
 from shogun.schemas.common import ShogunBase
+
+
+# ═══════════════════════════════════════════════════════════════
+# SECURITY POLICY
+# ═══════════════════════════════════════════════════════════════
+
+
+DEFAULT_SECURITY_POLICY = {
+    "https_only": False,
+    "downloads": "allowed",
+    "uploads": "allowed",
+    "form_submit": "allowed",
+    "external_navigation": "allowed",
+    "js_execution": "allowed",
+    "max_page_loads": 0,
+}
+
+
+class MadoSecurityPolicy(ShogunBase):
+    """Per-session security policy for Mado browser sessions."""
+
+    https_only: bool = Field(False, description="Block non-HTTPS navigation")
+    downloads: Literal["allowed", "blocked", "approval_required"] = Field(
+        "allowed", description="Download policy"
+    )
+    uploads: Literal["allowed", "blocked", "approval_required"] = Field(
+        "allowed", description="Upload policy"
+    )
+    form_submit: Literal["allowed", "blocked", "approval_required"] = Field(
+        "allowed", description="Form submission policy"
+    )
+    external_navigation: Literal["allowed", "blocked"] = Field(
+        "allowed", description="Block navigation outside domain allowlist"
+    )
+    js_execution: Literal["allowed", "blocked"] = Field(
+        "allowed", description="JavaScript execution policy"
+    )
+    max_page_loads: int = Field(
+        0, ge=0, description="Max navigations per session lifetime (0 = unlimited)"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -24,6 +64,7 @@ class MadoSessionCreate(ShogunBase):
     agent_id: uuid.UUID | None = Field(None, description="Optional Samurai agent to link")
     browser_mode: str = Field("headless", description="Browser mode: 'headless' or 'visible'")
     domain_allowlist: list[str] = Field(default_factory=list, description="Allowed domains for this session")
+    security_policy: MadoSecurityPolicy | None = Field(None, description="Per-session security policy")
 
 
 class MadoSessionResponse(ShogunBase):
@@ -38,6 +79,7 @@ class MadoSessionResponse(ShogunBase):
     last_url: str | None = None
     domain_allowlist: list[str] = Field(default_factory=list)
     session_data: dict[str, Any] = Field(default_factory=dict)
+    security_policy: dict[str, Any] = Field(default_factory=lambda: DEFAULT_SECURITY_POLICY.copy())
     last_active_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -53,6 +95,8 @@ class MadoSessionListItem(ShogunBase):
     status: str
     browser_mode: str
     last_url: str | None = None
+    domain_allowlist: list[str] = Field(default_factory=list)
+    security_policy: dict[str, Any] = Field(default_factory=lambda: DEFAULT_SECURITY_POLICY.copy())
     last_active_at: datetime | None = None
     created_at: datetime
 

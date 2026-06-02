@@ -16,6 +16,7 @@ import {
   Send,
   FileText,
   Settings2,
+  Shield,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -23,6 +24,26 @@ import { cn } from '../lib/utils';
 // ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
+
+interface SecurityPolicy {
+  https_only: boolean;
+  downloads: 'allowed' | 'blocked' | 'approval_required';
+  uploads: 'allowed' | 'blocked' | 'approval_required';
+  form_submit: 'allowed' | 'blocked' | 'approval_required';
+  external_navigation: 'allowed' | 'blocked';
+  js_execution: 'allowed' | 'blocked';
+  max_page_loads: number;
+}
+
+const DEFAULT_POLICY: SecurityPolicy = {
+  https_only: false,
+  downloads: 'allowed',
+  uploads: 'allowed',
+  form_submit: 'allowed',
+  external_navigation: 'allowed',
+  js_execution: 'allowed',
+  max_page_loads: 0,
+};
 
 interface MadoSession {
   id: string;
@@ -32,6 +53,8 @@ interface MadoSession {
   status: string;
   browser_mode: string;
   last_url: string | null;
+  domain_allowlist: string[];
+  security_policy: SecurityPolicy;
   last_active_at: string | null;
   created_at: string;
 }
@@ -88,6 +111,14 @@ export function Mado() {
   const [newProfile, setNewProfile] = useState('');
   const [newMode, setNewMode] = useState<'headless' | 'visible'>('headless');
   const [creating, setCreating] = useState(false);
+  const [showPolicySection, setShowPolicySection] = useState(false);
+  const [newPolicy, setNewPolicy] = useState<SecurityPolicy>({ ...DEFAULT_POLICY });
+  const [newDomainAllowlist, setNewDomainAllowlist] = useState('');
+
+  // Edit policy modal
+  const [editPolicySession, setEditPolicySession] = useState<MadoSession | null>(null);
+  const [editPolicy, setEditPolicy] = useState<SecurityPolicy>({ ...DEFAULT_POLICY });
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   // Quick action state
   const [quickUrl, setQuickUrl] = useState('');
@@ -168,17 +199,39 @@ export function Mado() {
     if (!newName.trim() || !newProfile.trim()) return;
     setCreating(true);
     try {
+      const domains = newDomainAllowlist.split(',').map(d => d.trim()).filter(Boolean);
       await axios.post('/api/v1/mado/sessions', {
         name: newName,
         profile_name: newProfile.replace(/\s+/g, '_').toLowerCase(),
         browser_mode: newMode,
+        domain_allowlist: domains,
+        security_policy: newPolicy,
       });
       await loadSessions();
       setShowCreate(false);
       setNewName('');
       setNewProfile('');
+      setNewDomainAllowlist('');
+      setNewPolicy({ ...DEFAULT_POLICY });
+      setShowPolicySection(false);
     } catch { /* ignore */ }
     setCreating(false);
+  };
+
+  const openEditPolicy = (s: MadoSession) => {
+    setEditPolicySession(s);
+    setEditPolicy(s.security_policy ? { ...DEFAULT_POLICY, ...s.security_policy } : { ...DEFAULT_POLICY });
+  };
+
+  const savePolicy = async () => {
+    if (!editPolicySession) return;
+    setSavingPolicy(true);
+    try {
+      await axios.patch(`/api/v1/mado/sessions/${editPolicySession.id}/policy`, editPolicy);
+      await loadSessions();
+      setEditPolicySession(null);
+    } catch { /* ignore */ }
+    setSavingPolicy(false);
   };
 
   const deleteSession = async (id: string) => {
@@ -429,10 +482,37 @@ export function Mado() {
                             <span className="text-[9px] text-[#06b6d4]/70 truncate max-w-[400px]">{s.last_url}</span>
                           </div>
                         )}
+                        {/* Policy badge */}
+                        {s.security_policy && (() => {
+                          const p = { ...DEFAULT_POLICY, ...s.security_policy };
+                          const badges: string[] = [];
+                          if (p.https_only) badges.push('HTTPS');
+                          if ((s.domain_allowlist?.length || 0) > 0) badges.push(`${s.domain_allowlist.length} domain${s.domain_allowlist.length > 1 ? 's' : ''}`);
+                          if (p.downloads === 'blocked') badges.push('No DL');
+                          if (p.uploads === 'blocked') badges.push('No UL');
+                          if (p.form_submit === 'blocked') badges.push('No forms');
+                          if (p.external_navigation === 'blocked') badges.push('Locked nav');
+                          if (p.js_execution === 'blocked') badges.push('No JS');
+                          if (p.max_page_loads > 0) badges.push(`${p.max_page_loads} loads`);
+                          if (badges.length === 0) return null;
+                          return (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Shield className="w-2.5 h-2.5 text-[#06b6d4]/50" />
+                              <span className="text-[8px] text-[#06b6d4]/50 font-mono">{badges.join(' · ')}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Actions */}
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => openEditPolicy(s)}
+                          className="p-1.5 hover:bg-[#06b6d4]/10 text-[#7a8899] hover:text-[#06b6d4] rounded-lg transition-colors cursor-pointer"
+                          title="Edit security policy"
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => deleteSession(s.id)}
                           className="p-1.5 hover:bg-[#ef4444]/10 text-[#7a8899] hover:text-[#ef4444] rounded-lg transition-colors cursor-pointer"
@@ -500,6 +580,103 @@ export function Mado() {
                         ))}
                       </div>
                     </div>
+
+                    {/* ▶ Security Policy (collapsible) */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPolicySection(!showPolicySection)}
+                      className="flex items-center gap-1.5 text-[9px] font-bold text-[#7a8899] hover:text-[#c8d0d8] uppercase tracking-widest transition-colors cursor-pointer mt-1"
+                    >
+                      <Shield className="w-3 h-3" />
+                      <span className="transition-transform" style={{ transform: showPolicySection ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                      Security Policy
+                    </button>
+
+                    {showPolicySection && (
+                      <div className="space-y-3 pl-1 border-l-2 border-[#1a2040] ml-1">
+                        {/* Allowed Domains */}
+                        <div className="space-y-1 pl-3">
+                          <label className="text-[8px] font-bold text-[#7a8899] uppercase tracking-widest">Allowed Domains</label>
+                          <input
+                            value={newDomainAllowlist}
+                            onChange={(e) => setNewDomainAllowlist(e.target.value)}
+                            className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-[10px] text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none font-mono"
+                            placeholder="e.g., github.com, google.com"
+                          />
+                          <p className="text-[7px] text-[#555]">Comma-separated list. Leave empty to allow all domains.</p>
+                        </div>
+
+                        {/* HTTPS Only */}
+                        <div className="flex items-center justify-between pl-3">
+                          <label className="text-[8px] font-bold text-[#7a8899] uppercase tracking-widest">HTTPS Only</label>
+                          <button
+                            type="button"
+                            onClick={() => setNewPolicy(p => ({ ...p, https_only: !p.https_only }))}
+                            className={cn(
+                              "w-8 h-4 rounded-full transition-colors cursor-pointer relative",
+                              newPolicy.https_only ? "bg-[#06b6d4]" : "bg-[#1a2040]"
+                            )}
+                          >
+                            <span className={cn(
+                              "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform",
+                              newPolicy.https_only ? "translate-x-4" : "translate-x-0.5"
+                            )} />
+                          </button>
+                        </div>
+
+                        {/* Tri-state dropdowns */}
+                        {([
+                          ['downloads', 'Downloads'] as const,
+                          ['uploads', 'Uploads'] as const,
+                          ['form_submit', 'Form Submission'] as const,
+                        ] as const).map(([key, label]) => (
+                          <div key={key} className="flex items-center justify-between pl-3">
+                            <label className="text-[8px] font-bold text-[#7a8899] uppercase tracking-widest">{label}</label>
+                            <select
+                              value={newPolicy[key]}
+                              onChange={(e) => setNewPolicy(p => ({ ...p, [key]: e.target.value }))}
+                              className="bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+                            >
+                              <option value="allowed">✅ Allowed</option>
+                              <option value="blocked">🚫 Blocked</option>
+                              <option value="approval_required">⏳ Approval Required</option>
+                            </select>
+                          </div>
+                        ))}
+
+                        {/* Binary toggles */}
+                        {([
+                          ['external_navigation', 'External Navigation'] as const,
+                          ['js_execution', 'JS Execution'] as const,
+                        ] as const).map(([key, label]) => (
+                          <div key={key} className="flex items-center justify-between pl-3">
+                            <label className="text-[8px] font-bold text-[#7a8899] uppercase tracking-widest">{label}</label>
+                            <select
+                              value={newPolicy[key]}
+                              onChange={(e) => setNewPolicy(p => ({ ...p, [key]: e.target.value }))}
+                              className="bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+                            >
+                              <option value="allowed">✅ Allowed</option>
+                              <option value="blocked">🚫 Blocked</option>
+                            </select>
+                          </div>
+                        ))}
+
+                        {/* Max Page Loads */}
+                        <div className="flex items-center justify-between pl-3">
+                          <label className="text-[8px] font-bold text-[#7a8899] uppercase tracking-widest">Max Page Loads</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={newPolicy.max_page_loads}
+                            onChange={(e) => setNewPolicy(p => ({ ...p, max_page_loads: Math.max(0, parseInt(e.target.value) || 0) }))}
+                            className="w-16 bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] text-center focus:border-[#06b6d4] transition-colors outline-none"
+                            placeholder="0"
+                          />
+                        </div>
+                        <p className="text-[7px] text-[#555] pl-3">0 = unlimited navigations</p>
+                      </div>
+                    )}
                   </div>
                   <div className="px-5 py-3 border-t border-[#1a2040] flex items-center justify-end gap-2">
                     <button
@@ -516,6 +693,114 @@ export function Mado() {
                     >
                       {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                       Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Edit Policy Modal */}
+            {editPolicySession && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="bg-[#0e1225] border border-[#1a2040] rounded-2xl w-[440px] shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+                  <div className="p-5 border-b border-[#1a2040] flex items-center gap-3">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ background: `${ACCENT}15`, border: `1px solid ${ACCENT}30` }}
+                    >
+                      <Shield className="w-4 h-4" style={{ color: ACCENT }} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#c8d0d8]">Security Policy</h3>
+                      <p className="text-[9px] text-[#555]">{editPolicySession.name}</p>
+                    </div>
+                  </div>
+                  <div className="p-5 space-y-3 overflow-y-auto">
+                    {/* HTTPS Only */}
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">HTTPS Only</label>
+                      <button
+                        type="button"
+                        onClick={() => setEditPolicy(p => ({ ...p, https_only: !p.https_only }))}
+                        className={cn(
+                          "w-8 h-4 rounded-full transition-colors cursor-pointer relative",
+                          editPolicy.https_only ? "bg-[#06b6d4]" : "bg-[#1a2040]"
+                        )}
+                      >
+                        <span className={cn(
+                          "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform",
+                          editPolicy.https_only ? "translate-x-4" : "translate-x-0.5"
+                        )} />
+                      </button>
+                    </div>
+
+                    {/* Tri-state dropdowns */}
+                    {([
+                      ['downloads', 'Downloads'] as const,
+                      ['uploads', 'Uploads'] as const,
+                      ['form_submit', 'Form Submission'] as const,
+                    ] as const).map(([key, label]) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">{label}</label>
+                        <select
+                          value={editPolicy[key]}
+                          onChange={(e) => setEditPolicy(p => ({ ...p, [key]: e.target.value }))}
+                          className="bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+                        >
+                          <option value="allowed">✅ Allowed</option>
+                          <option value="blocked">🚫 Blocked</option>
+                          <option value="approval_required">⏳ Approval Required</option>
+                        </select>
+                      </div>
+                    ))}
+
+                    {/* Binary toggles */}
+                    {([
+                      ['external_navigation', 'External Navigation'] as const,
+                      ['js_execution', 'JS Execution'] as const,
+                    ] as const).map(([key, label]) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">{label}</label>
+                        <select
+                          value={editPolicy[key]}
+                          onChange={(e) => setEditPolicy(p => ({ ...p, [key]: e.target.value }))}
+                          className="bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] focus:border-[#06b6d4] transition-colors outline-none cursor-pointer"
+                        >
+                          <option value="allowed">✅ Allowed</option>
+                          <option value="blocked">🚫 Blocked</option>
+                        </select>
+                      </div>
+                    ))}
+
+                    {/* Max Page Loads */}
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Max Page Loads</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editPolicy.max_page_loads}
+                        onChange={(e) => setEditPolicy(p => ({ ...p, max_page_loads: Math.max(0, parseInt(e.target.value) || 0) }))}
+                        className="w-16 bg-[#0a0e1a] border border-[#1a2040] rounded-md px-2 py-1 text-[9px] text-[#c8d0d8] text-center focus:border-[#06b6d4] transition-colors outline-none"
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-[7px] text-[#555]">0 = unlimited navigations</p>
+                  </div>
+                  <div className="px-5 py-3 border-t border-[#1a2040] flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => setEditPolicySession(null)}
+                      className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#7a8899] hover:text-[#c8d0d8] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={savePolicy}
+                      disabled={savingPolicy}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40"
+                      style={{ background: ACCENT, color: '#0a0e1a' }}
+                    >
+                      {savingPolicy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3 h-3" />}
+                      Save Policy
                     </button>
                   </div>
                 </div>

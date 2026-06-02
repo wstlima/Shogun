@@ -46,6 +46,17 @@ class MadoSession(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     # Session metadata (cookies count, storage size, page title, etc.)
     session_data: Mapped[dict] = mapped_column(JSONType(), nullable=False, default=dict)
 
+    # Per-session security policy (overrides are additive to Torii posture)
+    security_policy: Mapped[dict] = mapped_column(JSONType(), nullable=False, default=lambda: {
+        "https_only": False,
+        "downloads": "allowed",
+        "uploads": "allowed",
+        "form_submit": "allowed",
+        "external_navigation": "allowed",
+        "js_execution": "allowed",
+        "max_page_loads": 0,
+    })
+
     # Last browser activity timestamp
     last_active_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None,
