@@ -728,7 +728,7 @@ export function Guide() {
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" /> Security Integration</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado respects the Torii security posture. Browser automation must be explicitly enabled in the agent's permission set. In <strong>SHRINE</strong> and <strong>GUARDED</strong> tiers, Mado is disabled entirely. In <strong>TACTICAL</strong> and above, it can be toggled on per-policy.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Mado respects the Torii security posture. Browser automation must be explicitly enabled in the agent's permission set. In <strong>SHRINE</strong> tier, Mado is disabled entirely. In <strong>GUARDED</strong>, it's limited to 1 session with no downloads or uploads. In <strong>TACTICAL</strong> and above, full Mado features are available.</p>
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" /> Session Management</div>
@@ -754,7 +754,7 @@ export function Guide() {
                          <li>Click it. The system will download and install Playwright + Chromium (1–2 minutes depending on connection).</li>
                          <li>Once complete, the badge changes to a green <strong>"Chromium Ready"</strong> indicator with the version number.</li>
                       </ol>
-                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Security Note:</strong> Mado must be enabled in your Torii security posture. At <strong>SHRINE</strong> and <strong>GUARDED</strong> tiers, Mado is completely disabled. You need at least <strong>TACTICAL</strong> (headless only) or higher.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Security Note:</strong> Mado must be enabled in your Torii security posture. At <strong>SHRINE</strong> tier, Mado is completely disabled. <strong>GUARDED</strong> allows 1 session with no downloads/uploads. You need at least <strong>TACTICAL</strong> (headless only) for full Mado features.</p>
                    </div>
 
                    {/* Step 2: Create a Session */}
@@ -813,7 +813,7 @@ export function Guide() {
                          <li>Select a session from the <strong>Active Session</strong> dropdown.</li>
                          <li>Enter a URL in the <strong>Navigate to URL</strong> field and click <strong>Go</strong>. The result shows the page title and final URL.</li>
                          <li>Click <strong>Screenshot</strong> to capture the current page — it's saved to the Screenshots gallery instantly.</li>
-                         <li>Click <strong>Extract Text</strong> to pull the full page content as readable text. The result appears in the output panel below (up to 3,000 chars).</li>
+                         <li>Click <strong>Extract Text</strong> to pull the full page content as readable text. The result appears in the output panel below.</li>
                       </ol>
                       <p className="text-xs text-shogun-subdued leading-relaxed mt-1"><strong>Best for:</strong> Quick manual inspections, testing whether a URL loads correctly before automating it, or grabbing content from a specific page without typing a full chat prompt.</p>
                    </div>
@@ -845,8 +845,8 @@ export function Guide() {
                          <li><strong>Click elements:</strong> Click any element by CSS selector — buttons, links, menu items.</li>
                          <li><strong>Wait for elements:</strong> Pause until a specific CSS selector appears on the page (with configurable timeout).</li>
                          <li><strong>Execute JavaScript:</strong> Run custom JS scripts on the page for advanced extraction or interaction.</li>
-                         <li><strong>Upload files:</strong> Upload a local file to a file input element (requires CAMPAIGN tier or higher).</li>
-                         <li><strong>Download files:</strong> Capture a triggered download and save it locally (requires CAMPAIGN tier or higher).</li>
+                         <li><strong>Upload files:</strong> Upload a local file to a file input element (requires TACTICAL tier or higher).</li>
+                         <li><strong>Download files:</strong> Capture a triggered download and save it locally (requires TACTICAL tier or higher).</li>
                       </ul>
                       <p className="text-xs text-shogun-subdued leading-relaxed mt-1">These actions are available through the REST API at <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/api/v1/mado/sessions/{'{'}session_id{'}'}/fill-form</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/click</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/wait</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/execute-js</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/upload</code>, and <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">/download</code>.</p>
                    </div>
@@ -899,7 +899,7 @@ export function Guide() {
                    <div className="shogun-card space-y-3 border-l-2 border-red-400/40">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><span className="text-red-400 font-mono text-sm">⚠</span> Troubleshooting</div>
                       <ul className="text-xs text-shogun-subdued space-y-2 ml-4 list-disc">
-                         <li><strong>"Browser automation is disabled"</strong> — Your Torii security tier doesn't allow Mado. Go to <strong>Torii → Security Posture</strong> and switch to TACTICAL or higher.</li>
+                         <li><strong>"Browser automation is disabled"</strong> — Your Torii security tier doesn't allow Mado. Go to <strong>Torii → Security Posture</strong> and switch to GUARDED or higher (GUARDED allows 1 session; TACTICAL+ enables full features).</li>
                          <li><strong>"Domain not in allowlist"</strong> — Your session or security policy has a domain allowlist that doesn't include the URL you're trying to visit. Edit the session's domain allowlist or update the policy in Torii.</li>
                          <li><strong>"No active browser session"</strong> — For chat skills (<code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">take_screenshot</code>), you must first use <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">browse_web</code> to navigate to a page.</li>
                          <li><strong>Chromium not installed</strong> — Click "Install Chromium" on the Mado page. Requires internet access for the initial download (~200 MB).</li>
