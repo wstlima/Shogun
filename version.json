@@ -1,8 +1,8 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.2",
   "name": "Shogun OS",
-  "build": 26,
+  "build": 27,
   "channel": "stable",
-  "released": "2026-06-01T11:52:00Z",
-  "changelog": "Fix auto-mode chat classifier: add missing mission keywords ('check', 'find', TLD fragments like '.com'/'.org', URL prefixes, and live-data words 'weather'/'latest'/'news'/'stock') so queries referencing websites or real-time data correctly route to Mission Mode instead of falling through to Fast Chat."
+  "released": "2026-06-03T11:42:00Z",
+  "changelog": "Fix AgentFlow Run History panel: panel was clipped by overflow-hidden ancestors making close button invisible and content cut off. Rendered via React Portal into dedicated #portal-root element to escape all CSS containment. Also changed API_PORT from 8888 to 8000 to avoid conflict with Unsloth Studio."
 }

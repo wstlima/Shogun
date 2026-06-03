@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import type { DragEvent } from 'react';
 import {
   ReactFlow,
@@ -1728,7 +1729,7 @@ function AgentFlowCanvas({
   const inspectorNode = selectedNode ? nodes.find((n) => n.id === selectedNode.id) || selectedNode : null;
 
   return (
-    <div className="flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040]">
+    <div className="relative flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040]">
       {/* Canvas */}
       <div className="flex-1 flex flex-col bg-[#060810]">
         {/* Toolbar */}
@@ -1968,79 +1969,111 @@ function AgentFlowCanvas({
         />
       )}
 
-      {/* Run History Panel */}
-      {showHistory && (
-        <div className="w-[320px] bg-[#0a0e1a] border-l border-[#1a2040] flex flex-col shrink-0">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a2040]">
-            <div className="flex items-center gap-2">
-              <History className="w-4 h-4 text-[#4a8cc7]" />
-              <h3 className="text-xs font-bold text-[#c8d0d8] uppercase tracking-wider">Run History</h3>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={fetchHistory}
-                className="p-1 hover:bg-[#1a2040] text-[#7a8899] hover:text-[#c8d0d8] rounded transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="p-1 hover:bg-[#1a2040] text-[#7a8899] hover:text-[#c8d0d8] rounded transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {runHistory.length === 0 && (
-              <div className="text-center py-8">
-                <Clock className="w-8 h-8 text-[#7a8899]/30 mx-auto mb-2" />
-                <p className="text-[10px] text-[#7a8899]/50">No runs yet</p>
+      {/* Run History Panel — rendered into #portal-root (outside React #root) */}
+      {showHistory && createPortal(
+        <>
+          {/* Backdrop — click to close */}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99998,
+              backgroundColor: 'rgba(0,0,0,0.2)',
+              pointerEvents: 'auto',
+            }}
+            onClick={() => setShowHistory(false)}
+          />
+          {/* Panel */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              width: 320,
+              height: '100vh',
+              zIndex: 99999,
+              backgroundColor: '#0a0e1a',
+              borderLeft: '1px solid #1a2040',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-8px 0 32px rgba(0,0,0,0.5)',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a2040] shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <History className="w-4 h-4 text-[#4a8cc7] shrink-0" />
+                <h3 className="text-xs font-bold text-[#c8d0d8] uppercase tracking-wider">Run History</h3>
               </div>
-            )}
-            {runHistory.map((run: any) => (
-              <div
-                key={run.id}
-                className="p-3 bg-[#0e1225] border border-[#1a2040] rounded-lg hover:border-[#2a3060] transition-colors"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {run.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-[#22c55e]" />}
-                    {run.status === 'failed' && <XCircle className="w-3.5 h-3.5 text-[#ef4444]" />}
-                    {run.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-[#4a8cc7] animate-spin" />}
-                    {run.status === 'cancelled' && <StopCircle className="w-3.5 h-3.5 text-[#7a8899]" />}
-                    {run.status === 'pending' && <Clock className="w-3.5 h-3.5 text-[#d4a017]" />}
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase",
-                      run.status === 'completed' ? "text-[#22c55e]" :
-                      run.status === 'failed' ? "text-[#ef4444]" :
-                      run.status === 'running' ? "text-[#4a8cc7]" :
-                      "text-[#7a8899]"
-                    )}>
-                      {run.status}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={fetchHistory}
+                  className="p-1.5 hover:bg-[#1a2040] text-[#7a8899] hover:text-[#c8d0d8] rounded-lg transition-colors"
+                  title="Refresh history"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="p-1.5 hover:bg-[#ef4444]/20 text-[#7a8899] hover:text-[#ef4444] rounded-lg transition-colors"
+                  title="Close history"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {runHistory.length === 0 && (
+                <div className="text-center py-8">
+                  <Clock className="w-8 h-8 text-[#7a8899]/30 mx-auto mb-2" />
+                  <p className="text-[10px] text-[#7a8899]/50">No runs yet</p>
+                </div>
+              )}
+              {runHistory.map((run: any) => (
+                <div
+                  key={run.id}
+                  className="p-3 bg-[#0e1225] border border-[#1a2040] rounded-lg hover:border-[#2a3060] transition-colors overflow-hidden"
+                >
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {run.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />}
+                      {run.status === 'failed' && <XCircle className="w-3.5 h-3.5 text-[#ef4444] shrink-0" />}
+                      {run.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-[#4a8cc7] animate-spin shrink-0" />}
+                      {run.status === 'cancelled' && <StopCircle className="w-3.5 h-3.5 text-[#7a8899] shrink-0" />}
+                      {run.status === 'pending' && <Clock className="w-3.5 h-3.5 text-[#d4a017] shrink-0" />}
+                      <span className={cn(
+                        "text-[10px] font-bold uppercase",
+                        run.status === 'completed' ? "text-[#22c55e]" :
+                        run.status === 'failed' ? "text-[#ef4444]" :
+                        run.status === 'running' ? "text-[#4a8cc7]" :
+                        "text-[#7a8899]"
+                      )}>
+                        {run.status}
+                      </span>
+                    </div>
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#7a8899]/60 bg-[#7a8899]/10 px-1.5 py-0.5 rounded shrink-0 truncate max-w-[80px]">
+                      {run.trigger_type}
                     </span>
                   </div>
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-[#7a8899]/60 bg-[#7a8899]/10 px-1.5 py-0.5 rounded">
-                    {run.trigger_type}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[9px] text-[#7a8899]">
-                  <span>{run.created_at ? new Date(run.created_at).toLocaleString() : '-'}</span>
-                  {run.started_at && run.completed_at && (
-                    <span className="text-[#d4a017]/70">
-                      {((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000).toFixed(1)}s
-                    </span>
+                  <div className="flex items-center justify-between text-[9px] text-[#7a8899]">
+                    <span>{run.created_at ? new Date(run.created_at).toLocaleString() : '-'}</span>
+                    {run.started_at && run.completed_at && (
+                      <span className="text-[#d4a017]/70">
+                        {((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000).toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+                  {run.error_message && (
+                    <p className="mt-1.5 text-[9px] text-[#ef4444]/80 line-clamp-2 bg-[#ef4444]/5 rounded p-1.5">
+                      {run.error_message}
+                    </p>
                   )}
                 </div>
-                {run.error_message && (
-                  <p className="mt-1.5 text-[9px] text-[#ef4444]/80 line-clamp-2 bg-[#ef4444]/5 rounded p-1.5">
-                    {run.error_message}
-                  </p>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </>,
+        document.getElementById('portal-root')!
       )}
     </div>
   );
