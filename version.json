@@ -1,8 +1,8 @@
 {
-  "version": "1.4.2",
+  "version": "1.4.3",
   "name": "Shogun OS",
-  "build": 27,
+  "build": 28,
   "channel": "stable",
-  "released": "2026-06-03T11:42:00Z",
-  "changelog": "Fix AgentFlow Run History panel: panel was clipped by overflow-hidden ancestors making close button invisible and content cut off. Rendered via React Portal into dedicated #portal-root element to escape all CSS containment. Also changed API_PORT from 8888 to 8000 to avoid conflict with Unsloth Studio."
+  "released": "2026-06-04T18:40:00Z",
+  "changelog": "Fix Dashboard security posture showing hardcoded GUARDED instead of actual active tier. Security Posture card color now matches Torii tier colors (gold/green/blue/orange/red). Added profile picture support to Samurai agents — avatar upload in Deploy and Configure modals, avatar display in fleet table."
 }

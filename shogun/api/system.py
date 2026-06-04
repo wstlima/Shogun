@@ -112,8 +112,10 @@ async def get_overview(
 
     # 3. Fetch Security and Health Status
     qdrant_status = await _check_qdrant()
-    # This assumes we have a way to find the active policy. For now, default to Guarded.
-    security_tier = "guarded"
+    # Read the actual persisted security posture
+    from shogun.api.security import _get_agent_posture
+    posture = await _get_agent_posture()
+    security_tier = posture.get("active_tier", "tactical")
 
     return ApiResponse(
         success=True,
