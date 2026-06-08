@@ -216,6 +216,12 @@ def create_app() -> FastAPI:
     if uploads_path.exists():
         app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
+    # Static serving for Mado screenshots
+    mado_screenshots_path = Path(settings.workspace_path) / "mado" / "screenshots"
+    if not mado_screenshots_path.exists():
+        mado_screenshots_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/mado/screenshots", StaticFiles(directory=str(mado_screenshots_path)), name="mado_screenshots")
+
     # Static file serving for React frontend (anchored to PROJECT_ROOT)
     frontend_path = PROJECT_ROOT / "frontend" / "dist"
     if frontend_path.exists():

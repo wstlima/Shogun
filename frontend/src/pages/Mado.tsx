@@ -980,8 +980,17 @@ export function Mado() {
                     key={ss.filename}
                     className="bg-[#0e1225] border border-[#1a2040] rounded-xl overflow-hidden group hover:border-[#2a3060] transition-all"
                   >
-                    <div className="aspect-video bg-[#080b15] flex items-center justify-center">
-                      <Image className="w-8 h-8" style={{ color: `${ACCENT}30` }} />
+                    <div className="aspect-video bg-[#080b15] flex items-center justify-center relative overflow-hidden group/img">
+                      <img
+                        src={`/mado/screenshots/${ss.filename}`}
+                        alt={ss.filename}
+                        className="w-full h-full object-cover opacity-80 group-hover/img:opacity-100 transition-opacity"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement?.querySelector('svg')?.style.setProperty('display', 'block');
+                        }}
+                      />
+                      <Image className="w-8 h-8 absolute hidden" style={{ color: `${ACCENT}30` }} />
                     </div>
                     <div className="p-3 space-y-1">
                       <p className="text-[10px] font-bold text-[#c8d0d8] truncate">{ss.filename}</p>
