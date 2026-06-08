@@ -61,7 +61,7 @@ class MadoSessionService(BaseService[MadoSession]):
         for key, value in extra.items():
             if hasattr(record, key) and value is not None:
                 setattr(record, key, value)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(record)
         return record
 

@@ -17,6 +17,10 @@ import {
   FileText,
   Settings2,
   Shield,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -119,6 +123,9 @@ export function Mado() {
   const [editPolicySession, setEditPolicySession] = useState<MadoSession | null>(null);
   const [editPolicy, setEditPolicy] = useState<SecurityPolicy>({ ...DEFAULT_POLICY });
   const [savingPolicy, setSavingPolicy] = useState(false);
+
+  // Screenshot lightbox
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   // Quick action state
   const [quickUrl, setQuickUrl] = useState('');
@@ -974,23 +981,26 @@ export function Mado() {
                 <p className="text-xs text-[#555]">Take a screenshot from Quick Actions or Agent Flow</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
-                {screenshots.map((ss) => (
-                  <div
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {screenshots.map((ss, idx) => (
+                  <button
                     key={ss.filename}
-                    className="bg-[#0e1225] border border-[#1a2040] rounded-xl overflow-hidden group hover:border-[#2a3060] transition-all"
+                    onClick={() => setLightboxIndex(idx)}
+                    className="bg-[#0e1225] border border-[#1a2040] rounded-xl overflow-hidden group hover:border-[#06b6d4]/40 transition-all duration-200 text-left cursor-pointer hover:shadow-lg hover:shadow-[#06b6d4]/5"
                   >
-                    <div className="aspect-video bg-[#080b15] flex items-center justify-center relative overflow-hidden group/img">
+                    <div className="aspect-video bg-[#080b15] relative overflow-hidden">
                       <img
                         src={`/mado/screenshots/${ss.filename}`}
                         alt={ss.filename}
-                        className="w-full h-full object-cover opacity-80 group-hover/img:opacity-100 transition-opacity"
+                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300"
                         onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement?.querySelector('svg')?.style.setProperty('display', 'block');
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
                         }}
                       />
-                      <Image className="w-8 h-8 absolute hidden" style={{ color: `${ACCENT}30` }} />
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-center justify-center">
+                        <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 drop-shadow-lg" />
+                      </div>
                     </div>
                     <div className="p-3 space-y-1">
                       <p className="text-[10px] font-bold text-[#c8d0d8] truncate">{ss.filename}</p>
@@ -1003,8 +1013,71 @@ export function Mado() {
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
+              </div>
+            )}
+
+            {/* ── Lightbox Modal ────────────────────────────────── */}
+            {lightboxIndex !== null && screenshots[lightboxIndex] && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                onClick={() => setLightboxIndex(null)}
+              >
+                {/* Close button */}
+                <button
+                  onClick={() => setLightboxIndex(null)}
+                  className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white/80 hover:text-white transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                {/* Previous button */}
+                {lightboxIndex > 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex - 1); }}
+                    className="absolute left-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white/80 hover:text-white transition-all cursor-pointer"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                )}
+
+                {/* Next button */}
+                {lightboxIndex < screenshots.length - 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1); }}
+                    className="absolute right-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white/80 hover:text-white transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                )}
+
+                {/* Image */}
+                <div
+                  className="max-w-[90vw] max-h-[85vh] relative"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <img
+                    src={`/mado/screenshots/${screenshots[lightboxIndex].filename}`}
+                    alt={screenshots[lightboxIndex].filename}
+                    className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                  />
+                  {/* Caption bar */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent rounded-b-lg px-4 py-3">
+                    <p className="text-xs font-bold text-white truncate">{screenshots[lightboxIndex].filename}</p>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-[9px] text-white/60">
+                        {(screenshots[lightboxIndex].size_bytes / 1024).toFixed(1)} KB
+                      </span>
+                      <span className="text-[9px] text-white/60">
+                        {new Date(screenshots[lightboxIndex].created_at).toLocaleString()}
+                      </span>
+                      <span className="text-[9px] text-white/40">
+                        {lightboxIndex + 1} / {screenshots.length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
