@@ -287,6 +287,208 @@ def _get_page(session_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# COOKIE / GDPR CONSENT AUTO-DISMISS
+# ═══════════════════════════════════════════════════════════════
+
+# Comprehensive list of selectors for cookie consent "accept" buttons.
+# Ordered from most specific (platform IDs) to generic (text matching).
+_CONSENT_SELECTORS: list[str] = [
+    # ── Google / YouTube consent ──
+    "#L2AGLb",                                          # Google "Accept all" button
+    "button[aria-label*='Accept all']",
+    "form[action*='consent'] button",
+
+    # ── Cookiebot (very common in Scandinavia / EU) ──
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "#CybotCookiebotDialogBodyButtonAccept",
+    "#CybotCookiebotDialogBodyLevelButtonAccept",
+    "a#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+
+    # ── OneTrust (enterprise-grade CMP) ──
+    "#onetrust-accept-btn-handler",
+    ".onetrust-accept-btn-handler",
+    "button[id*='onetrust-accept']",
+
+    # ── Didomi ──
+    "#didomi-notice-agree-button",
+    "button[class*='didomi-agree']",
+
+    # ── Quantcast / TCF ──
+    ".qc-cmp2-summary-buttons button[mode='primary']",
+    "button.qc-cmp-button",
+    "#qc-cmp2-ui button[mode='primary']",
+
+    # ── TrustArc / TrustE ──
+    ".trustarc-agree-btn",
+    "#truste-consent-button",
+    "a.call",                                           # TrustArc "Agree" link
+
+    # ── Klaro consent manager ──
+    "button.cm-btn-accept",
+    ".klaro .cm-btn-accept-all",
+
+    # ── Borlabs Cookie (WordPress) ──
+    "#BorlabsCookieBox a[data-cookie-accept-all]",
+    "a._brlbs-btn-accept-all",
+
+    # ── Generic EU cookie banners (text-based matching, multi-language) ──
+    # English
+    "button:has-text('Accept all')",
+    "button:has-text('Accept All')",
+    "button:has-text('Accept cookies')",
+    "button:has-text('Accept Cookies')",
+    "button:has-text('Allow all')",
+    "button:has-text('Allow All')",
+    "button:has-text('I agree')",
+    "button:has-text('I Accept')",
+    "button:has-text('Got it')",
+    "button:has-text('OK')",
+    "a:has-text('Accept all')",
+    "a:has-text('Accept cookies')",
+
+    # Danish (eb.dk, jp.dk, dr.dk, bt.dk, etc.)
+    "button:has-text('Acceptér alle')",
+    "button:has-text('Accepter alle')",
+    "button:has-text('Acceptér')",
+    "button:has-text('Accepter')",
+    "button:has-text('Tillad alle')",
+    "button:has-text('Tillad')",
+    "button:has-text('Godkend alle')",
+    "button:has-text('Godkend')",
+    "a:has-text('Acceptér alle')",
+    "a:has-text('Accepter alle')",
+
+    # German
+    "button:has-text('Alle akzeptieren')",
+    "button:has-text('Akzeptieren')",
+    "button:has-text('Alle zulassen')",
+    "button:has-text('Zustimmen')",
+
+    # French
+    "button:has-text('Tout accepter')",
+    "button:has-text('Accepter tout')",
+    "button:has-text('J\\'accepte')",
+    "button:has-text('Accepter')",
+
+    # Spanish
+    "button:has-text('Aceptar todo')",
+    "button:has-text('Aceptar todas')",
+    "button:has-text('Aceptar')",
+
+    # Italian
+    "button:has-text('Accetta tutto')",
+    "button:has-text('Accetta tutti')",
+    "button:has-text('Accetto')",
+
+    # Dutch
+    "button:has-text('Alles accepteren')",
+    "button:has-text('Accepteren')",
+    "button:has-text('Alle toestaan')",
+
+    # Norwegian / Swedish
+    "button:has-text('Godta alle')",
+    "button:has-text('Aksepter alle')",
+    "button:has-text('Acceptera alla')",
+    "button:has-text('Godkänn alla')",
+
+    # Portuguese
+    "button:has-text('Aceitar tudo')",
+    "button:has-text('Aceitar todos')",
+
+    # Polish
+    "button:has-text('Zaakceptuj wszystkie')",
+    "button:has-text('Akceptuję')",
+
+    # ── Generic fallback: aria-label / data attributes ──
+    "button[aria-label*='accept']",
+    "button[aria-label*='Accept']",
+    "button[aria-label*='cookie']",
+    "button[data-testid*='accept']",
+    "button[data-action='accept']",
+    "[data-cookiefirst-action='accept']",
+    "[data-gdpr='accept']",
+]
+
+
+def _auto_dismiss_consent(page: Any, timeout_ms: int = 3000) -> bool:
+    """Try to find and click a cookie consent "Accept" button on the page.
+
+    Works on both the main frame and inside iframes (many CMPs use an iframe).
+    Returns True if a consent button was clicked, False otherwise.
+    """
+    import time
+
+    # Short wait for consent banners to render (they often load async)
+    try:
+        page.wait_for_timeout(800)
+    except Exception:
+        pass
+
+    # ── Pass 1: try selectors on the main page ──
+    if _try_consent_selectors(page, "main page"):
+        return True
+
+    # ── Pass 2: try inside iframes (Cookiebot, OneTrust, etc.) ──
+    try:
+        frames = page.frames
+        for frame in frames:
+            if frame == page.main_frame:
+                continue
+            frame_url = frame.url or ""
+            # Only check frames that look like consent managers
+            consent_hints = [
+                "consent", "cookie", "gdpr", "privacy", "cmp",
+                "onetrust", "cookiebot", "didomi", "quantcast",
+                "trustarc", "klaro", "borlabs",
+            ]
+            if any(h in frame_url.lower() for h in consent_hints):
+                if _try_consent_selectors(frame, f"iframe ({frame_url[:60]})"):
+                    return True
+    except Exception as exc:
+        log.debug("Mado: iframe consent check error: %s", exc)
+
+    # ── Pass 3: JavaScript-based CMP API calls (Cookiebot, TCF) ──
+    try:
+        # Cookiebot JS API
+        result = page.evaluate("""() => {
+            if (typeof Cookiebot !== 'undefined' && Cookiebot.consent) {
+                Cookiebot.submitCustomConsent(true, true, true);
+                return 'cookiebot';
+            }
+            if (typeof __tcfapi !== 'undefined') {
+                __tcfapi('setConsent', 2, () => {}, {purpose: {consents: true}});
+                return 'tcf';
+            }
+            return null;
+        }""")
+        if result:
+            log.info("Mado: Consent accepted via JS API (%s)", result)
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _try_consent_selectors(frame: Any, label: str) -> bool:
+    """Try each consent selector on a frame/page. Returns True on first click."""
+    for selector in _CONSENT_SELECTORS:
+        try:
+            btn = frame.query_selector(selector)
+            if btn and btn.is_visible():
+                btn.click()
+                log.info("Mado: Cookie consent accepted on %s via '%s'", label, selector)
+                try:
+                    frame.wait_for_timeout(500)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            continue
+    return False
+
+
+# ═══════════════════════════════════════════════════════════════
 # BROWSER ACTIONS
 # ═══════════════════════════════════════════════════════════════
 
@@ -317,27 +519,10 @@ async def navigate(
         response = page.goto(url, wait_until=wait_until, timeout=30000)
         status_code = response.status if response else None
 
-        # Auto-handle Google/EU cookie consent walls
-        current_url = page.url
-        if "consent.google" in current_url or "consent.youtube" in current_url:
-            log.info("Mado: Consent wall detected at %s — auto-accepting", current_url)
-            try:
-                # Try various consent button selectors
-                for btn_selector in [
-                    "button[aria-label*='Accept']",
-                    "button:has-text('Accept all')",
-                    "button:has-text('I agree')",
-                    "form[action*='consent'] button",
-                    "#L2AGLb",  # Google's "Accept all" button ID
-                ]:
-                    btn = page.query_selector(btn_selector)
-                    if btn:
-                        btn.click()
-                        page.wait_for_load_state("domcontentloaded", timeout=15000)
-                        log.info("Mado: Consent accepted, now at %s", page.url)
-                        break
-            except Exception as consent_exc:
-                log.warning("Mado: Could not auto-accept consent: %s", consent_exc)
+        # ── Auto-dismiss cookie / GDPR consent popups ────────────
+        # Handles: Google, Cookiebot, OneTrust, Didomi, Quantcast,
+        #          TrustArc, generic EU cookie banners, iframed CMPs
+        _auto_dismiss_consent(page)
 
         title = page.title()
         return {"url": page.url, "title": title, "status_code": status_code}
