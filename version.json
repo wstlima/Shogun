@@ -1,8 +1,8 @@
 {
-  "version": "1.4.3",
+  "version": "1.4.4",
   "name": "Shogun OS",
-  "build": 28,
+  "build": 29,
   "channel": "stable",
-  "released": "2026-06-04T18:40:00Z",
-  "changelog": "Fix Dashboard security posture showing hardcoded GUARDED instead of actual active tier. Security Posture card color now matches Torii tier colors (gold/green/blue/orange/red). Added profile picture support to Samurai agents — avatar upload in Deploy and Configure modals, avatar display in fleet table."
+  "released": "2026-06-08T08:40:00Z",
+  "changelog": "Fixed Mado session creation by adding missing Alembic migration for the security_policy column."
 }
