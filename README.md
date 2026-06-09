@@ -80,9 +80,18 @@ When you move beyond a single Shogun instance, **Gensui** becomes your command-a
 | 📋 **Centralized Audit Log** | Tamper-proof HMAC-chained audit trail across all managed agents. NIS2/SOC2/EU AI Act compliant. |
 | 🔒 **Admin Authentication** | JWT-based admin portal with role-based access control (Owner, Admin, Viewer). |
 
-### Deployment Options
+### Install Gensui (One Click)
 
-Gensui runs independently from Shogun instances and can be deployed three ways:
+Download **one file** for your platform, double-click it, and you're done:
+
+| Platform | Download | Instructions |
+|----------|----------|-------------|
+| **🪟 Windows** | [⬇️ **Gensui-Install.bat**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Install.bat) | **Click to download** → Double-click the file |
+| **🍎 macOS** | [⬇️ **Gensui-Install.command**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Install.command) | **Click to download** → Double-click the file |
+
+### Deployment Options (Advanced)
+
+Gensui runs independently from Shogun instances and can also be deployed via Docker:
 
 | Deployment | Command | Best For |
 |---|---|---|
@@ -332,4 +341,4 @@ No Docker, no external services. SQLite + Qdrant embedded handles everything loc
 
 ## License
 
-Proprietary — [AlphaHorizon AI](https://github.com/AlphaHorizon-AI)
+[Proprietary](LICENSE.md) — [AlphaHorizon AI](https://github.com/AlphaHorizon-AI)
