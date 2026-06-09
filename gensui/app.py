@@ -1,0 +1,130 @@
+"""FastAPI application factory for Gensui server."""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from gensui.config import gensui_settings, GENSUI_ROOT
+
+log = logging.getLogger("gensui")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan — startup and shutdown hooks."""
+    # ── Startup ──────────────────────────────────────────────
+    gensui_settings.ensure_directories()
+
+    # Create all tables
+    from gensui.db.engine import engine
+    from gensui.db.base import Base
+    import gensui.db.models  # noqa: F401 — register models
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Seed built-in postures and initial admin
+    from gensui.db.engine import async_session_factory
+    from gensui.services.seed import seed_database
+
+    async with async_session_factory() as session:
+        await seed_database(session)
+
+    log.info("Gensui server started on port %d", gensui_settings.gensui_server_port)
+
+    yield
+
+    # ── Shutdown ─────────────────────────────────────────────
+    from gensui.db.engine import engine as _engine
+    await _engine.dispose()
+    log.info("Gensui server shut down")
+
+
+def create_app() -> FastAPI:
+    """Build and configure the Gensui FastAPI application."""
+    app = FastAPI(
+        title="Gensui",
+        description="Central Command & Security Control Plane for Shogun",
+        version="0.1.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        lifespan=lifespan,
+    )
+
+    # CORS — allow admin UI connections
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # ── Register API Routers ─────────────────────────────────
+    from gensui.api.auth import router as auth_router
+    from gensui.api.enrollment import router as enrollment_router
+    from gensui.api.heartbeat import router as heartbeat_router
+    from gensui.api.telemetry import router as telemetry_router
+    from gensui.api.policy import router as policy_router
+    from gensui.api.commands import router as commands_router
+    from gensui.api.harakiri import router as harakiri_router
+    from gensui.api.members import router as members_router
+    from gensui.api.postures import router as postures_router
+    from gensui.api.audit import router as audit_router
+    from gensui.api.alerts import router as alerts_router
+    from gensui.api.dashboard import router as dashboard_router
+    from gensui.api.monitoring import router as monitoring_router
+
+    prefix = "/api/gensui"
+    app.include_router(auth_router, prefix=prefix)
+    app.include_router(enrollment_router, prefix=prefix)
+    app.include_router(heartbeat_router, prefix=prefix)
+    app.include_router(telemetry_router, prefix=prefix)
+    app.include_router(policy_router, prefix=prefix)
+    app.include_router(commands_router, prefix=prefix)
+    app.include_router(harakiri_router, prefix=prefix)
+    app.include_router(members_router, prefix=prefix)
+    app.include_router(postures_router, prefix=prefix)
+    app.include_router(audit_router, prefix=prefix)
+    app.include_router(alerts_router, prefix=prefix)
+    app.include_router(dashboard_router, prefix=prefix)
+    app.include_router(monitoring_router, prefix=prefix)
+
+    # ── Health Check ─────────────────────────────────────────
+    @app.get("/api/gensui/health")
+    async def health_check():
+        return {"status": "ok", "service": "gensui", "version": "0.1.0"}
+
+    # ── Serve Frontend (production) ──────────────────────────
+    frontend_dist = GENSUI_ROOT / "frontend" / "dist"
+    if frontend_dist.exists():
+        # Serve /assets/* static files
+        assets_path = frontend_dist / "assets"
+        if assets_path.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_path)), name="static")
+
+        # Explicit root route
+        @app.get("/")
+        async def serve_root():
+            return FileResponse(str(frontend_dist / "index.html"))
+
+        # Catch-all for SPA routing — must NOT match /api, /docs, /redoc
+        @app.get("/{full_path:path}")
+        async def serve_frontend(full_path: str):
+            if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("redoc") or full_path.startswith("openapi"):
+                raise HTTPException(status_code=404)
+            # Serve actual file if it exists (favicon.svg, logo.png, etc.)
+            target = frontend_dist / full_path
+            if full_path and target.is_file():
+                return FileResponse(target)
+            # Otherwise serve index.html (SPA client-side routing)
+            return FileResponse(str(frontend_dist / "index.html"))
+
+    return app
