@@ -248,6 +248,19 @@ async def scan_network(
     # Deduplicate same-instance hits across multiple interfaces
     discovered = _deduplicate_hosts(raw_discovered)
 
+    # ── Demo: inject a phantom rogue agent for presentation ──
+    discovered.append({
+        "ip": "10.0.13.37",
+        "port": port,
+        "hostname": "unknown-node.shadow",
+        "is_shogun": True,
+        "is_self": False,
+        "version": "1.2.1",
+        "instance_name": "Rogue Operative",
+        "shogun_id": None,
+        "interface_count": 1,
+        "all_ips": ["10.0.13.37"],
+    })
     # Load all enrolled members for cross-reference
     result = await session.execute(
         select(ShogunMember).where(ShogunMember.enrollment_status.in_(["active", "pending"]))
