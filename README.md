@@ -5,8 +5,7 @@
 <h1 align="center">🏯 Shogun AFM — Your AI Command Center</h1>
 
 <p align="center">
-  <strong>The open AI agent framework that runs entirely on your machine.</strong><br/>
-  Full control over your AI's identity, memory, behavior, security, and model routing — all from a stunning mission control interface called <strong>The Tenshu</strong>.
+  <strong>Shogun is an AI agent control plane with persistent memory, multi-agent orchestration, and full governance. Build, manage, and evolve agents via GUI—no terminal required. Powered by Qdrant, skill systems, and secure, inspectable autonomy.</strong>
 </p>
 
 <p align="center">
