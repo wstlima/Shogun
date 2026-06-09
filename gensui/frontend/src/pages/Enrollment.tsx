@@ -53,11 +53,11 @@ export default function Enrollment() {
   };
 
   const handleCreateToken = async () => {
-    if (!newLabel.trim()) return;
     setCreating(true);
     setError(null);
+    const label = newLabel.trim() || `Token ${new Date().toLocaleDateString()}`;
     try {
-      const res = await api.post('/enrollment/tokens', { label: newLabel.trim(), max_uses: 1 });
+      const res = await api.post('/enrollment/tokens', { label, max_uses: 1 });
       setNewLabel('');
       setSuccess(`Token created: ${res.data?.token?.slice(0, 30)}...`);
       fetchData();
@@ -131,8 +131,8 @@ export default function Enrollment() {
           />
           <button
             onClick={handleCreateToken}
-            disabled={creating || !newLabel.trim()}
-            className="btn-primary flex items-center gap-1.5 disabled:opacity-50"
+            disabled={creating}
+            className="btn-primary flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             Generate Token
