@@ -107,6 +107,17 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    # ── Start Gensui Membership Client ────────────────────────
+    gensui = None
+    if settings.gensui_enabled:
+        try:
+            from shogun.services.gensui_client import gensui_client
+            gensui = gensui_client
+            await gensui.start()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Gensui client startup failed: %s", exc)
+
     yield
 
     # Shutdown
@@ -133,6 +144,13 @@ async def lifespan(app: FastAPI):
         await stop_scheduler()
     except Exception:
         pass
+
+    # ── Stop Gensui client ───────────────────────────────────
+    if gensui:
+        try:
+            await gensui.stop()
+        except Exception:
+            pass
 
     from shogun.db.engine import engine
     await engine.dispose()
@@ -183,6 +201,7 @@ def create_app() -> FastAPI:
     from shogun.api.calendar import router as calendar_router
     from shogun.api.agent_flow import router as agent_flow_router
     from shogun.api.mado import router as mado_router
+    from shogun.api.gensui_config import router as gensui_config_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -210,6 +229,34 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router, prefix=prefix)
     app.include_router(agent_flow_router, prefix=prefix)
     app.include_router(mado_router, prefix=prefix)
+    app.include_router(gensui_config_router, prefix=prefix)
+
+    # ── Health / Identity Endpoint ───────────────────────────
+    # Used by Gensui network scanner to identify Shogun instances on the LAN.
+    @app.get("/api/v1/health")
+    async def health_check():
+        import json
+        version_file = PROJECT_ROOT / "version.json"
+        version_info = {}
+        if version_file.exists():
+            version_info = json.loads(version_file.read_text(encoding="utf-8"))
+
+        shogun_id = None
+        try:
+            from shogun.config import settings as _s
+            shogun_id = getattr(_s, "shogun_id", None)
+        except Exception:
+            pass
+
+        return {
+            "service": "shogun",
+            "status": "ok",
+            "version": version_info.get("version", "unknown"),
+            "name": version_info.get("name", "Shogun OS"),
+            "build": version_info.get("build"),
+            "instance_name": settings.instance_name if hasattr(settings, "instance_name") else None,
+            "shogun_id": str(shogun_id) if shogun_id else None,
+        }
 
     # Static serving for user uploads
     uploads_path = Path(settings.uploads_path)
