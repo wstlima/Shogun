@@ -160,21 +160,24 @@ async def _scan_host(
 def _deduplicate_hosts(hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Deduplicate Shogun instances found on multiple network interfaces.
 
-    Groups by shogun_id (or instance_name as fallback) and merges IPs.
+    Groups by shogun_id, instance_name, or 'self' flag and merges IPs.
     Non-Shogun hosts are passed through unchanged.
     """
     non_shogun = [h for h in hosts if not h.get("is_shogun")]
     shogun_hosts = [h for h in hosts if h.get("is_shogun")]
 
-    # Group by identity key
+    # Group by identity key — prioritize shogun_id, then instance_name,
+    # then use "__self__" for all local-machine hits (same machine, different NICs)
     groups: dict[str, list[dict[str, Any]]] = {}
     for h in shogun_hosts:
-        key = h.get("shogun_id") or h.get("instance_name") or h["ip"]
+        key = h.get("shogun_id") or h.get("instance_name")
+        if not key:
+            # No identity — fall back to self-detection grouping
+            key = "__self__" if h.get("is_self") else h["ip"]
         groups.setdefault(key, []).append(h)
 
     deduped: list[dict[str, Any]] = []
     for key, group in groups.items():
-        # Pick the "best" representative (prefer non-self, or first)
         primary = group[0]
         all_ips = sorted({h["ip"] for h in group})
         is_self = any(h.get("is_self") for h in group)
