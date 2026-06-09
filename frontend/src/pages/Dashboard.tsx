@@ -190,10 +190,13 @@ export const Dashboard = () => {
         />
         <StatCard 
           title={t('dashboard.security_posture', 'Security Tier')} 
-          value={data?.security_posture?.tier?.toUpperCase() || "GUARDED"} 
+          value={posture?.active_tier?.toUpperCase() || data?.security_posture?.tier?.toUpperCase() || "TACTICAL"} 
           status={t('common.active', 'Active')} 
           icon={Shield} 
-          colorClass="text-red-500"
+          colorClass={
+            ({ shrine: 'text-shogun-gold', guarded: 'text-green-400', tactical: 'text-shogun-blue', campaign: 'text-orange-400', ronin: 'text-red-500' } as Record<string, string>)
+            [posture?.active_tier || data?.security_posture?.tier || 'tactical'] || 'text-shogun-blue'
+          }
           to="/torii"
         />
       </div>

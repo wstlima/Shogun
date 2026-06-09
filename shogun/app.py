@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
         await EventLogger.emit_system_event(
             "system.startup", "Shogun server started",
             detail={
-                "version": "1.1.7",
+                "version": "1.3.2",
                 "platform": platform.system(),
                 "python": platform.python_version(),
             },
@@ -107,9 +107,30 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    # ── Start Gensui Membership Client ────────────────────────
+    gensui = None
+    if settings.gensui_enabled:
+        try:
+            from shogun.services.gensui_client import gensui_client
+            gensui = gensui_client
+            await gensui.start()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Gensui client startup failed: %s", exc)
+
     yield
 
     # Shutdown
+    # Close all active Mado browser sessions
+    try:
+        from shogun.services.mado_service import close_all_browsers
+        closed = await close_all_browsers()
+        if closed:
+            import logging
+            logging.getLogger(__name__).info("Mado: closed %d browser sessions on shutdown", closed)
+    except Exception:
+        pass
+
     try:
         from shogun.services.event_logger import EventLogger as _EL
         import asyncio
@@ -123,6 +144,13 @@ async def lifespan(app: FastAPI):
         await stop_scheduler()
     except Exception:
         pass
+
+    # ── Stop Gensui client ───────────────────────────────────
+    if gensui:
+        try:
+            await gensui.stop()
+        except Exception:
+            pass
 
     from shogun.db.engine import engine
     await engine.dispose()
@@ -169,6 +197,11 @@ def create_app() -> FastAPI:
     from shogun.api.setup import router as setup_router
     from shogun.api.updates import router as updates_router
     from shogun.api.backups import router as backups_router
+    from shogun.api.email import router as email_router
+    from shogun.api.calendar import router as calendar_router
+    from shogun.api.agent_flow import router as agent_flow_router
+    from shogun.api.mado import router as mado_router
+    from shogun.api.gensui_config import router as gensui_config_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -192,11 +225,49 @@ def create_app() -> FastAPI:
     app.include_router(setup_router, prefix=prefix)
     app.include_router(updates_router, prefix=prefix)
     app.include_router(backups_router, prefix=prefix)
+    app.include_router(email_router, prefix=prefix)
+    app.include_router(calendar_router, prefix=prefix)
+    app.include_router(agent_flow_router, prefix=prefix)
+    app.include_router(mado_router, prefix=prefix)
+    app.include_router(gensui_config_router, prefix=prefix)
+
+    # ── Health / Identity Endpoint ───────────────────────────
+    # Used by Gensui network scanner to identify Shogun instances on the LAN.
+    @app.get("/api/v1/health")
+    async def health_check():
+        import json
+        version_file = PROJECT_ROOT / "version.json"
+        version_info = {}
+        if version_file.exists():
+            version_info = json.loads(version_file.read_text(encoding="utf-8"))
+
+        shogun_id = None
+        try:
+            from shogun.config import settings as _s
+            shogun_id = getattr(_s, "shogun_id", None)
+        except Exception:
+            pass
+
+        return {
+            "service": "shogun",
+            "status": "ok",
+            "version": version_info.get("version", "unknown"),
+            "name": version_info.get("name", "Shogun OS"),
+            "build": version_info.get("build"),
+            "instance_name": settings.instance_name if hasattr(settings, "instance_name") else None,
+            "shogun_id": str(shogun_id) if shogun_id else None,
+        }
 
     # Static serving for user uploads
     uploads_path = Path(settings.uploads_path)
     if uploads_path.exists():
         app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+
+    # Static serving for Mado screenshots
+    mado_screenshots_path = Path(settings.mado_path) / "screenshots"
+    if not mado_screenshots_path.exists():
+        mado_screenshots_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/mado/screenshots", StaticFiles(directory=str(mado_screenshots_path)), name="mado_screenshots")
 
     # Static file serving for React frontend (anchored to PROJECT_ROOT)
     frontend_path = PROJECT_ROOT / "frontend" / "dist"

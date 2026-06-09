@@ -15,6 +15,8 @@ import { Guide } from './pages/Guide'
 import { Nexus } from './pages/Nexus'
 import { Updates } from './pages/Updates'
 import { Backups } from './pages/Backups'
+import { Mado } from './pages/Mado'
+import { Gensui } from './pages/Gensui'
 import { SetupWizard } from './pages/SetupWizard'
 import { useState, useEffect } from 'react'
 import { useTranslation, I18nProvider } from './i18n'
@@ -98,6 +100,8 @@ function AppContent() {
           <Route path="/nexus" element={<Shell><Nexus /></Shell>} />
           <Route path="/updates" element={<Shell><Updates /></Shell>} />
           <Route path="/backups" element={<Shell><Backups /></Shell>} />
+          <Route path="/mado" element={<Shell><Mado /></Shell>} />
+          <Route path="/gensui" element={<Shell><Gensui /></Shell>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

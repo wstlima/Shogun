@@ -46,6 +46,15 @@ class MemoryPermissions(ShogunBase):
     allow_bulk_delete: bool = False
 
 
+class CommsPermissions(ShogunBase):
+    allow_read_email: bool = True
+    allow_send_email: bool = True
+    allow_read_calendar: bool = True
+    allow_create_events: bool = True
+    allow_list_cron: bool = True
+    allow_manage_cron: bool = False
+
+
 class PolicyPermissions(ShogunBase):
     """Full permissions block for a security policy."""
 
@@ -55,6 +64,7 @@ class PolicyPermissions(ShogunBase):
     skills: SkillPermissions = Field(default_factory=SkillPermissions)
     subagents: SubagentPermissions = Field(default_factory=SubagentPermissions)
     memory: MemoryPermissions = Field(default_factory=MemoryPermissions)
+    comms: CommsPermissions = Field(default_factory=CommsPermissions)
 
 
 class SecurityPolicyCreate(ShogunBase):
@@ -127,3 +137,17 @@ class SecurityPostureResponse(ShogunBase):
     max_active_subagents: int
     kill_switch_enabled: bool
     kill_switch_active: bool = False
+    comms_read_email: bool = True
+    comms_send_email: bool = True
+    comms_read_calendar: bool = True
+    comms_create_events: bool = True
+    comms_list_cron: bool = True
+    comms_manage_cron: bool = False
+    # Mado browser automation
+    mado_enabled: bool = True
+    mado_headless_only: bool = True
+    mado_max_sessions: int = 3
+    mado_autonomous_browsing: bool = False
+    mado_downloads_enabled: bool = True
+    mado_uploads_enabled: bool = True
+

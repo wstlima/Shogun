@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  Save
+  Save,
+  Clock
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -35,6 +36,7 @@ interface Calibration {
   reflection_intensity: number;
   consolidation_rate: number;
   exploration_variance: number;
+  heartbeat_frequency: number;
 }
 
 interface Recommendation {
@@ -51,6 +53,7 @@ const DEFAULT_CALIBRATION: Calibration = {
   reflection_intensity: 70,
   consolidation_rate: 45,
   exploration_variance: 24,
+  heartbeat_frequency: 15,
 };
 
 export function Bushido() {
@@ -151,6 +154,7 @@ export function Bushido() {
         reflection_intensity: res.data.data.reflection_intensity,
         consolidation_rate: res.data.data.consolidation_rate,
         exploration_variance: res.data.data.exploration_variance,
+        heartbeat_frequency: res.data.data.heartbeat_frequency,
       });
       setCalibrationDirty(false);
       setStatusMsg({ type: 'success', text: t('bushido.calibration_reset') });
@@ -323,6 +327,25 @@ export function Bushido() {
                       className="w-full h-1.5 bg-shogun-card rounded-lg appearance-none cursor-pointer accent-green-500"
                     />
                     <p className="text-[10px] text-shogun-subdued">{t('bushido.exploration_variance_desc')}</p>
+                 </div>
+
+                 {/* Heartbeat Frequency */}
+                 <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                       <label className="text-xs font-bold text-shogun-text flex items-center gap-2 uppercase tracking-wide">
+                          <Clock className="w-3.5 h-3.5 text-purple-400" /> {t('bushido.heartbeat_frequency')}
+                       </label>
+                       <span className="text-xs font-mono text-purple-400">{calibration.heartbeat_frequency}m</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="120" 
+                      value={calibration.heartbeat_frequency}
+                      onChange={(e) => updateCalibration('heartbeat_frequency', parseInt(e.target.value))}
+                      className="w-full h-1.5 bg-shogun-card rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                    <p className="text-[10px] text-shogun-subdued">{t('bushido.heartbeat_frequency_desc')}</p>
                  </div>
               </div>
 

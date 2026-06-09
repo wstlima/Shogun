@@ -275,6 +275,42 @@ class TriggerMode(str, Enum):
     EVENT = "event"
 
 
+class FlowStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
+
+
+class FlowTriggerType(str, Enum):
+    MANUAL = "manual"
+    SCHEDULED = "scheduled"
+    EVENT = "event"
+    API = "api"
+
+
+class FlowNodeType(str, Enum):
+    SAMURAI = "samurai"
+    SHOGUN_APPROVAL = "shogun_approval"
+    LOGIC = "logic"
+    INPUT = "input"
+    OUTPUT = "output"
+
+
+class FlowEdgeType(str, Enum):
+    DEFAULT = "default"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    CONDITIONAL = "conditional"
+
+
+class ApprovalMode(str, Enum):
+    MANUAL = "manual"
+    AI_ASSISTED = "ai_assisted"
+    POLICY_BASED = "policy_based"
+    CONFIDENCE_THRESHOLD = "confidence_threshold"
+
+
 # ── Shared Base Schemas ──────────────────────────────────────
 
 

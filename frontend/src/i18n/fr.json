@@ -30,6 +30,8 @@
     "alliance": "Alliance",
     "nexus": "Nexus",
     "nexus_sub": "Espaces de Travail A2A",
+    "gensui": "Gensui",
+    "gensui_sub": "Commandement de Flotte",
     "maintenance": "Maintenance",
     "backups": "Sauvegardes",
     "backups_sub": "Protection des Données",

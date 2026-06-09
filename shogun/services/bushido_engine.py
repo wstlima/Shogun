@@ -764,7 +764,7 @@ async def _run_persona_drift_check(
 
     # Resolve endpoint and model
     PROVIDER_URLS = {
-        "ollama": "http://localhost:11434",
+        "ollama": "http://127.0.0.1:11434",
         "lmstudio": "http://localhost:1234/v1",
         "local": "http://localhost:1234/v1",
         "openai": "https://api.openai.com/v1",

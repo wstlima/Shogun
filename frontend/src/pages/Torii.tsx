@@ -4,7 +4,7 @@ import {
   CheckCircle2, RefreshCw, Search, Eye, X, Plus, Save,
   Trash2, Copy, Check, Activity,
   Globe, HardDrive, Terminal, Zap, Users,
-  ChevronDown, ChevronRight, Database,
+  ChevronDown, ChevronRight, Database, Mail, Calendar, Clock, AppWindow,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -22,6 +22,16 @@ interface Posture {
   max_active_subagents: number;
   kill_switch_enabled: boolean;
   kill_switch_active: boolean;
+  comms_read_email: boolean;
+  comms_send_email: boolean;
+  comms_read_calendar: boolean;
+  comms_create_events: boolean;
+  comms_list_cron: boolean;
+  comms_manage_cron: boolean;
+  mado_enabled: boolean;
+  mado_headless_only: boolean;
+  mado_max_sessions: number;
+  mado_autonomous_browsing: boolean;
 }
 
 interface Policy {
@@ -36,6 +46,7 @@ interface Policy {
     skills?: { allow_auto_install?: boolean; require_approval?: boolean };
     subagents?: { allow_spawn?: boolean; max_active?: number; allow_auto_spawn?: boolean };
     memory?: { allow_write?: boolean; allow_bulk_delete?: boolean };
+    comms?: { allow_read_email?: boolean; allow_send_email?: boolean; allow_read_calendar?: boolean; allow_create_events?: boolean; allow_list_cron?: boolean; allow_manage_cron?: boolean };
   };
   kill_switch_enabled: boolean;
   dry_run_supported: boolean;
@@ -100,6 +111,7 @@ export function Torii() {
     skills:     { allow_auto_install: false, require_approval: true, allow_untrusted: false },
     subagents:  { allow_spawn: true, max_active: 5, allow_auto_spawn: false },
     memory:     { allow_write: true, allow_bulk_delete: false },
+    comms:      { allow_read_email: true, allow_send_email: true, allow_read_calendar: true, allow_create_events: true, allow_list_cron: true, allow_manage_cron: false },
   };
   const [newPermissions, setNewPermissions] = useState(structuredClone(DEFAULT_PERMS));
   const [expandedPerms, setExpandedPerms]   = useState<Set<string>>(new Set());
@@ -372,6 +384,10 @@ export function Torii() {
                 { icon: Terminal,  label: t('torii.shell'),      value: posture.shell_enabled ? t('torii.enabled') : t('torii.disabled') },
                 { icon: Zap,       label: t('torii.auto_skills'), value: posture.skill_auto_install ? t('torii.allowed') : t('torii.off') },
                 { icon: Users,     label: t('torii.max_agents'), value: String(posture.max_active_subagents) },
+                { icon: Mail,      label: t('torii.mail_access'), value: !posture.comms_read_email ? t('torii.disabled') : posture.comms_send_email ? t('torii.read_send') : t('torii.read_only') },
+                { icon: Calendar,  label: t('torii.calendar_access'), value: !posture.comms_read_calendar ? t('torii.disabled') : posture.comms_create_events ? t('torii.full_access') : t('torii.read_only') },
+                { icon: Clock,     label: t('torii.cron_access'), value: !posture.comms_list_cron ? t('torii.disabled') : posture.comms_manage_cron ? t('torii.full_access') : t('torii.read_only') },
+                { icon: AppWindow,  label: 'Mado Browser', value: !posture.mado_enabled ? t('torii.disabled') : posture.mado_headless_only ? 'Headless' : posture.mado_autonomous_browsing ? 'Autonomous' : 'Enabled' },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 text-shogun-subdued">
@@ -812,6 +828,54 @@ export function Torii() {
                           <input type="checkbox" checked={newPermissions.memory.allow_bulk_delete}
                             onChange={e => setNewPermissions(p => ({ ...p, memory: { ...p.memory, allow_bulk_delete: e.target.checked } }))} className="accent-shogun-blue" />
                           <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_bulk_delete', 'Allow Bulk Delete')}</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Comms ── */}
+                  <div className="border border-shogun-border rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => togglePermSection('comms')}
+                      className="w-full flex items-center justify-between p-3 hover:bg-[#0a0e1a] transition-colors">
+                      <span className="flex items-center gap-2 text-xs font-bold text-shogun-text">
+                        <Mail className="w-3.5 h-3.5 text-shogun-blue" /> {t('profile.perm_cat_comms', 'Comms')}
+                      </span>
+                      {expandedPerms.has('comms') ? <ChevronDown className="w-3.5 h-3.5 text-shogun-subdued" /> : <ChevronRight className="w-3.5 h-3.5 text-shogun-subdued" />}
+                    </button>
+                    {expandedPerms.has('comms') && (
+                      <div className="px-4 pb-4 pt-3 space-y-2 border-t border-shogun-border bg-[#050508]">
+                        <p className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold mb-1">Email</p>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_read_email}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_read_email: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_read_email', 'Allow Read Email')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_send_email}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_send_email: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_send_email', 'Allow Send Email')}</span>
+                        </label>
+                        <p className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold mt-3 mb-1">Calendar</p>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_read_calendar}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_read_calendar: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_read_calendar', 'Allow Read Calendar')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_create_events}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_create_events: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_create_events', 'Allow Create Events')}</span>
+                        </label>
+                        <p className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold mt-3 mb-1">Cron Jobs</p>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_list_cron}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_list_cron: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_list_cron', 'Allow List Cron Jobs')}</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={newPermissions.comms.allow_manage_cron}
+                            onChange={e => setNewPermissions(p => ({ ...p, comms: { ...p.comms, allow_manage_cron: e.target.checked } }))} className="accent-shogun-blue" />
+                          <span className="text-xs text-shogun-subdued">{t('profile.perm_prop_allow_manage_cron', 'Allow Manage Cron Jobs')}</span>
                         </label>
                       </div>
                     )}

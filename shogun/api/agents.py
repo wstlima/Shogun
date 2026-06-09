@@ -38,6 +38,10 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
 _CTX_CACHE: dict = {"data": None, "ts": 0.0}
 _CTX_TTL = 90  # seconds
 
+# ── Pinned-memories cache (60 s TTL) — pinned memories rarely change ──
+_PINNED_CACHE: dict = {"data": None, "ts": 0.0, "agent_id": None}
+_PINNED_TTL = 60
+
 async def _get_system_context() -> dict:
     """Return cached samurai/provider/tool counts, refreshed every 90 s."""
     if time.monotonic() - _CTX_CACHE["ts"] < _CTX_TTL and _CTX_CACHE["data"]:
@@ -251,16 +255,134 @@ async def shogun_chat(
     body: dict,
     svc: AgentService = Depends(get_agent_service),
 ):
-    """Stream chat tokens from the primary Shogun agent via SSE."""
-    import httpx
-    from shogun.db.models.agent import Agent
+    """Stream chat tokens from the primary Shogun agent via SSE.
+
+    Supports three execution lanes via the ``mode`` field:
+    - ``fast``      — conversation-only, no tools/memory/actions
+    - ``governed``  — context-aware chat (stub → routes to mission for now)
+    - ``mission``   — full agent orchestration with tools/memory/compliance
+    - ``auto``      — heuristic classifier selects the lane (default)
+    """
     user_msg: str = body.get("message", "").strip()
     history: list = body.get("history", [])
+    mode: str = body.get("mode", "auto")
 
     if not user_msg:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    return await _shogun_chat_internal(user_msg, history, svc)
+    # ── Mode classification ───────────────────────────────────────
+    classification: dict = {"mode": mode, "reason": "manual_selection", "matched": []}
+    if mode == "auto":
+        classification = _classify_chat_mode(user_msg, history)
+        mode = classification["mode"]
+
+    # Governed Chat is a stub in v1 — routes to mission for now
+    if mode == "governed":
+        return await _shogun_chat_internal(user_msg, history, svc, classification=classification)
+    elif mode == "fast":
+        return await _shogun_fast_chat(user_msg, history, svc, classification=classification)
+    else:
+        return await _shogun_chat_internal(user_msg, history, svc, classification=classification)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CHAT MODE CLASSIFIER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _classify_chat_mode(message: str, history: list) -> dict:
+    """Heuristic classifier that determines which execution lane to use.
+
+    Returns a dict with ``mode``, ``reason``, and ``matched`` triggers
+    so the decision is auditable.
+
+    Two keyword groups:
+    - MISSION_KEYWORDS  → tools/actions required → Mission Mode
+    - GOVERNED_KEYWORDS → context/memory required → Governed Chat
+    """
+    msg = message.lower()
+
+    # Mission/action triggers → full pipeline (tools, agents, side effects)
+    MISSION_KEYWORDS = [
+        # Agent/mission orchestration
+        "spawn", "samurai", "create agent", "mission", "deploy",
+        # Communication tools
+        "email", "send mail", "send me", "send an", "send a", "inbox",
+        "calendar", "schedule",
+        # Web browsing / search (+ common typos and natural phrases)
+        "browse", "brows ", "visit", "search", "look up", "look at",
+        "google", "go to",
+        "fetch", "scrape", "navigate", "open ", "url",
+        "website", "web page", "web site", "check ",
+        "wikipedia", "youtube", "reddit", "github",
+        # Action verbs that imply tool use
+        "find ", "show me", "pull ", "grab ", "get the", "get me",
+        "give me", "tell me about",
+        # Extraction presets (matches natural chat like "get the headlines")
+        "extract", "headline", "article content", "links from",
+        "tables from", "prices from", "screenshot",
+        # Domain / URL references — broad TLD coverage
+        ".com", ".org", ".net", ".io", ".gov", ".edu",
+        ".dk", ".se", ".no", ".de", ".fr", ".uk", ".ai",
+        ".dev", ".app", ".co", ".info", ".me", ".us", ".ca",
+        ".au", ".nl", ".fi", ".jp", ".eu", ".ch", ".at",
+        ".es", ".it", ".pt", ".pl", ".cz", ".be", ".ie",
+        "http://", "https://", "www.",
+        # Live-data / real-time queries
+        "weather", "latest", "news", "stock", "price of", "score",
+        # Cron/scheduling
+        "cron", "job", "workflow",
+        # Execution/system
+        "execute", "run ", "shell", "command", "script",
+        # File operations
+        "file", "read file", "write file", "upload", "download", "analyze",
+        # Data mutations
+        "delete", "update database", "modify",
+        # External connections
+        "connect", "api", "webhook", "database",
+        # Shogun internals
+        "tool", "permission",
+    ]
+
+    # Governed/context triggers → memory/RAG/CAG needed, no external actions
+    GOVERNED_KEYWORDS = [
+        "remember", "memory", "earlier", "last time", "you said",
+        "you mentioned", "previous", "we discussed", "my preference",
+        "what did i say", "what did you say", "save to memory",
+        "store in memory", "note this",
+    ]
+
+    mission_matched = [kw for kw in MISSION_KEYWORDS if kw in msg]
+    governed_matched = [kw for kw in GOVERNED_KEYWORDS if kw in msg]
+
+    # Mission takes priority over governed
+    if mission_matched:
+        return {
+            "mode": "mission",
+            "reason": "mission_triggers_detected",
+            "matched": mission_matched,
+        }
+
+    if governed_matched:
+        return {
+            "mode": "governed",
+            "reason": "context_or_memory_triggers_detected",
+            "matched": governed_matched,
+        }
+
+    # Long complex messages → governed (likely needs context, not necessarily tools)
+    if len(message) > 1500:
+        return {
+            "mode": "governed",
+            "reason": "long_complex_message",
+            "matched": [],
+        }
+
+    # Default → fast chat
+    return {
+        "mode": "fast",
+        "reason": "no_governed_or_mission_triggers_detected",
+        "matched": [],
+    }
 
 
 def _detect_task_type(message: str) -> str:
@@ -279,7 +401,346 @@ def _detect_task_type(message: str) -> str:
     return "*"
 
 
-async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService):
+# ─────────────────────────────────────────────────────────────────────────────
+# FAST CHAT LANE — conversation-only, no tools/memory/actions
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _shogun_fast_chat(
+    user_msg: str,
+    history: list,
+    svc: AgentService,
+    *,
+    classification: dict | None = None,
+):
+    """Fast Chat execution lane — pure conversation, no side effects.
+
+    Physical capability lock:
+    - No tool registry loaded
+    - No memory retrieval (Qdrant)
+    - No filesystem/shell/network access
+    - No mission planner or subagent orchestration
+    - No full Torii policy evaluation
+    - No EU AI Act 5-event audit chain
+
+    Does include:
+    - Kill switch check
+    - Agent + model resolution
+    - Cached operator name
+    - Minimal system prompt with safety boundary
+    - SSE token streaming
+    - Lightweight audit events (mode_decision + completion)
+    """
+    import httpx
+    import hashlib
+    from shogun.db.models.agent import Agent
+    from shogun.db.models.model_provider import ModelProvider
+    from shogun.db.models.operator import Operator
+    from shogun.api.deps import get_db
+    from shogun.services.posture_guard import check_kill_switch
+    from sqlalchemy import select
+    import uuid as _uuid
+
+    _t_start = time.monotonic()
+    EL = _get_event_logger()
+    _trace_id = f"trc_{uuid.uuid4().hex[:16]}"
+    classification = classification or {"mode": "fast", "reason": "manual_selection", "matched": []}
+
+    # ── 0. Kill switch gate (fast, critical) ──────────────────────
+    try:
+        await check_kill_switch()
+    except HTTPException:
+        async def _blocked():
+            yield f"data: {json.dumps({'type': 'error', 'content': '⛩️ HARAKIRI is active — all AI operations are suspended.'})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(_blocked(), media_type="text/event-stream")
+
+    # ── 1. Load primary Shogun agent ──────────────────────────────
+    filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
+    records, _ = await svc.get_all(filters=filters)
+    if not records:
+        raise HTTPException(status_code=404, detail="Primary Shogun agent not found")
+    agent = records[0]
+    _agent_id_str = str(agent.id)
+
+    # ── 2. Resolve model (reuse bushido primary_model setting) ────
+    bushido = agent.bushido_settings or {}
+    _exploration_variance = bushido.get("exploration_variance", 24)
+    _temperature = round(0.3 + (_exploration_variance / 100) * 0.9, 2)
+
+    saved_primary: str = bushido.get("primary_model", "")
+    saved_provider_id: str = saved_primary.split("::")[0] if "::" in saved_primary else ""
+    saved_model_name: str = saved_primary.split("::")[1] if "::" in saved_primary else ""
+
+    provider = None
+    async for db in get_db():
+        if saved_provider_id:
+            try:
+                res = await db.execute(
+                    select(ModelProvider).where(ModelProvider.id == _uuid.UUID(saved_provider_id))
+                )
+                provider = res.scalar_one_or_none()
+            except Exception:
+                provider = None
+
+        if not provider and saved_model_name:
+            res = await db.execute(
+                select(ModelProvider).where(ModelProvider.status == "connected")
+            )
+            for p in res.scalars().all():
+                p_models = p.config.get("models") or []
+                if saved_model_name in p_models or saved_model_name == p.name:
+                    provider = p
+                    break
+
+        if not provider:
+            res = await db.execute(
+                select(ModelProvider)
+                .where(ModelProvider.status == "connected")
+                .order_by(ModelProvider.created_at)
+                .limit(1)
+            )
+            provider = res.scalar_one_or_none()
+        break
+
+    if not provider:
+        async def _no_provider():
+            yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No active model provider found. Go to The Katana → Model Providers and add one.'})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(_no_provider(), media_type="text/event-stream")
+
+    # ── Endpoint resolve ──────────────────────────────────────────
+    PROVIDER_URLS: dict[str, str] = {
+        "ollama":     "http://127.0.0.1:11434",
+        "lmstudio":   "http://localhost:1234/v1",
+        "local":      "http://localhost:1234/v1",
+        "openai":     "https://api.openai.com/v1",
+        "openrouter": "https://openrouter.ai/api/v1",
+        "anthropic":  "https://api.anthropic.com/v1",
+        "google":     "https://generativelanguage.googleapis.com/v1beta/openai",
+        "custom":     "https://api.openai.com/v1",
+    }
+    base_url: str = provider.base_url or PROVIDER_URLS.get(provider.provider_type, "https://api.openai.com/v1")
+    if provider.provider_type == "ollama" and not base_url.rstrip("/").endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+
+    model_name = (
+        saved_model_name
+        or provider.config.get("model_id")
+        or (provider.config.get("models") or [None])[0]
+        or provider.name
+    )
+    provider_name = provider.name
+
+    api_key = provider.config.get("api_key") or provider.config.get("api-key")
+    req_headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        req_headers["Authorization"] = f"Bearer {api_key}"
+    if provider.provider_type == "openrouter":
+        req_headers["HTTP-Referer"] = "https://shogun.ai"
+        req_headers["X-Title"] = "Shogun"
+
+    # ── 3. Load cached operator name (no Qdrant) ──────────────────
+    operator_name = "Daimyo"
+    async for db in get_db():
+        op_res = await db.execute(select(Operator).limit(1))
+        op = op_res.scalar_one_or_none()
+        if op and op.display_name:
+            operator_name = op.display_name
+        break
+
+    # ── 4. Get posture tier name (cached, no full evaluation) ─────
+    try:
+        from shogun.services.posture_guard import get_posture_tool_filter
+        _posture = await get_posture_tool_filter()
+        _active_tier = _posture.get("active_tier", "tactical").upper()
+    except Exception:
+        _active_tier = "TACTICAL"
+
+    # ── 5. Lightweight audit: mode_decision event ─────────────────
+    _capabilities = {
+        "tools": False, "memory_retrieval": False, "memory_write": False,
+        "filesystem": False, "network": False, "shell": False,
+        "agents": False, "external_side_effects": False,
+    }
+    try:
+        import asyncio
+        asyncio.ensure_future(EL.emit_decision_event(
+            "chat.mode_decision",
+            f"Chat mode selected: fast (reason: {classification['reason']})",
+            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+            model_used=model_name, provider_used=provider_name,
+            detail={
+                "mode_requested": classification.get("mode", "auto"),
+                "mode_selected": "fast",
+                "classifier_version": "heuristic_v1",
+                "matched_triggers": classification.get("matched", []),
+                "risk_level": "low",
+                "capabilities": _capabilities,
+                "posture_tier": _active_tier,
+            },
+        ))
+    except Exception:
+        pass
+
+    # ── 6. Build minimal system prompt (with safety boundary) ─────
+    persona_name = agent.name or "Shogun"
+    system_prompt = f"""You are {persona_name}, the primary AI of the Shogun platform.
+Your operator is '{operator_name}'.
+Current mode: Fast Chat.
+Current posture: {_active_tier}.
+Current model: {model_name}.
+
+Fast Chat is conversation-only.
+In this mode you do not have access to tools, files, memory retrieval, shell, network, agents, or external systems.
+You cannot perform actions, access private context, or make persistent changes.
+
+Be conversational, direct, and helpful.
+Use markdown when it improves readability.
+
+If the user asks for memory, tools, files, commands, browsing, messages, scheduling, agent spawning, or mission execution, explain that the request requires Governed Chat or Mission Mode and they can switch using the mode selector in the chat interface."""
+
+    # ── 7. Build messages (no recalled memories, no tool context) ──
+    messages = [{"role": "system", "content": system_prompt}]
+    for h in history[-10:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_msg})
+
+    # Log for drift monitor
+    _append_chat_log("user", user_msg)
+    timestamp = datetime.now().isoformat()
+
+    # ── 8. Stream — no tools, no retry loop, pure generation ──────
+    async def generate():
+        _t_first_token = None
+        _failed = False
+
+        # Meta event: model badge
+        yield f"data: {json.dumps({'type': 'meta', 'model': model_name, 'provider': provider_name, 'timestamp': timestamp, 'mode': 'fast'})}\n\n"
+
+        # Audit: chat.fast.started
+        try:
+            await EL.emit_model_event(
+                "chat.fast.started",
+                f"Fast Chat started ({model_name})",
+                model_used=model_name, provider_used=provider_name,
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={"mode": "fast", "message_length": len(user_msg), "history_length": len(history)},
+            )
+        except Exception:
+            pass
+
+        # Status event
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Calling model...'})}\n\n"
+
+        req_json = {
+            "model": model_name,
+            "messages": messages,
+            "stream": True,
+            "temperature": _temperature,
+            # NO tools — capability lock is physical
+        }
+
+        assistant_tokens: list[str] = []
+
+        try:
+            async with httpx.AsyncClient(base_url=base_url, headers=req_headers, timeout=120.0) as client:
+                async with client.stream("POST", "/chat/completions", json=req_json) as resp:
+                    if resp.status_code != 200:
+                        _failed = True
+                        body_text = await resp.aread()
+                        yield f"data: {json.dumps({'type': 'error', 'content': f'Model error {resp.status_code}: {body_text.decode()[:300]}'})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+
+                    async for raw_line in resp.aiter_lines():
+                        if not raw_line.startswith("data: "):
+                            continue
+                        payload = raw_line[6:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(payload)
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                if _t_first_token is None:
+                                    _t_first_token = time.monotonic()
+                                assistant_tokens.append(content)
+                                yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+                        except Exception:
+                            continue
+        except httpx.ConnectError:
+            _failed = True
+            yield f"data: {json.dumps({'type': 'error', 'content': f'Cannot connect to {provider.provider_type} at {base_url}. Is the server running?'})}\n\n"
+        except Exception as exc:
+            _failed = True
+            yield f"data: {json.dumps({'type': 'error', 'content': f'Streaming error: {str(exc)[:200]}'})}\n\n"
+
+        # ── Audit: completion or failure event ────────────────────
+        _t_end = time.monotonic()
+        full_response = "".join(assistant_tokens)
+        _append_chat_log("assistant", full_response)
+
+        try:
+            _latency_ms = round((_t_end - _t_start) * 1000)
+            _ttft_ms = round((_t_first_token - _t_start) * 1000) if _t_first_token else None
+            _prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:16]
+            _input_hash = hashlib.sha256(user_msg.encode()).hexdigest()[:16]
+            _response_hash = hashlib.sha256(full_response.encode()).hexdigest()[:16]
+
+            _event_type = "chat.fast.failed" if _failed else "chat.fast.completed"
+            _summary = f"Fast Chat {'failed' if _failed else 'completed'} ({model_name}) — {_latency_ms}ms, TTFT {_ttft_ms}ms"
+
+            await EL.emit_model_event(
+                _event_type, _summary,
+                model_used=model_name, provider_used=provider_name,
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={
+                    "mode": "fast",
+                    "latency_ms": _latency_ms,
+                    "time_to_first_token_ms": _ttft_ms,
+                    "prompt_hash": _prompt_hash,
+                    "input_hash": _input_hash,
+                    "response_hash": _response_hash,
+                    "capabilities": _capabilities,
+                    "posture_tier": _active_tier,
+                },
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            "[Shogun] Fast Chat %s: model=%s latency=%dms ttft=%sms",
+            "FAILED" if _failed else "completed",
+            model_name,
+            round((_t_end - _t_start) * 1000),
+            round((_t_first_token - _t_start) * 1000) if _t_first_token else "N/A",
+        )
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MISSION MODE LANE — full agent orchestration (existing pipeline)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService, *, classification: dict | None = None):
+    """Mission Mode execution lane — full tools/memory/governance/audit.
+
+    Returns a StreamingResponse immediately. All heavy pre-work (agent loading,
+    model resolution, memory recall, governance, tool loading) happens inside
+    the async generator so status SSE events stream to the frontend in real-time.
+    """
     import httpx
     from shogun.db.models.agent import Agent
     from shogun.db.models.model_provider import ModelProvider
@@ -301,297 +762,335 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService)
             yield "data: [DONE]\n\n"
         return StreamingResponse(_blocked(), media_type="text/event-stream")
 
-    # ── 1. Load primary Shogun agent ──────────────────────────────
-    filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
-    records, _ = await svc.get_all(filters=filters)
-    if not records:
-        raise HTTPException(status_code=404, detail="Primary Shogun agent not found")
-    agent = records[0]
+    async def _mission_generate():
+        # ── STATUS: stream starts immediately ─────────────────
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Loading context...'})}\n\n"
+
+        # ── 1. Load primary Shogun agent ──────────────────────
+        filters = [Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False]
+        records, _ = await svc.get_all(filters=filters)
+        if not records:
+            yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ Primary Shogun agent not found.'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        agent = records[0]
 
     # ── 2. Resolve primary model from settings ────────────────────
-    bushido = agent.bushido_settings or {}
+        bushido = agent.bushido_settings or {}
 
-    # ── Bushido calibration parameters (from Bushido page sliders) ─
-    _reflection_intensity = bushido.get("reflection_intensity", 70)
-    _consolidation_rate = bushido.get("consolidation_rate", 45)
-    _exploration_variance = bushido.get("exploration_variance", 24)
-    # Map exploration_variance (0-100) to LLM temperature (0.3-1.2)
-    _temperature = round(0.3 + (_exploration_variance / 100) * 0.9, 2)
+        # ── Bushido calibration parameters (from Bushido page sliders) ─
+        _reflection_intensity = bushido.get("reflection_intensity", 70)
+        _consolidation_rate = bushido.get("consolidation_rate", 45)
+        _exploration_variance = bushido.get("exploration_variance", 24)
+        # Map exploration_variance (0-100) to LLM temperature (0.3-1.2)
+        _temperature = round(0.3 + (_exploration_variance / 100) * 0.9, 2)
 
-    saved_primary: str = bushido.get("primary_model", "")
-    saved_provider_id: str = saved_primary.split("::")[0] if "::" in saved_primary else ""
-    saved_model_name: str = saved_primary.split("::")[1] if "::" in saved_primary else ""
+        saved_primary: str = bushido.get("primary_model", "")
+        saved_provider_id: str = saved_primary.split("::")[0] if "::" in saved_primary else ""
+        saved_model_name: str = saved_primary.split("::")[1] if "::" in saved_primary else ""
 
-    provider = None
+        provider = None
+        _model_supports_tools = None  # True/False/None — resolved below
 
-    # ── 3. Resolve routing profiles and provider ──────────────────
-    task_type = _detect_task_type(user_msg)
-    _search_model: str | None = None
-    provider_name: str | None = None
-    res_reason = "primary_agent_model"
+        # ── 3. Resolve routing profiles and provider ──────────────────
+        task_type = _detect_task_type(user_msg)
+        _search_model: str | None = None
+        provider_name: str | None = None
+        res_reason = "primary_agent_model"
 
-    async for db in get_db():
-        # ── Step 0: Build Authorized Inventory ──
-        authorized_keys = set()
-        prov_res = await db.execute(select(ModelProvider).where(ModelProvider.status == "connected"))
-        for p in prov_res.scalars().all():
-            authorized_keys.add(p.name)
-            m_id = p.config.get("model_id") or p.config.get("model")
-            if m_id:
-                authorized_keys.add(m_id)
+        async for db in get_db():
+            # ── Step 0: Build Authorized Inventory ──
+            authorized_keys = set()
+            prov_res = await db.execute(select(ModelProvider).where(ModelProvider.status == "connected"))
+            for p in prov_res.scalars().all():
+                authorized_keys.add(p.name)
+                m_id = p.config.get("model_id") or p.config.get("model")
+                if m_id:
+                    authorized_keys.add(m_id)
 
-        # Get active (default) routing profile
-        res = await db.execute(
-            select(ModelRoutingProfile).where(ModelRoutingProfile.is_default == True).limit(1)
-        )
-        profile = res.scalar_one_or_none()
+            # Get active (default) routing profile
+            res = await db.execute(
+                select(ModelRoutingProfile).where(ModelRoutingProfile.is_default == True).limit(1)
+            )
+            profile = res.scalar_one_or_none()
         
-        # If we have a special task (like research), check if there's a specific rule
-        if profile and task_type != "*":
-            rule = next((r for r in profile.rules if r.get("task_type") == task_type), None)
-            if rule and rule.get("primary_model_id"):
-                try:
-                    # Look up the model definition
-                    mid = _uuid.UUID(rule["primary_model_id"])
-                    res = await db.execute(
-                        select(ModelDefinition).where(ModelDefinition.id == mid)
-                    )
-                    mdef = res.scalar_one_or_none()
-                    if mdef and mdef.provider and mdef.provider.status == "connected":
-                        # Check if this specific model is authorized in Katana
-                        if mdef.model_key in authorized_keys or mdef.display_name in authorized_keys:
-                            # Success! Override provider and model
-                            provider = mdef.provider
-                            model_name = mdef.model_key
-                            provider_name = mdef.display_name
-                            _search_model = model_name
-                            res_reason = f"logic_routing_authorized ({task_type})"
+            # If we have a special task (like research), check if there's a specific rule
+            if profile and task_type != "*":
+                rule = next((r for r in profile.rules if r.get("task_type") == task_type), None)
+                if rule and rule.get("primary_model_id"):
+                    try:
+                        # Look up the model definition
+                        mid = _uuid.UUID(rule["primary_model_id"])
+                        res = await db.execute(
+                            select(ModelDefinition).where(ModelDefinition.id == mid)
+                        )
+                        mdef = res.scalar_one_or_none()
+                        if mdef and mdef.provider and mdef.provider.status == "connected":
+                            # Check if this specific model is authorized in Katana
+                            if mdef.model_key in authorized_keys or mdef.display_name in authorized_keys:
+                                # Success! Override provider and model
+                                provider = mdef.provider
+                                model_name = mdef.model_key
+                                provider_name = mdef.display_name
+                                _search_model = model_name
+                                _model_supports_tools = mdef.supports_tools
+                                res_reason = f"logic_routing_authorized ({task_type})"
+                            else:
+                                logger.warning(f"[Routing] Unauthorized model '{mdef.model_key}' blocked. Fallback to primary.")
+                                res_reason = f"routing_blocked_unauthorized ({task_type})"
                         else:
-                            logger.warning(f"[Routing] Unauthorized model '{mdef.model_key}' blocked. Fallback to primary.")
-                            res_reason = f"routing_blocked_unauthorized ({task_type})"
-                    else:
-                        logger.debug(f"Routing rule skipped: Provider {mdef.provider.name if mdef and mdef.provider else 'unknown'} is NOT connected.")
-                except Exception:
-                    pass # Fallback to default if anything goes wrong
+                            logger.debug(f"Routing rule skipped: Provider {mdef.provider.name if mdef and mdef.provider else 'unknown'} is NOT connected.")
+                    except Exception:
+                        pass # Fallback to default if anything goes wrong
 
-        # If no routing override, use the saved primary or first connected
-        if not provider:
-            if saved_provider_id:
-                try:
+            # If no routing override, use the saved primary or first connected
+            if not provider:
+                if saved_provider_id:
+                    try:
+                        res = await db.execute(
+                            select(ModelProvider).where(ModelProvider.id == _uuid.UUID(saved_provider_id))
+                        )
+                        provider = res.scalar_one_or_none()
+                    except Exception:
+                        provider = None
+
+                # If the saved UUID didn't match (e.g. stale frontend UUID from
+                # setup wizard), try to find a provider whose models list
+                # contains the saved model name.
+                if not provider and saved_model_name:
                     res = await db.execute(
-                        select(ModelProvider).where(ModelProvider.id == _uuid.UUID(saved_provider_id))
+                        select(ModelProvider).where(ModelProvider.status == "connected")
+                    )
+                    for p in res.scalars().all():
+                        p_models = p.config.get("models") or []
+                        if saved_model_name in p_models or saved_model_name == p.name:
+                            provider = p
+                            res_reason = "model_name_match_fallback"
+                            break
+
+                if not provider:
+                    res = await db.execute(
+                        select(ModelProvider)
+                        .where(ModelProvider.status == "connected")
+                        .order_by(ModelProvider.created_at)
+                        .limit(1)
                     )
                     provider = res.scalar_one_or_none()
-                except Exception:
-                    provider = None
-
-            # If the saved UUID didn't match (e.g. stale frontend UUID from
-            # setup wizard), try to find a provider whose models list
-            # contains the saved model name.
-            if not provider and saved_model_name:
-                res = await db.execute(
-                    select(ModelProvider).where(ModelProvider.status == "connected")
-                )
-                for p in res.scalars().all():
-                    p_models = p.config.get("models") or []
-                    if saved_model_name in p_models or saved_model_name == p.name:
-                        provider = p
-                        res_reason = "model_name_match_fallback"
-                        break
+                    if provider:
+                        res_reason = "auto_fallback_to_connected"
+            break
 
             if not provider:
-                res = await db.execute(
-                    select(ModelProvider)
-                    .where(ModelProvider.status == "connected")
-                    .order_by(ModelProvider.created_at)
-                    .limit(1)
-                )
-                provider = res.scalar_one_or_none()
-                if provider:
-                    res_reason = "auto_fallback_to_connected"
-        break
+                yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No active model provider found. Go to The Katana → Model Providers and add one.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
 
-    if not provider:
-        async def _no_provider():
-            yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No active model provider found. Go to The Katana → Model Providers and add one.'})}\n\n"
-            yield "data: [DONE]\n\n"
-        return StreamingResponse(_no_provider(), media_type="text/event-stream")
+        # ── Generate trace_id for correlating all events in this chat turn ──
+        _trace_id = f"trc_{uuid.uuid4().hex[:16]}"
+        _agent_id_str = str(agent.id) if agent else None
+        EL = _get_event_logger()
 
-    # ── Generate trace_id for correlating all events in this chat turn ──
-    _trace_id = f"trc_{uuid.uuid4().hex[:16]}"
-    _agent_id_str = str(agent.id) if agent else None
-    EL = _get_event_logger()
+        # Endpoint resolve
+        PROVIDER_URLS: dict[str, str] = {
+            "ollama":     "http://127.0.0.1:11434",
+            "lmstudio":   "http://localhost:1234/v1",
+            "local":      "http://localhost:1234/v1",
+            "openai":     "https://api.openai.com/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
+            "anthropic":  "https://api.anthropic.com/v1",
+            "google":     "https://generativelanguage.googleapis.com/v1beta/openai",
+            "custom":     "https://api.openai.com/v1",
+        }
+        base_url: str = provider.base_url or PROVIDER_URLS.get(provider.provider_type, "https://api.openai.com/v1")
+        if provider.provider_type == "ollama" and not base_url.rstrip("/").endswith("/v1"):
+            base_url = base_url.rstrip("/") + "/v1"
 
-    # Endpoint resolve
-    PROVIDER_URLS: dict[str, str] = {
-        "ollama":     "http://localhost:11434",
-        "lmstudio":   "http://localhost:1234/v1",
-        "local":      "http://localhost:1234/v1",
-        "openai":     "https://api.openai.com/v1",
-        "openrouter": "https://openrouter.ai/api/v1",
-        "anthropic":  "https://api.anthropic.com/v1",
-        "google":     "https://generativelanguage.googleapis.com/v1beta/openai",
-        "custom":     "https://api.openai.com/v1",
-    }
-    base_url: str = provider.base_url or PROVIDER_URLS.get(provider.provider_type, "https://api.openai.com/v1")
-    if provider.provider_type == "ollama" and not base_url.rstrip("/").endswith("/v1"):
-        base_url = base_url.rstrip("/") + "/v1"
-
-    if not _search_model:
-        model_name = (
-            saved_model_name
-            or provider.config.get("model_id")
-            or (provider.config.get("models") or [None])[0]
-            or provider.name
-        )
-        provider_name = provider.name
-    else:
-        model_name = model_name or saved_model_name or "unknown"
-
-    # ── EVENT: Model Selected ─────────────────────────────────
-    try:
-        import asyncio
-        asyncio.ensure_future(EL.emit_model_event(
-            "model.selected", f"Model resolved: {model_name} via {provider.provider_type}",
-            model_used=model_name, provider_used=provider.provider_type,
-            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-            detail={"reason": res_reason, "provider_id": str(provider.id), "base_url": base_url},
-        ))
-    except Exception:
-        pass
-
-    api_key = provider.config.get("api_key") or provider.config.get("api-key")
-    req_headers: dict[str, str] = {"Content-Type": "application/json"}
-    if api_key:
-        req_headers["Authorization"] = f"Bearer {api_key}"
-    if provider.provider_type == "openrouter":
-        req_headers["HTTP-Referer"] = "https://shogun.ai"
-        req_headers["X-Title"] = "Shogun"
-
-    # ── 4. System context (90 s cache) ────────────────────────────
-    ctx = await _get_system_context()
-
-    # ── 4b. Governance context (constitution + mandate) ───────────
-    try:
-        from shogun.api.kaizen import get_governance_context
-        gov = get_governance_context()
-    except Exception:
-        gov = {"rules_text": "  (not loaded)", "mandate_summary": ""}
-
-    # ── 4c. Fetch Operator Identity ───────────────────────────────
-    operator_name = "Daimyo"
-    async for db in get_db():
-        op_res = await db.execute(select(Operator).limit(1))
-        op = op_res.scalar_one_or_none()
-        if op and op.display_name:
-            operator_name = op.display_name
-        break
-
-    # ── EVENT: Auth — Session Start ──────────────────────────
-    try:
-        import asyncio
-        asyncio.ensure_future(EL.emit_auth_event(
-            "auth.session", f"Chat session started by {operator_name}",
-            user_id=operator_name, agent_id=_agent_id_str, trace_id=_trace_id,
-            detail={"channel": "web", "operator": operator_name},
-        ))
-    except Exception:
-        pass
-
-    # ── 4d. Recall Relevant Memories from Archives ────────────────
-    recalled_memories_text = ""
-    try:
-        from shogun.services.memory_service import MemoryService
-        async for db in get_db():
-            mem_svc = MemoryService(db)
-
-            # 1. Semantic search for user-query-relevant memories
-            relevant = await mem_svc.search(
-                query=user_msg,
-                agent_id=agent.id,
-                limit=5,
+        if not _search_model:
+            model_name = (
+                saved_model_name
+                or provider.config.get("model_id")
+                or (provider.config.get("models") or [None])[0]
+                or provider.name
             )
+            provider_name = provider.name
+        else:
+            model_name = model_name or saved_model_name or "unknown"
 
-            # 2. Always include pinned memories (identity, preferences, etc.)
-            pinned = await mem_svc.get_pinned(agent_id=agent.id)
+        # ── Provider-type heuristic for tool support ──────────────────
+        # If not resolved from a ModelDefinition, infer from provider type.
+        if _model_supports_tools is None and provider:
+            _PROVIDER_TOOL_SUPPORT = {
+                "openai": True, "openrouter": True, "anthropic": True,
+                "google": True, "custom": True,
+                "ollama": False, "lmstudio": False, "local": False,
+            }
+            _model_supports_tools = _PROVIDER_TOOL_SUPPORT.get(provider.provider_type, False)
+        _model_supports_tools = _model_supports_tools or False
+        logger.info(f"[Shogun] Model tool support: {_model_supports_tools} (provider: {provider.provider_type if provider else 'none'})")
 
-            # Merge: pinned first, then relevant (deduplicated)
-            seen: set[str] = set()
-            memory_entries: list[str] = []
+        # ── EVENT: Model Selected ─────────────────────────────────
+        try:
+            import asyncio
+            asyncio.ensure_future(EL.emit_model_event(
+                "model.selected", f"Model resolved: {model_name} via {provider.provider_type}",
+                model_used=model_name, provider_used=provider.provider_type,
+                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                detail={"reason": res_reason, "provider_id": str(provider.id), "base_url": base_url},
+            ))
+        except Exception:
+            pass
 
-            for p in pinned:
-                mid = str(p.id)
-                if mid not in seen:
-                    seen.add(mid)
-                    memory_entries.append(f"[PINNED | {p.memory_type}] {p.title}\n{p.content}")
+        api_key = provider.config.get("api_key") or provider.config.get("api-key")
+        req_headers: dict[str, str] = {"Content-Type": "application/json"}
+        if api_key:
+            req_headers["Authorization"] = f"Bearer {api_key}"
+        if provider.provider_type == "openrouter":
+            req_headers["HTTP-Referer"] = "https://shogun.ai"
+            req_headers["X-Title"] = "Shogun"
 
-            for r in relevant:
-                mid = r["memory_id"]
-                if mid not in seen:
-                    seen.add(mid)
-                    score = r["scores"]["final"]
-                    memory_entries.append(f"[{r['memory_type']} | salience:{score:.2f}] {r['title']}\n{r['content']}")
+        # ── STATUS: Reading memory ────────────────────────────
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Reading memory...'})}\n\n"
 
-            if memory_entries:
-                recalled_memories_text = "\n\n".join(memory_entries)
+            # ── 4. Parallel context fetch (system ctx + governance + operator + memories) ──
+        import asyncio as _aio
 
-            # 3. Batch-update access tracking (single SQL UPDATE instead of N round-trips)
-            recalled_ids = []
-            if relevant:
-                from shogun.db.models.memory_record import MemoryRecord
-                from sqlalchemy import update
-                recall_ids = [uuid.UUID(r["memory_id"]) for r in relevant]
-                recalled_ids = [str(rid) for rid in recall_ids]
-                await db.execute(
-                    update(MemoryRecord)
-                    .where(MemoryRecord.id.in_(recall_ids))
-                    .values(
-                        access_count=MemoryRecord.access_count + 1,
-                        recall_count=MemoryRecord.recall_count + 1,
-                        last_accessed_at=datetime.now(),
-                        last_recalled_at=datetime.now(),
-                    )
+        async def _fetch_gov():
+            try:
+                from shogun.api.kaizen import get_governance_context
+                return get_governance_context()
+            except Exception:
+                return {"rules_text": "  (not loaded)", "mandate_summary": ""}
+
+        async def _fetch_operator():
+            async for db in get_db():
+                op_res = await db.execute(select(Operator).limit(1))
+                op = op_res.scalar_one_or_none()
+                return op.display_name if op and op.display_name else "Daimyo"
+            return "Daimyo"
+
+        ctx, gov, operator_name = await _aio.gather(
+            _get_system_context(),
+            _fetch_gov(),
+            _fetch_operator(),
+        )
+
+        # ── EVENT: Auth — Session Start ──────────────────────────
+        try:
+            import asyncio
+            asyncio.ensure_future(EL.emit_auth_event(
+                "auth.session", f"Chat session started by {operator_name}",
+                user_id=operator_name, agent_id=_agent_id_str, trace_id=_trace_id,
+                detail={"channel": "web", "operator": operator_name},
+            ))
+        except Exception:
+            pass
+
+        # ── 4d. Recall Relevant Memories from Archives ────────────────
+        recalled_memories_text = ""
+        try:
+            from shogun.services.memory_service import MemoryService
+            async for db in get_db():
+                mem_svc = MemoryService(db)
+
+                # 1. Semantic search for user-query-relevant memories
+                relevant = await mem_svc.search(
+                    query=user_msg,
+                    agent_id=agent.id,
+                    limit=5,
                 )
-                await db.commit()
 
-            # ── EVENT: Memory Recalled (enhanced retrieval provenance) ──
-            _retrieval_context = []
-            if relevant:
+                # 2. Pinned memories — use cache (they rarely change)
+                _agent_str = str(agent.id)
+                if (time.monotonic() - _PINNED_CACHE["ts"] < _PINNED_TTL
+                        and _PINNED_CACHE["agent_id"] == _agent_str
+                        and _PINNED_CACHE["data"] is not None):
+                    pinned = _PINNED_CACHE["data"]
+                else:
+                    pinned = await mem_svc.get_pinned(agent_id=agent.id)
+                    _PINNED_CACHE["data"] = pinned
+                    _PINNED_CACHE["ts"] = time.monotonic()
+                    _PINNED_CACHE["agent_id"] = _agent_str
+
+                # Merge: pinned first, then relevant (deduplicated)
+                seen: set[str] = set()
+                memory_entries: list[str] = []
+
+                for p in pinned:
+                    mid = str(p.id)
+                    if mid not in seen:
+                        seen.add(mid)
+                        memory_entries.append(f"[PINNED | {p.memory_type}] {p.title}\n{p.content}")
+
                 for r in relevant:
-                    _retrieval_context.append({
-                        "memory_id": r["memory_id"],
-                        "title": r.get("title", "")[:100],
-                        "memory_type": r.get("memory_type", "unknown"),
-                        "relevance_score": round(r.get("scores", {}).get("final", 0), 3),
-                    })
-            if memory_entries:
-                try:
-                    import asyncio
-                    asyncio.ensure_future(EL.emit_memory_event(
-                        "memory.search", f"Recalled {len(memory_entries)} memories ({len(pinned)} pinned, {len(relevant)} semantic)",
-                        trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-                        memory_ids=recalled_ids,
-                        detail={
-                            "query": user_msg[:200],
-                            "pinned_count": len(pinned),
-                            "relevant_count": len(relevant),
-                            "retrieval_context": _retrieval_context,
-                        },
-                    ))
-                except Exception:
-                    pass
-            break
-    except Exception as e:
-        logger.debug("Memory recall skipped: %s", e)
+                    mid = r["memory_id"]
+                    if mid not in seen:
+                        seen.add(mid)
+                        score = r["scores"]["final"]
+                        memory_entries.append(f"[{r['memory_type']} | salience:{score:.2f}] {r['title']}\n{r['content']}")
 
-    # ── 5. Build system prompt ────────────────────────────────────
-    # Fetch posture for context injection and tool filtering
-    _posture_filter = await get_posture_tool_filter()
-    _active_tier = _posture_filter.get("active_tier", "tactical").upper()
-    _max_subagents = _posture_filter.get("max_active_subagents", 5)
+                if memory_entries:
+                    recalled_memories_text = "\n\n".join(memory_entries)
 
-    persona_name = agent.name or "Shogun"
-    system_prompt = f"""You are {persona_name}, the primary AI orchestrator of the Shogun platform.
+                # 3. Batch-update access tracking (single SQL UPDATE instead of N round-trips)
+                recalled_ids = []
+                if relevant:
+                    from shogun.db.models.memory_record import MemoryRecord
+                    from sqlalchemy import update
+                    recall_ids = [uuid.UUID(r["memory_id"]) for r in relevant]
+                    recalled_ids = [str(rid) for rid in recall_ids]
+                    await db.execute(
+                        update(MemoryRecord)
+                        .where(MemoryRecord.id.in_(recall_ids))
+                        .values(
+                            access_count=MemoryRecord.access_count + 1,
+                            recall_count=MemoryRecord.recall_count + 1,
+                            last_accessed_at=datetime.now(),
+                            last_recalled_at=datetime.now(),
+                        )
+                    )
+                    await db.commit()
+
+                # ── EVENT: Memory Recalled (enhanced retrieval provenance) ──
+                _retrieval_context = []
+                if relevant:
+                    for r in relevant:
+                        _retrieval_context.append({
+                            "memory_id": r["memory_id"],
+                            "title": r.get("title", "")[:100],
+                            "memory_type": r.get("memory_type", "unknown"),
+                            "relevance_score": round(r.get("scores", {}).get("final", 0), 3),
+                        })
+                if memory_entries:
+                    try:
+                        import asyncio
+                        asyncio.ensure_future(EL.emit_memory_event(
+                            "memory.search", f"Recalled {len(memory_entries)} memories ({len(pinned)} pinned, {len(relevant)} semantic)",
+                            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                            memory_ids=recalled_ids,
+                            detail={
+                                "query": user_msg[:200],
+                                "pinned_count": len(pinned),
+                                "relevant_count": len(relevant),
+                                "retrieval_context": _retrieval_context,
+                            },
+                        ))
+                    except Exception:
+                        pass
+                break
+        except Exception as e:
+            logger.debug("Memory recall skipped: %s", e)
+
+        # ── STATUS: Evaluating permissions ─────────────────────
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Evaluating permissions...'})}\n\n"
+
+            # ── 5. Build system prompt ────────────────────────────────
+        # Fetch posture for context injection and tool filtering
+        _posture_filter = await get_posture_tool_filter()
+        _active_tier = _posture_filter.get("active_tier", "tactical").upper()
+        _max_subagents = _posture_filter.get("max_active_subagents", 5)
+
+        persona_name = agent.name or "Shogun"
+        system_prompt = f"""You are {persona_name}, the primary AI orchestrator of the Shogun platform.
 
 YOUR OPERATOR:
 You report exclusively to your Operator, whose preferred name is '{operator_name}'.
@@ -604,12 +1103,15 @@ The platform uses Japanese-themed naming:
 - **Samurai**: Sub-agents you can spawn to handle specific tasks (research, coding, analysis, etc.).
 - **Dojo**: The UI section where Samurai agents are created, configured, and managed.
 - **Katana**: The configuration hub for model providers (Ollama, OpenAI, etc.) and API tools.
-- **Comms**: This chat interface where the user talks directly to you.
+- **Comms**: The communications hub with three tabs:
+  - **Chat**: The chat interface where the user talks directly to you.
+  - **Mail**: A fully integrated email client. You can read, reply to, and compose emails.
+  - **Calendar**: An integrated calendar. You can view events and create new ones.
 - **Bushido**: The behavioral rules/directives that govern agent decisions.
 - **Kaizen**: The continuous improvement and optimization system.
 - **Torii**: The security and governance portal.
 
-Note: You now have Native Skills (Tools) injected into your capabilities. If the user asks you to spawn a samurai, update models, etc. use the provided tools directly instead of redirecting them, IF the tools are available to you.
+Note: You now have Native Skills (Tools) injected into your capabilities. If the user asks you to spawn a samurai, update models, read emails, send emails, check the calendar, etc. use the provided tools directly instead of redirecting them, IF the tools are available to you.
 
 CONSTITUTIONAL DIRECTIVES (from Kaizen — you must follow these):
 {gov['rules_text']}
@@ -648,12 +1150,32 @@ YOUR CAPABILITIES:
 - Help the user understand and configure their Shogun system
 - Reason about tasks, suggest which Samurai agents would be best for a given workflow
 - Help with code, analysis, writing, and general knowledge
+- **Email**: Fetch inbox messages, read full email contents, compose and send emails, and reply to messages using the mail tools (fetch_inbox, read_email, send_email)
+- **Calendar**: View upcoming events and create new calendar events using the calendar tools (list_calendar_events, create_calendar_event)
+- **Cron Jobs**: List, create, and delete Bushido schedules (cron jobs) using the schedule tools (list_cron_jobs, create_cron_job, delete_cron_job)
+- **Web Browsing (Mado)**: Browse any web page, extract content, and take screenshots using the browse_web and take_screenshot tools. You have a REAL browser.
+- **Agent Flow**: Create visual AI workflows using the create_agent_flow tool
+
+IMPORTANT — TOOL USAGE DIRECTIVES:
+You have DIRECT access to all of the above capabilities through your native tools.
+When the user asks you to do something that a tool can handle — USE THE TOOL. Do NOT describe how a tool works. CALL IT.
+
+- **Web browsing**: When the user asks you to look up, search, browse, visit, or check a website — call browse_web(url="...") IMMEDIATELY.
+  Do NOT say you cannot browse the web. You CAN. You have the Mado browser engine. USE IT.
+  When extracting specific content, use the extract_preset parameter instead of raw CSS selectors:
+  headlines, links, article, news_cards, tables, images, lists, prices, full_page.
+  Only use the 'selector' parameter if the user explicitly provides a CSS selector.
+  After browsing, summarize the extracted content for the user.
+- **Email**: Use fetch_inbox, read_email, send_email. Confirm before sending.
+- **Calendar**: Use list_calendar_events, create_calendar_event.
+- **Cron Jobs**: Use list_cron_jobs, create_cron_job, delete_cron_job.
+- **Memory**: Use store_memory when the user shares important details worth remembering.
 
 BEHAVIOUR:
 - Be conversational, warm, and genuinely helpful
 - Use platform terminology naturally since the user knows the system
 - When you don't know something about live system state, say so honestly
-- Do NOT pretend you can directly execute actions
+- You CAN directly execute actions via your tools — use them proactively
 - Format responses with markdown when it improves readability
 - You HAVE persistent memory via the Archives system (Qdrant vector store + SQLite).
   Information from recalled memories is injected above. Use it naturally — refer to
@@ -664,163 +1186,209 @@ BEHAVIOUR:
   remembering, use the store_memory tool to save them to the Archives.
 """
 
-    # ── 6. Build messages ─────────────────────────────────────────
-    messages = [{"role": "system", "content": system_prompt}]
-    for h in history[-10:]:
-        if h.get("role") in ("user", "assistant") and h.get("content"):
-            messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": user_msg})
+        # ── 6. Build messages ─────────────────────────────────────────
+        messages = [{"role": "system", "content": system_prompt}]
+        for h in history[-10:]:
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+        messages.append({"role": "user", "content": user_msg})
 
-    provider_name = provider_name or provider.name
+        provider_name = provider_name or provider.name
 
-    # ── 7. Native Skills Setup ────────────────────────────────────
-    active_tools = []
-    _policy_name = None
-    async for db in get_db():
-        if agent.security_policy_id:
-            from shogun.db.models.security_policy import SecurityPolicy
-            pol = await db.execute(select(SecurityPolicy).where(SecurityPolicy.id == agent.security_policy_id))
-            policy = pol.scalar_one_or_none()
-            if policy:
-                _policy_name = policy.name if hasattr(policy, 'name') else str(agent.security_policy_id)
-                perms = policy.permissions
-                # Shogun can override the base Torii policy with custom permissions
-                if agent.bushido_settings and agent.bushido_settings.get("custom_permissions"):
-                    perms = agent.bushido_settings["custom_permissions"]
+        # ── STATUS: Loading tools ─────────────────────────────
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Loading tools...'})}\n\n"
+
+        # ── 7. Native Skills Setup ────────────────────────────────
+        active_tools = []
+        _policy_name = None
+        async for db in get_db():
+            if agent.security_policy_id:
+                from shogun.db.models.security_policy import SecurityPolicy
+                pol = await db.execute(select(SecurityPolicy).where(SecurityPolicy.id == agent.security_policy_id))
+                policy = pol.scalar_one_or_none()
+                if policy:
+                    _policy_name = policy.name if hasattr(policy, 'name') else str(agent.security_policy_id)
+                    perms = policy.permissions
+                    # Shogun can override the base Torii policy with custom permissions
+                    if agent.bushido_settings and agent.bushido_settings.get("custom_permissions"):
+                        perms = agent.bushido_settings["custom_permissions"]
                 
-                # Determine which native skills are allowed based on policy limits
-                allow_skills = not perms.get("skills", {}).get("require_approval", True)
-                allow_auto_spawn = perms.get("subagents", {}).get("allow_auto_spawn", False)
-                _denied_tools = []
-                for tool in NATIVE_TOOLS:
-                    if tool["function"]["name"] == "spawn_samurai" and not allow_auto_spawn:
-                        _denied_tools.append(tool["function"]["name"])
-                        continue
-                    if tool["function"]["name"] in ["list_available_models", "update_model_settings"] and not allow_skills:
-                        _denied_tools.append(tool["function"]["name"])
-                        continue
-                    active_tools.append(tool)
+                    # Determine which native skills are allowed based on policy limits
+                    allow_skills = not perms.get("skills", {}).get("require_approval", True)
+                    allow_auto_spawn = perms.get("subagents", {}).get("allow_auto_spawn", False)
+                    _denied_tools = []
+                    for tool in NATIVE_TOOLS:
+                        if tool["function"]["name"] == "spawn_samurai" and not allow_auto_spawn:
+                            _denied_tools.append(tool["function"]["name"])
+                            continue
+                        if tool["function"]["name"] in ["list_available_models", "update_model_settings"] and not allow_skills:
+                            _denied_tools.append(tool["function"]["name"])
+                            continue
+                        active_tools.append(tool)
 
-                try:
-                    import asyncio
-                    asyncio.ensure_future(EL.emit_policy_event(
-                        "policy.evaluated",
-                        f"Torii policy evaluated: {len(active_tools)} tools granted, {len(_denied_tools)} denied",
-                        trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-                        policy_ref=_policy_name,
-                        policy_decision="allowed" if active_tools else "restricted",
-                        policy_reason=f"Granted: {[t['function']['name'] for t in active_tools]}. Denied: {_denied_tools}",
-                        detail={"allow_skills": allow_skills, "allow_auto_spawn": allow_auto_spawn},
-                    ))
-                    # ── EVENT: Risk — Tool Denied ──────────────────
-                    if _denied_tools:
-                        asyncio.ensure_future(EL.emit_risk_event(
-                            "risk.tools_denied",
-                            f"Policy denied {len(_denied_tools)} tools: {_denied_tools}",
-                            severity="warn", risk_score="medium",
+                    try:
+                        import asyncio
+                        asyncio.ensure_future(EL.emit_policy_event(
+                            "policy.evaluated",
+                            f"Torii policy evaluated: {len(active_tools)} tools granted, {len(_denied_tools)} denied",
                             trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-                            detail={"denied_tools": _denied_tools, "policy": _policy_name},
+                            policy_ref=_policy_name,
+                            policy_decision="allowed" if active_tools else "restricted",
+                            policy_reason=f"Granted: {[t['function']['name'] for t in active_tools]}. Denied: {_denied_tools}",
+                            detail={"allow_skills": allow_skills, "allow_auto_spawn": allow_auto_spawn},
                         ))
-                except Exception:
-                    pass
-        else:
-            # No security policy — still grant core memory tool
-            for tool in NATIVE_TOOLS:
-                if tool["function"]["name"] == "store_memory":
-                    active_tools.append(tool)
-        break
+                        # ── EVENT: Risk — Tool Denied ──────────────────
+                        if _denied_tools:
+                            asyncio.ensure_future(EL.emit_risk_event(
+                                "risk.tools_denied",
+                                f"Policy denied {len(_denied_tools)} tools: {_denied_tools}",
+                                severity="warn", risk_score="medium",
+                                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                detail={"denied_tools": _denied_tools, "policy": _policy_name},
+                            ))
+                    except Exception:
+                        pass
+            else:
+                # No security policy — still grant core memory tool
+                for tool in NATIVE_TOOLS:
+                    if tool["function"]["name"] == "store_memory":
+                        active_tools.append(tool)
+            break
 
-    # ── 7b. Global posture enforcement layer ──────────────────────
-    # The per-agent policy gating above checks the agent's assigned policy.
-    # This additional layer enforces the GLOBAL posture tier constraints,
-    # stripping tools that the current tier does not permit.
-    active_tools, _posture_denied = filter_tools_by_posture(active_tools, _posture_filter)
-    if _posture_denied:
+        # ── 7b. Global posture enforcement layer ──────────────────────
+        # The per-agent policy gating above checks the agent's assigned policy.
+        # This additional layer enforces the GLOBAL posture tier constraints,
+        # stripping tools that the current tier does not permit.
+        active_tools, _posture_denied = filter_tools_by_posture(active_tools, _posture_filter)
+        if _posture_denied:
+            try:
+                import asyncio
+                asyncio.ensure_future(EL.emit_policy_event(
+                    "policy.posture_filtered",
+                    f"Posture [{_active_tier}] stripped {len(_posture_denied)} tools: {_posture_denied}",
+                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                    policy_ref=f"posture:{_active_tier}",
+                    policy_decision="denied",
+                    policy_reason=f"Global posture filter denied: {_posture_denied}",
+                    detail={"posture_tier": _active_tier, "denied_tools": _posture_denied},
+                ))
+            except Exception:
+                pass
+
+        # ── 7c. Prompt injection for non-tool-calling models ──────────
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Tools loaded: {len(active_tools)}'})}\n\n"
+        
+        # When the model doesn't support the structured tools API, we inject
+        # tool descriptions into the system prompt and rely on text-based parsing.
+        _prompt_injected_tools = False
+        _active_tool_names = [t["function"]["name"] for t in active_tools]
+        if active_tools and not _model_supports_tools:
+            from shogun.services.native_skills import generate_tool_prompt
+            _tool_prompt = generate_tool_prompt(active_tools)
+            # Inject into the system prompt (first message)
+            messages[0]["content"] += "\n\n" + _tool_prompt
+            _prompt_injected_tools = True
+            logger.info(f"[Shogun] Prompt-injected {len(active_tools)} tools (model does not support structured tools)")
+            # Clear active_tools so they're not sent via API — text parser will handle calls
+            active_tools = []
+            
+        # Log Torii / Tool permission decisions
+        logger.info(f"[MISSION] Torii Decisions - Policy ID: {_policy_name}, Posture: {_active_tier}")
+        for tool in NATIVE_TOOLS:
+            tname = tool["function"]["name"]
+            allowed = tname in _active_tool_names
+            reason = "Granted by policy" if allowed else "Denied by policy/posture constraints"
+            logger.info(f"[MISSION] Tool '{tname}': Allowed={allowed}, Reason='{reason}'")
+
+        # ── EU AI Act: Derive use-case context ─────────────────
+        _security_tier = "guarded"
+        if _policy_name:
+            _tier_map = {"shrine": "minimal", "guarded": "limited", "tactical": "limited", "campaign": "high", "ronin": "high"}
+            for tier_key, risk_lvl in _tier_map.items():
+                if tier_key in (_policy_name or "").lower():
+                    _security_tier = risk_lvl
+                    break
+
+        _use_case_context = {
+            "domain": "assistant",
+            "purpose": task_type if task_type != "*" else "general_conversation",
+            "risk_level": _security_tier,
+            "human_oversight_required": False,
+            "frameworks": ["SOC2", "NIS2", "EU_AI_ACT"],
+        }
+
+        # ── EVENT: Decision Context (EU AI Act) ───────────────
         try:
             import asyncio
-            asyncio.ensure_future(EL.emit_policy_event(
-                "policy.posture_filtered",
-                f"Posture [{_active_tier}] stripped {len(_posture_denied)} tools: {_posture_denied}",
+            _safeguards = []
+            if _policy_name:
+                _safeguards.append(f"torii_policy:{_policy_name}")
+            if recalled_memories_text:
+                _safeguards.append("memory_grounding")
+
+            asyncio.ensure_future(EL.emit_decision_event(
+                "decision.context",
+                f"Decision context assembled for chat turn",
                 trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-                policy_ref=f"posture:{_active_tier}",
-                policy_decision="denied",
-                policy_reason=f"Global posture filter denied: {_posture_denied}",
-                detail={"posture_tier": _active_tier, "denied_tools": _posture_denied},
+                model_used=model_name, provider_used=provider_name,
+                use_case_context=_use_case_context,
+                governance_flags={
+                    "human_oversight_required": False,
+                    "evidence_completeness": "full" if recalled_memories_text else "none",
+                },
+                detail={
+                    "inputs": {
+                        "user_message_length": len(user_msg),
+                        "history_messages": len(history),
+                        "memories_recalled": len(memory_entries) if 'memory_entries' in dir() else 0,
+                        "tools_available": [t["function"]["name"] for t in active_tools],
+                    },
+                    "safeguards_applied": _safeguards,
+                    "security_tier": _security_tier,
+                },
             ))
+            # ── EVENT: Risk — High Autonomy Mode ──────────────
+            if _security_tier in ("high",):
+                asyncio.ensure_future(EL.emit_risk_event(
+                    "risk.high_autonomy_mode",
+                    f"Operating in high-autonomy tier ({_policy_name or 'campaign/ronin'})",
+                    severity="warn", risk_score="high",
+                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                    detail={"security_tier": _security_tier, "policy": _policy_name},
+                ))
         except Exception:
             pass
 
-    # ── EU AI Act: Derive use-case context ─────────────────
-    _security_tier = "guarded"
-    if _policy_name:
-        _tier_map = {"shrine": "minimal", "guarded": "limited", "tactical": "limited", "campaign": "high", "ronin": "high"}
-        for tier_key, risk_lvl in _tier_map.items():
-            if tier_key in (_policy_name or "").lower():
-                _security_tier = risk_lvl
-                break
+        # Log user message for drift monitor
+        _append_chat_log("user", user_msg)
+        timestamp = datetime.now().isoformat()
 
-    _use_case_context = {
-        "domain": "assistant",
-        "purpose": task_type if task_type != "*" else "general_conversation",
-        "risk_level": _security_tier,
-        "human_oversight_required": False,
-        "frameworks": ["SOC2", "NIS2", "EU_AI_ACT"],
-    }
+        # ── Pre-Call Diagnostics Logging ──
+        logger.info(
+            f"[MISSION] Request Context - Mode: Mission, "
+            f"Provider: {provider_name}, Model: {model_name}\n"
+            f"[MISSION] Tool Count: {len(_active_tool_names)}, "
+            f"Tools Passed to Model: {bool(_active_tool_names)}\n"
+            f"[MISSION] Tool Names: {_active_tool_names}\n"
+            f"[MISSION] Security Posture: {_active_tier} (Policy ID: {_policy_name})\n"
+            f"[MISSION] Tool Call Strategy: {'native' if _model_supports_tools else 'json_prompt' if _prompt_injected_tools else 'none'}\n"
+            f"[MISSION] Streaming: True"
+        )
 
-    # ── EVENT: Decision Context (EU AI Act) ───────────────
-    try:
-        import asyncio
-        _safeguards = []
-        if _policy_name:
-            _safeguards.append(f"torii_policy:{_policy_name}")
-        if recalled_memories_text:
-            _safeguards.append("memory_grounding")
+        # ── Meta event — emit now that model is resolved ───────
+        timestamp = datetime.now().isoformat()
+        yield f"data: {json.dumps({'type': 'meta', 'model': model_name, 'provider': provider_name, 'timestamp': timestamp, 'reason': res_reason, 'search': bool(_search_model), 'mode': 'mission'})}\n\n"
 
-        asyncio.ensure_future(EL.emit_decision_event(
-            "decision.context",
-            f"Decision context assembled for chat turn",
-            trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-            model_used=model_name, provider_used=provider_name,
-            use_case_context=_use_case_context,
-            governance_flags={
-                "human_oversight_required": False,
-                "evidence_completeness": "full" if recalled_memories_text else "none",
-            },
-            detail={
-                "inputs": {
-                    "user_message_length": len(user_msg),
-                    "history_messages": len(history),
-                    "memories_recalled": len(memory_entries) if 'memory_entries' in dir() else 0,
-                    "tools_available": [t["function"]["name"] for t in active_tools],
-                },
-                "safeguards_applied": _safeguards,
-                "security_tier": _security_tier,
-            },
-        ))
-        # ── EVENT: Risk — High Autonomy Mode ──────────────
-        if _security_tier in ("high",):
-            asyncio.ensure_future(EL.emit_risk_event(
-                "risk.high_autonomy_mode",
-                f"Operating in high-autonomy tier ({_policy_name or 'campaign/ronin'})",
-                severity="warn", risk_score="high",
-                trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
-                detail={"security_tier": _security_tier, "policy": _policy_name},
-            ))
-    except Exception:
-        pass
+        # ── STATUS: Calling model ─────────────────────────────
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Calling model...'})}\n\n"
 
-    # Log user message for drift monitor
-    _append_chat_log("user", user_msg)
-    timestamp = datetime.now().isoformat()
-
-    async def generate():
-        nonlocal messages
-        # Metadata event: lets frontend show model badge immediately
-        yield f"data: {json.dumps({'type': 'meta', 'model': model_name, 'provider': provider_name, 'timestamp': timestamp, 'reason': res_reason, 'search': bool(_search_model)})}\n\n"
+        _tool_retry_used = False  # only retry once
+        _any_tool_executed = False
 
         while True:
             assistant_tokens: list[str] = []
             tool_calls_buffer: dict = {}
+            _retry_without_tools = False
 
             req_json = {
                 "model": model_name,
@@ -842,60 +1410,171 @@ BEHAVIOUR:
                         if resp.status_code >= 400:
                             body_bytes = await resp.aread()
                             err = body_bytes.decode(errors="replace")[:300]
-                            # ── EVENT: Model Error ────────────────
-                            try:
-                                await EL.emit_model_event(
-                                    "model.error", f"LLM API error {resp.status_code}: {err[:100]}",
-                                    result="error", severity="error",
-                                    model_used=model_name, provider_used=provider_name,
-                                    trace_id=_trace_id, agent_id=_agent_id_str,
-                                    detail={"status_code": resp.status_code, "error": err},
-                                )
-                                # ── EVENT: Incident — Model API Error ───
-                                await EL.emit_incident_event(
-                                    "incident.model_api_error",
-                                    f"Model API returned HTTP {resp.status_code}",
-                                    severity="error", risk_score="high",
-                                    trace_id=_trace_id, agent_id=_agent_id_str,
-                                    detail={"model": model_name, "provider": provider_name, "status_code": resp.status_code, "error": err[:200]},
-                                )
-                            except Exception:
-                                pass
-                            yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ LLM error ({resp.status_code}): {err}'})}\n\n"
-                            yield "data: [DONE]\n\n"
-                            return
 
-                        async for line in resp.aiter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data_str = line[6:].strip()
-                            if data_str == "[DONE]":
-                                break
-                                
-                            try:
-                                chunk = json.loads(data_str)
-                                delta = chunk["choices"][0]["delta"]
-                                
-                                # Process tool calls from streaming
-                                if "tool_calls" in delta:
-                                    for tcall in delta["tool_calls"]:
-                                        idx = tcall["index"]
-                                        if idx not in tool_calls_buffer:
-                                            tool_calls_buffer[idx] = {"id": tcall.get("id"), "type": "function", "function": {"name": tcall["function"].get("name", ""), "arguments": ""}}
-                                        else:
-                                            tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"].get("arguments", "")
+                            # ── Retry without tools on invalid tool call arguments ──
+                            if resp.status_code == 400 and "invalid tool call" in err.lower() and not _tool_retry_used:
+                                import logging as _logging
+                                _logging.getLogger("shogun.agents").warning("[Shogun] 400 invalid tool call — retrying without tools")
+                                active_tools = []
+                                _tool_retry_used = True
+                                _retry_without_tools = True
+                                # Strip any tool-related messages so the model gets a clean conversation
+                                messages = [m for m in messages if m.get("role") not in ("tool",) and "tool_calls" not in m]
+
+                            if not _retry_without_tools:
+                                # ── EVENT: Model Error ────────────────
+                                try:
+                                    await EL.emit_model_event(
+                                        "model.error", f"LLM API error {resp.status_code}: {err[:100]}",
+                                        result="error", severity="error",
+                                        model_used=model_name, provider_used=provider_name,
+                                        trace_id=_trace_id, agent_id=_agent_id_str,
+                                        detail={"status_code": resp.status_code, "error": err},
+                                    )
+                                    # ── EVENT: Incident — Model API Error ───
+                                    await EL.emit_incident_event(
+                                        "incident.model_api_error",
+                                        f"Model API returned HTTP {resp.status_code}",
+                                        severity="error", risk_score="high",
+                                        trace_id=_trace_id, agent_id=_agent_id_str,
+                                        detail={"model": model_name, "provider": provider_name, "status_code": resp.status_code, "error": err[:200]},
+                                    )
+                                except Exception:
+                                    pass
+                                yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ LLM error ({resp.status_code}): {err}'})}\n\n"
+                                yield "data: [DONE]\n\n"
+                                return
+
+                        if not _retry_without_tools:
+                            _inside_think = False  # Track <think>...</think> blocks
+                            _inside_tool_call = False  # Track <tool_call>...</tool_call> blocks
+                            _yield_buffer = ""  # Buffer for detecting <tool_call> tags split across tokens
+                            _first_token_received = False
+                            async for line in resp.aiter_lines():
+                                if not line.startswith("data: "):
+                                    continue
+                                data_str = line[6:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                    
+                                if not _first_token_received:
+                                    _first_token_received = True
+                                    yield f"data: {json.dumps({'type': 'status', 'content': 'Model responded. Checking for tool requests...'})}\n\n"
+                                    
+                                try:
+                                    chunk = json.loads(data_str)
+                                    delta = chunk["choices"][0]["delta"]
+                                    
+                                    # Process tool calls from streaming
+                                    if "tool_calls" in delta:
+                                        for i, tcall in enumerate(delta["tool_calls"]):
+                                            idx = tcall.get("index", i)
+                                            if idx not in tool_calls_buffer:
+                                                tool_calls_buffer[idx] = {
+                                                    "id": tcall.get("id"),
+                                                    "type": "function",
+                                                    "function": {
+                                                        "name": tcall["function"].get("name", "") if "function" in tcall else "",
+                                                        "arguments": tcall["function"].get("arguments", "") if "function" in tcall else ""
+                                                    }
+                                                }
+                                            else:
+                                                if tcall.get("id"):
+                                                    tool_calls_buffer[idx]["id"] = tcall["id"]
+                                                if "function" in tcall:
+                                                    if tcall["function"].get("name"):
+                                                        tool_calls_buffer[idx]["function"]["name"] = tcall["function"]["name"]
+                                                    if tcall["function"].get("arguments"):
+                                                        tool_calls_buffer[idx]["function"]["arguments"] += tcall["function"]["arguments"]
+                                            
+                                            # Yield action notice initially
+                                            if tool_calls_buffer[idx].get("id") and tool_calls_buffer[idx]["function"].get("name"):
+                                                func_name = tool_calls_buffer[idx]["function"]["name"]
+                                                yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
+                                    
+                                    content = delta.get("content") or ""
+                                    if content:
+                                        _yield_buffer += content
                                         
-                                        # Yield action notice initially
-                                        if tcall.get("id"):
-                                            func_name = tool_calls_buffer[idx]["function"]["name"]
-                                            yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
-                                
-                                content = delta.get("content") or ""
-                                if content:
-                                    assistant_tokens.append(content)
-                                    yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                            except Exception:
-                                pass  # skip malformed chunks
+                                        # ── Handle <think> blocks ──
+                                        if _inside_think:
+                                            assistant_tokens.append(content)
+                                            if "</think>" in _yield_buffer:
+                                                _inside_think = False
+                                                _yield_buffer = _yield_buffer.split("</think>", 1)[1]
+                                            else:
+                                                _yield_buffer = _yield_buffer[-7:]
+                                            continue
+                                        elif "<think>" in _yield_buffer:
+                                            before, after = _yield_buffer.split("<think>", 1)
+                                            if before:
+                                                assistant_tokens.append(before)
+                                                yield f"data: {json.dumps({'type': 'token', 'content': before})}\n\n"
+                                            _inside_think = True
+                                            assistant_tokens.append("<think>")
+                                            if after:
+                                                assistant_tokens.append(after)
+                                            if "</think>" in after:
+                                                _inside_think = False
+                                                _yield_buffer = after.split("</think>", 1)[1]
+                                            else:
+                                                _yield_buffer = after[-7:]
+                                            continue
+                                            
+                                        # ── Handle <tool_call> blocks ──
+                                        if _inside_tool_call:
+                                            assistant_tokens.append(content)
+                                            if "</tool_call>" in _yield_buffer:
+                                                _inside_tool_call = False
+                                                _yield_buffer = _yield_buffer.split("</tool_call>", 1)[1]
+                                            else:
+                                                _yield_buffer = _yield_buffer[-11:]
+                                            continue
+                                        elif "<tool_call>" in _yield_buffer:
+                                            before, after = _yield_buffer.split("<tool_call>", 1)
+                                            if before:
+                                                assistant_tokens.append(before)
+                                                yield f"data: {json.dumps({'type': 'token', 'content': before})}\n\n"
+                                            _inside_tool_call = True
+                                            assistant_tokens.append("<tool_call>")
+                                            if after:
+                                                assistant_tokens.append(after)
+                                            if "</tool_call>" in after:
+                                                _inside_tool_call = False
+                                                _yield_buffer = after.split("</tool_call>", 1)[1]
+                                            else:
+                                                _yield_buffer = after[-11:]
+                                            continue
+                                            
+                                        # ── Check if suffix could be start of <think> or <tool_call> ──
+                                        _might_be_tag = False
+                                        for _tag in ("<think>", "<tool_call>"):
+                                            for _i in range(1, len(_tag)):
+                                                if _yield_buffer.endswith(_tag[:_i]):
+                                                    _might_be_tag = True
+                                                    break
+                                            if _might_be_tag:
+                                                break
+                                        
+                                        if _might_be_tag:
+                                            continue
+                                        
+                                        # Safe to flush entire buffer to frontend
+                                        assistant_tokens.append(_yield_buffer)
+                                        yield f"data: {json.dumps({'type': 'token', 'content': _yield_buffer})}\n\n"
+                                        _yield_buffer = ""
+                                except Exception as chunk_exc:
+                                    logger.warning("[Shogun] Error parsing stream chunk: %s", chunk_exc, exc_info=True)
+
+                            # Flush remaining yield buffer after stream ends
+                            if _yield_buffer and not _inside_tool_call and not _inside_think:
+                                assistant_tokens.append(_yield_buffer)
+                                yield f"data: {json.dumps({'type': 'token', 'content': _yield_buffer})}\n\n"
+                                _yield_buffer = ""
+                            elif _yield_buffer:
+                                # Was part of a tool call or thought — save but don't yield
+                                assistant_tokens.append(_yield_buffer)
+                                _yield_buffer = ""
 
             except httpx.ConnectError:
                 yield f"data: {json.dumps({'type': 'error', 'content': f'⚠️ Cannot connect to {base_url}. Is {provider.provider_type} running?'})}\n\n"
@@ -906,11 +1585,16 @@ BEHAVIOUR:
                 yield "data: [DONE]\n\n"
                 return
 
-            if assistant_tokens:
-                _append_chat_log("assistant", "".join(assistant_tokens))
-                messages.append({"role": "assistant", "content": "".join(assistant_tokens)})
+            # If we're retrying without tools, restart the loop immediately
+            if _retry_without_tools:
+                continue
 
-            # Tool execution cycle
+            if assistant_tokens:
+                full_text = "".join(assistant_tokens)
+                _append_chat_log("assistant", full_text)
+                messages.append({"role": "assistant", "content": full_text})
+
+            # ── Structured tool calls (OpenAI format) ──
             if tool_calls_buffer:
                 tool_calls_array = list(tool_calls_buffer.values())
                 
@@ -931,6 +1615,7 @@ BEHAVIOUR:
                             
                         # Execute
                         res_str = await execute_native_tool(func_name, args, db)
+                        _any_tool_executed = True
                         messages.append({"role": "tool", "tool_call_id": tcall["id"], "name": func_name, "content": res_str})
 
                         # ── EVENT: Tool Executed ──────────────
@@ -970,10 +1655,166 @@ BEHAVIOUR:
                             pass
                     break # Only one DB session needed
 
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Tool completed. Drafting answer...'})}\n\n"
+
                 # Continue the loop to hit LLM again with the tool results
                 continue
+
+            # ── Fallback: parse text-based <tool_call> blocks ──
+            # Some models (e.g. Gemma4) output tool calls as text instead of
+            # using the structured OpenAI format. Parse and execute them.
+            full_text = "".join(assistant_tokens) if assistant_tokens else ""
+            # Strip <think>...</think> blocks before parsing tool calls
+            import re as _re
+            full_text_clean = _re.sub(r"<think>.*?</think>", "", full_text, flags=_re.DOTALL).strip()
+            
+            _valid_tool_names = _active_tool_names if _active_tool_names else []
+            _tool_names_pattern = "|".join(_valid_tool_names) if _valid_tool_names else "NO_TOOLS"
+            
+            _tc_matches = []
+            
+            # 1. Parse via strict <tool_call> blocks if present
+            if "<tool_call>" in full_text_clean and "</tool_call>" in full_text_clean:
+                _block_pattern = _re.compile(r"<tool_call>(.*?)</tool_call>", _re.DOTALL)
+                _blocks = _block_pattern.findall(full_text_clean)
+                _func_pattern = _re.compile(r"(\w+)\s*\(([\s\S]*)\)\s*$", _re.DOTALL)
+                for _block in _blocks:
+                    _block_clean = _block.strip()
+                    if _block_clean.startswith("tool_name:"):
+                        _block_clean = _block_clean[len("tool_name:"):].strip()
+                    _m = _func_pattern.match(_block_clean)
+                    if _m:
+                        _func_name = _m.group(1).strip()
+                        if _func_name in _valid_tool_names:
+                            _tc_matches.append((_func_name, _m.group(2).strip()))
+            
+            # 2. If no <tool_call> blocks matched, fall back to matching code blocks and text patterns
+            if not _tc_matches and _valid_tool_names:
+                _code_block_pattern = _re.compile(r"```[a-zA-Z0-9]*\s*\n(.*?)\n\s*```", _re.DOTALL)
+                _code_blocks = _code_block_pattern.findall(full_text_clean)
+                
+                _call_pattern = _re.compile(
+                    r"(?:tool_name:\s*)?(" + _tool_names_pattern + r")\s*\(([\s\S]*?)\)",
+                    _re.DOTALL
+                )
+                
+                for _block in _code_blocks:
+                    for _m in _call_pattern.finditer(_block):
+                        _tc_matches.append((_m.group(1), _m.group(2).strip()))
+                        
+                if not _tc_matches:
+                    for _m in _call_pattern.finditer(full_text_clean):
+                        _tc_matches.append((_m.group(1), _m.group(2).strip()))
+            
+            # Deduplicate matches
+            _seen = set()
+            _deduped_tc_matches = []
+            for _fn, _raw_args in _tc_matches:
+                _key = (_fn, _raw_args)
+                if _key not in _seen:
+                    _seen.add(_key)
+                    _deduped_tc_matches.append((_fn, _raw_args))
+            
+            import logging as _logging
+            _log = _logging.getLogger("shogun.agents")
+            
+            # ── Parser Diagnostics ──
+            if not tool_calls_buffer and _active_tool_names:
+                _log.info(
+                    f"[MISSION] Parser Diagnostics - Tool call detected: {bool(_deduped_tc_matches)}, "
+                    f"Tool names: {[m[0] for m in _deduped_tc_matches] if _deduped_tc_matches else []}\n"
+                    f"[MISSION] Raw output preview: {full_text_clean[:200].replace(chr(10), ' ')}"
+                )
+                if not _deduped_tc_matches:
+                    _log.info("[MISSION] Parse Error: No valid tool_call block or regex match found.")
+            
+            if _deduped_tc_matches:
+                _log.info(f"[Shogun] Text-mode tool calls found: {len(_deduped_tc_matches)} — {[m[0] for m in _deduped_tc_matches]}")
+                _text_tool_results = []
+                async for db in get_db():
+                    for func_name, raw_args in _deduped_tc_matches:
+                        # Parse arguments from various formats
+                        args = {}
+                        raw_args = raw_args.strip()
+                        if raw_args:
+                            if raw_args.endswith(","):
+                                raw_args = raw_args[:-1].strip()
+                            try:
+                                # Try JSON first: func({"key": "val"})
+                                args = json.loads(raw_args)
+                            except json.JSONDecodeError:
+                                # Try key=value pairs: func(key="val", key2="val2")
+                                _kv_pattern = _re.compile(
+                                    r'(\w+)\s*=\s*(?:'
+                                    r'\{?"([^}]*?)"\}?'    # key={"value"} or key="value"
+                                    r"|'([^']*?)'"         # key='value'
+                                    r'|(\S+)'              # key=value (no quotes)
+                                    r')',
+                                )
+                                for m in _kv_pattern.finditer(raw_args):
+                                    k = m.group(1)
+                                    v = m.group(2) or m.group(3) or m.group(4) or ""
+                                    v_str = str(v).strip().strip(",")
+                                    v_lower = v_str.lower()
+                                    if v_lower == "true":
+                                        v_parsed = True
+                                    elif v_lower == "false":
+                                        v_parsed = False
+                                    elif v_lower in ("none", "null"):
+                                        v_parsed = None
+                                    else:
+                                        try:
+                                            if "." in v_str:
+                                                v_parsed = float(v_str)
+                                            else:
+                                                v_parsed = int(v_str)
+                                        except ValueError:
+                                            v_parsed = v_str
+                                    args[k] = v_parsed
+                                _log.info(f"[Shogun] Text-mode tool '{func_name}' parsed args: {args}")
+
+                            yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
+                            res_str = await execute_native_tool(func_name, args, db)
+                            _any_tool_executed = True
+                            _text_tool_results.append((func_name, args, res_str))
+                            _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
+
+                            try:
+                                _tool_result = json.loads(res_str)
+                                _tool_status = _tool_result.get("status", "unknown")
+                            except Exception:
+                                _tool_status = "unknown"
+                            try:
+                                await EL.emit_tool_event(
+                                    "tool.executed", f"Native tool '{func_name}' executed (text-mode)",
+                                    tool_name=func_name,
+                                    result="success" if _tool_status == "success" else "error",
+                                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                    model_used=model_name, provider_used=provider_name,
+                                    detail={"args": {k: str(v)[:200] for k, v in args.items()}, "result_status": _tool_status, "mode": "text_parse"},
+                                )
+                            except Exception:
+                                pass
+                    break  # Only one DB session needed
+
+                # Feed results back as a user message with tool outputs
+                # (IMPORTANT: this must be OUTSIDE the `async for db` block
+                #  so that `continue` targets the outer `while True` loop)
+                _results_text = "\n\n".join(
+                    f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _text_tool_results
+                )
+                messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
+                
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Tool completed. Drafting answer...'})}\n\n"
+                continue  # ← NOW correctly continues the `while True` loop
             
             # If no tool calls occurred or we are done, terminate loop
+            _tool_required = bool(_active_tool_names) and classification and classification.get("task_type") in ("search", "skill", "agent")
+            if _tool_required and not _deduped_tc_matches and not tool_calls_buffer and not _any_tool_executed:
+                _log.warning(f"[Shogun] Mission failed gracefully. Expected tool call but none detected.")
+                yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No valid tool call detected.'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Mission completed.'})}\n\n"
             break
 
         # ── EVENT: Response Complete ─────────────────────
@@ -1036,7 +1877,7 @@ BEHAVIOUR:
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
-        generate(),
+        _mission_generate(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

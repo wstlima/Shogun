@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   Radio, 
@@ -13,10 +13,13 @@ import {
   Save,
   Settings,
   Zap,
+  GitBranch,
+  Camera,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { AgentFlow } from './AgentFlow';
 
 export const SamuraiNetwork = () => {
   const { t } = useTranslation();
@@ -26,6 +29,7 @@ export const SamuraiNetwork = () => {
   const [routingProfiles, setRoutingProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'fleet' | 'agent-flow'>('fleet');
   const [searchTerm, setSearchTerm] = useState('');
   const [editAgent, setEditAgent] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
@@ -37,6 +41,10 @@ export const SamuraiNetwork = () => {
   });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const editAvatarRef = useRef<HTMLInputElement>(null);
+  const createAvatarRef = useRef<HTMLInputElement>(null);
+  const [createAvatarFile, setCreateAvatarFile] = useState<File | null>(null);
+  const [createAvatarPreview, setCreateAvatarPreview] = useState<string | null>(null);
   
   const [newAgent, setNewAgent] = useState({
     name: '',
@@ -89,17 +97,55 @@ export const SamuraiNetwork = () => {
     e.preventDefault();
     try {
       const slug = newAgent.name.toLowerCase().replace(/\s+/g, '-');
-      await axios.post('/api/v1/agents', {
+      const res = await axios.post('/api/v1/agents', {
         ...newAgent,
         slug,
         model_routing_profile_id: newAgent.model_routing_profile_id || null,
       });
+      // Upload avatar if one was selected
+      if (createAvatarFile && res.data?.data?.id) {
+        const formData = new FormData();
+        formData.append('file', createAvatarFile);
+        try {
+          await axios.post(`/api/v1/agents/${res.data.data.id}/avatar`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch { /* non-fatal */ }
+      }
       setShowCreateModal(false);
       setNewAgent({ name: '', slug: '', description: '', role_id: '', model_routing_profile_id: '', agent_type: 'samurai', spawn_policy: 'manual', tags: [] });
+      setCreateAvatarFile(null);
+      setCreateAvatarPreview(null);
       fetchAll();
     } catch (error) {
       console.error('Error creating agent:', error);
     }
+  };
+
+  const handleEditAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editAgent) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await axios.post(`/api/v1/agents/${editAgent.id}/avatar`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setEditAgent({ ...editAgent, avatar_url: res.data.data.avatar_url });
+      // Update in the agents list as well
+      setAgents(prev => prev.map(a => a.id === editAgent.id ? { ...a, avatar_url: res.data.data.avatar_url } : a));
+    } catch {
+      setEditError('Failed to upload avatar.');
+    }
+  };
+
+  const handleCreateAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCreateAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setCreateAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleAction = async (agentId: string, action: 'suspend' | 'resume' | 'delete') => {
@@ -169,14 +215,58 @@ export const SamuraiNetwork = () => {
           <p className="text-shogun-subdued text-sm mt-1">{t('samurai_network.subtitle', 'Orchestrate specialized sub-agents across the mission grid.')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={fetchAll} className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
-          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold py-2.5 px-6 rounded-lg transition-all shadow-shogun">
-            <Plus className="w-4 h-4" /> {t('samurai_network.deploy_samurai', 'DEPLOY SAMURAI')}
-          </button>
+          {activeTab === 'fleet' && (
+            <>
+              <button onClick={fetchAll} className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors">
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              </button>
+              <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-shogun-blue hover:bg-shogun-blue/90 text-white font-bold py-2.5 px-6 rounded-lg transition-all shadow-shogun">
+                <Plus className="w-4 h-4" /> {t('samurai_network.deploy_samurai', 'DEPLOY SAMURAI')}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Tab Bar */}
+      <div className="flex items-center gap-1 border-b border-shogun-border">
+        <button
+          onClick={() => setActiveTab('fleet')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            activeTab === 'fleet'
+              ? "text-shogun-gold"
+              : "text-shogun-subdued hover:text-shogun-text"
+          )}
+        >
+          <Users className="w-3.5 h-3.5" />
+          {t('samurai_network.tab_fleet', 'Fleet')}
+          {activeTab === 'fleet' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('agent-flow')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            activeTab === 'agent-flow'
+              ? "text-shogun-gold"
+              : "text-shogun-subdued hover:text-shogun-text"
+          )}
+        >
+          <GitBranch className="w-3.5 h-3.5" />
+          {t('samurai_network.tab_agent_flow', 'Agent Flow')}
+          {activeTab === 'agent-flow' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
+          )}
+        </button>
+      </div>
+
+      {/* Agent Flow Tab */}
+      {activeTab === 'agent-flow' && <AgentFlow />}
+
+      {/* Fleet Tab — existing content */}
+      {activeTab === 'fleet' && (<>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -249,8 +339,12 @@ export const SamuraiNetwork = () => {
                     {/* Designation */}
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-shogun-card border border-shogun-border flex items-center justify-center text-shogun-gold font-bold relative">
-                          {agent.name[0]}
+                        <div className="w-10 h-10 rounded-lg bg-shogun-card border border-shogun-border flex items-center justify-center text-shogun-gold font-bold relative overflow-hidden">
+                          {agent.avatar_url && agent.avatar_url !== '/shogun-avatar.png' ? (
+                            <img src={agent.avatar_url} alt={agent.name} className="w-full h-full object-cover" />
+                          ) : (
+                            agent.name[0]
+                          )}
                           <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-shogun-blue border border-[#0a0e1a] flex items-center justify-center">
                             <Users className="w-2 h-2 text-white" />
                           </div>
@@ -375,14 +469,30 @@ export const SamuraiNetwork = () => {
           <div className="bg-[#0a0e1a] border border-shogun-border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="bg-shogun-card border-b border-shogun-border p-6 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-shogun-gold" />
-                  <h3 className="text-lg font-bold text-shogun-gold">{t('samurai_network.configure_samurai')}</h3>
+              <div className="flex items-center gap-4">
+                <div
+                  onClick={() => editAvatarRef.current?.click()}
+                  className="w-14 h-14 rounded-xl bg-[#050508] border border-shogun-border flex items-center justify-center text-shogun-gold font-bold text-lg relative cursor-pointer group hover:border-shogun-gold/50 transition-all overflow-hidden shrink-0"
+                >
+                  {editAgent.avatar_url && editAgent.avatar_url !== '/shogun-avatar.png' ? (
+                    <img src={editAgent.avatar_url} alt={editAgent.name} className="w-full h-full object-cover" />
+                  ) : (
+                    editAgent.name[0]
+                  )}
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-4 h-4 text-shogun-gold" />
+                  </div>
                 </div>
-                <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold mt-1">
-                  {editAgent.name} · <span className="font-mono">{editAgent.id.slice(0, 8)}</span>
-                </p>
+                <input type="file" ref={editAvatarRef} className="hidden" accept="image/*" onChange={handleEditAvatarUpload} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-shogun-gold" />
+                    <h3 className="text-lg font-bold text-shogun-gold">{t('samurai_network.configure_samurai')}</h3>
+                  </div>
+                  <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold mt-1">
+                    {editAgent.name} · <span className="font-mono">{editAgent.id.slice(0, 8)}</span>
+                  </p>
+                </div>
               </div>
               <button onClick={() => setEditAgent(null)} className="p-2 hover:bg-shogun-gold/10 text-shogun-subdued hover:text-shogun-gold rounded-lg transition-colors">
                 <X className="w-4 h-4" />
@@ -515,11 +625,29 @@ export const SamuraiNetwork = () => {
         >
           <div className="bg-[#0a0e1a] border border-shogun-border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="bg-shogun-card border-b border-shogun-border p-6 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-shogun-gold">{t('samurai_network.deploy_new')}</h3>
-                <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold mt-1">{t('samurai_network.initialize_fleet')}</p>
+              <div className="flex items-center gap-4">
+                <div
+                  onClick={() => createAvatarRef.current?.click()}
+                  className="w-14 h-14 rounded-xl bg-[#050508] border border-dashed border-shogun-border flex items-center justify-center relative cursor-pointer group hover:border-shogun-gold/50 transition-all overflow-hidden shrink-0"
+                >
+                  {createAvatarPreview ? (
+                    <img src={createAvatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-shogun-subdued group-hover:text-shogun-gold transition-colors" />
+                  )}
+                  {createAvatarPreview && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Camera className="w-4 h-4 text-shogun-gold" />
+                    </div>
+                  )}
+                </div>
+                <input type="file" ref={createAvatarRef} className="hidden" accept="image/*" onChange={handleCreateAvatarSelect} />
+                <div>
+                  <h3 className="text-xl font-bold text-shogun-gold">{t('samurai_network.deploy_new')}</h3>
+                  <p className="text-[10px] text-shogun-subdued uppercase tracking-widest font-bold mt-1">{t('samurai_network.initialize_fleet')}</p>
+                </div>
               </div>
-              <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-shogun-gold/10 text-shogun-subdued hover:text-shogun-gold rounded-lg transition-colors">
+              <button onClick={() => { setShowCreateModal(false); setCreateAvatarFile(null); setCreateAvatarPreview(null); }} className="p-2 hover:bg-shogun-gold/10 text-shogun-subdued hover:text-shogun-gold rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -636,6 +764,7 @@ export const SamuraiNetwork = () => {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 };

@@ -189,8 +189,27 @@ async def telegram_poller_task():
                     continue
 
             if not resp.is_success:
-                logger.warning(f"[Telegram] Polling failed: HTTP {resp.status_code} - {resp.text}")
-                await asyncio.sleep(10)
+                if resp.status_code == 401:
+                    # Invalid or revoked bot token — auto-disconnect to stop polling
+                    logger.warning("[Telegram] Bot token is invalid (HTTP 401). Auto-disconnecting to stop polling. Reconfigure in the Katana to reconnect.")
+                    try:
+                        async with async_session_factory() as session:
+                            from sqlalchemy import select
+                            agent = (await session.execute(
+                                select(Agent).where(Agent.agent_type == "shogun", Agent.is_primary == True, Agent.is_deleted == False)
+                            )).scalar_one_or_none()
+                            if agent and agent.bushido_settings:
+                                tg_cfg = agent.bushido_settings.get(_TELEGRAM_KEY, {})
+                                tg_cfg["connected"] = False
+                                agent.bushido_settings = {**agent.bushido_settings, _TELEGRAM_KEY: tg_cfg}
+                                await session.commit()
+                                logger.info("[Telegram] Auto-disconnected due to invalid token.")
+                    except Exception as disc_err:
+                        logger.debug(f"[Telegram] Failed to auto-disconnect: {disc_err}")
+                    await asyncio.sleep(60)  # Long sleep after auto-disconnect
+                else:
+                    logger.warning(f"[Telegram] Polling failed: HTTP {resp.status_code} - {resp.text[:200]}")
+                    await asyncio.sleep(10)
                 continue
                 
             data = resp.json()

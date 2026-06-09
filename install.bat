@@ -81,6 +81,11 @@ if %ERRORLEVEL% neq 0 (
 )
 echo        Python dependencies installed.
 
+:: -- Step 4b: Install Mado browser (Playwright Chromium) --------
+echo        Installing Mado browser engine (Chromium)...
+playwright install chromium --with-deps 2>nul || python -m playwright install chromium --with-deps 2>nul
+echo        Mado browser engine ready.
+
 :: -- Step 5: Bootstrap database ---------------------------------
 echo [5/8] Bootstrapping database...
 python -c "import asyncio; from shogun.bootstrap import bootstrap; asyncio.run(bootstrap())" 2>nul

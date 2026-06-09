@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     log_path: Path = PROJECT_ROOT / "logs"
     config_path: Path = PROJECT_ROOT / "configs"
     uploads_path: Path = PROJECT_ROOT / "data" / "uploads"
+    mado_path: Path = PROJECT_ROOT / "data" / "mado"
 
     # ── Telegram ─────────────────────────────────────────────
     telegram_bot_token: str | None = None
@@ -54,6 +55,19 @@ class Settings(BaseSettings):
 
     # ── GitHub (for update checker on private repos) ─────────
     github_token: str | None = None
+
+    # ── Gensui Membership ────────────────────────────────────
+    gensui_enabled: bool = False
+    gensui_server_url: str = "http://localhost:8787"
+    gensui_enrollment_token: str | None = None
+    gensui_instance_name: str = "Shogun Instance"
+    gensui_environment: str = "development"
+    gensui_heartbeat_interval_seconds: int = 15
+    gensui_command_poll_interval_seconds: int = 5
+    gensui_policy_sync_interval_seconds: int = 30
+    gensui_disconnect_behavior: str = "CONTINUE_LAST_POLICY"
+    gensui_telemetry_mode: str = "STANDARD"
+    gensui_data_path: Path = PROJECT_ROOT / "data"
 
     @property
     def is_production(self) -> bool:
@@ -71,6 +85,13 @@ class Settings(BaseSettings):
             self.log_path,
             self.config_path,
             self.uploads_path,
+            # Mado browser automation directories
+            self.mado_path,
+            self.mado_path / "profiles",
+            self.mado_path / "downloads",
+            self.mado_path / "sessions",
+            self.mado_path / "cache",
+            self.mado_path / "screenshots",
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 

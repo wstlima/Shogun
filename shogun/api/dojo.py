@@ -376,6 +376,14 @@ async def get_achievements(db: AsyncSession = Depends(get_db)):
     )
     installed_count = installed_result.scalar() or 0
 
+    # Fetch the actual installed skill IDs for the frontend
+    installed_ids_result = await db.execute(
+        select(SkillInstallation.openclaw_skill_id).where(
+            SkillInstallation.status == "installed"
+        )
+    )
+    installed_skill_ids = [row[0] for row in installed_ids_result.fetchall() if row[0]]
+
     # Count exams passed from College test results
     test_results = agent_data.get("testResults", [])
     exams_passed = sum(
@@ -393,6 +401,7 @@ async def get_achievements(db: AsyncSession = Depends(get_db)):
         "specializations_earned": agent_data.get("earnedSpecializations", []),
         "skills_completed": agent_data.get("skillsCompleted", 0),
         "skills_installed": installed_count,
+        "installed_skill_ids": installed_skill_ids,
         "exams_passed": exams_passed,
         "exams_total": len(test_results),
         "feedback_count": agent_data.get("feedbackCount", 0),

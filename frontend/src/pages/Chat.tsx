@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe } from 'lucide-react';
+import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare, Zap, Shield, Target, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { MailView } from './MailView';
+import { CalendarView } from './CalendarView';
+
+type ChatMode = 'auto' | 'fast' | 'governed' | 'mission';
 
 interface Message {
   role: 'user' | 'shogun';
@@ -10,6 +14,7 @@ interface Message {
   model?: string;
   provider?: string;
   search?: boolean;
+  mode?: ChatMode;
 }
 
 interface Session {
@@ -55,7 +60,6 @@ function loadHistory(): Session[] {
 }
 
 function archiveSession(msgs: Message[], t: any) {
-  // Only archive if there was actual conversation (more than just the welcome)
   const welcomeText = t(WELCOME_KEY);
   const real = msgs.filter(m => !(m.role === 'shogun' && m.content === welcomeText));
   if (real.length === 0) return;
@@ -70,12 +74,14 @@ function archiveSession(msgs: Message[], t: any) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
 
-export const Chat = () => {
+export const ChatConsole = () => {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>(() => loadCurrent(t));
   const operatorName = localStorage.getItem('shogun_operator_name') || 'Daimyo';
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>('auto');
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<Session[]>(loadHistory);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
@@ -106,26 +112,25 @@ export const Chat = () => {
     setMessages(updatedMessages);
     setInput('');
     setIsThinking(true);
+    setStatusText(null);
 
     const hist = updatedMessages
       .filter(m => m.role === 'user' || m.role === 'shogun')
       .slice(-20)
       .map(m => ({ role: m.role === 'shogun' ? 'assistant' : 'user', content: m.content }));
 
-    // Placeholder message that we'll fill in as tokens arrive
     const placeholder: Message = {
       role: 'shogun',
       content: '',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages(prev => [...prev, placeholder]);
-    // Keep isThinking=true until first token so input stays locked
 
     try {
       const resp = await fetch('/api/v1/agents/shogun/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, history: hist.slice(0, -1) }),
+        body: JSON.stringify({ message: input, history: hist.slice(0, -1), mode: chatMode }),
       });
 
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
@@ -134,7 +139,7 @@ export const Chat = () => {
       const decoder = new TextDecoder();
       let buffer = '';
       let assembled = '';
-      let meta: { model?: string; provider?: string; timestamp?: string; search?: boolean } = {};
+      let meta: { model?: string; provider?: string; timestamp?: string; search?: boolean; mode?: ChatMode } = {};
 
       while (true) {
         const { done, value } = await reader.read();
@@ -157,16 +162,19 @@ export const Chat = () => {
                 model: evt.model, 
                 provider: evt.provider, 
                 timestamp: evt.timestamp,
-                search: evt.search 
+                search: evt.search,
+                mode: evt.mode,
               };
-              setIsThinking(false); // first event received — hide the typing indication
               setMessages(prev => {
                 const copy = [...prev];
                 copy[copy.length - 1] = { ...copy[copy.length - 1], ...meta };
                 return copy;
               });
+            } else if (evt.type === 'status') {
+              setStatusText(evt.content);
             } else if (evt.type === 'token') {
-              setIsThinking(false); // first token — stop animation
+              setIsThinking(false);
+              setStatusText(null);
               assembled += evt.content;
               const snap = assembled;
               setMessages(prev => {
@@ -214,31 +222,25 @@ export const Chat = () => {
   };
 
   const restoreSession = (session: Session) => {
-    // Archive current first
     archiveSession(messages, t);
     setMessages(session.messages);
     setShowHistory(false);
   };
 
   return (
-    <div className="flex flex-col w-full min-w-0 h-[calc(100vh-140px)] space-y-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-bold shogun-title flex items-center gap-3">
-            {t('chat.title', 'Comms')}{' '}
-            <span className="text-xs font-normal text-shogun-subdued bg-shogun-card px-2 py-1 rounded border border-shogun-border tracking-[0.2em] uppercase">
-              {t('chat.badge', 'Command Console')}
-            </span>
-          </h2>
-          <p className="text-shogun-subdued text-sm mt-1">{t('chat.subtitle', 'Chat Console — Directly orchestrate the Shogun via terminal interface.')}</p>
-        </div>
+    <div className="flex flex-col w-full min-w-0 h-full space-y-4">
+      {/* Clear Bar */}
+      <div className="flex justify-between items-center shrink-0">
+        <span className="text-xs font-bold text-shogun-subdued uppercase tracking-widest">
+          {t('chat.neural_link', 'Neural Connection')}
+        </span>
         <button
           onClick={handleClear}
-          className="p-2 text-shogun-subdued hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/20 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-bold transition-all"
           title={t('chat.clear_tooltip', 'Clear current session')}
         >
-          <Trash2 className="w-5 h-5" />
+          <Trash2 className="w-3.5 h-3.5" />
+          {t('chat.clear_session', 'Clear Link')}
         </button>
       </div>
 
@@ -289,26 +291,51 @@ export const Chat = () => {
                   )}
                 >
                   {msg.role === 'shogun' && msg.content === '' ? (
-                    /* Typing animation — shown while waiting for first token */
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:300ms]" />
+                    <div className="flex items-center gap-2 py-1">
+                      {statusText ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                          <span className="text-xs text-cyan-400/80 font-mono animate-pulse">{statusText}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:0ms]" />
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:150ms]" />
+                          <span className="w-2 h-2 rounded-full bg-shogun-gold/70 animate-bounce [animation-delay:300ms]" />
+                        </>
+                      )}
                     </div>
                   ) : msg.content}
                 </div>
                 <div className="flex items-center gap-2 px-1 mt-1">
                   <span className="text-[10px] text-shogun-subdued font-bold tracking-wider">{msg.role === 'user' ? operatorName : t('chat.agent_label', 'SHOGUN')}</span>
                   <span className="text-[10px] text-shogun-subdued opacity-50">{msg.timestamp}</span>
-                  {msg.role === 'shogun' && (msg.model || msg.search) && (
-                    <div className={cn(
-                      "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                      msg.search 
-                        ? "bg-shogun-blue/10 border border-shogun-blue/30 text-shogun-blue"
-                        : "bg-shogun-card border border-shogun-border text-shogun-subdued"
-                    )}>
-                      {msg.search ? <Globe className="w-2.5 h-2.5" /> : <Bot className="w-2.5 h-2.5" />}
-                      {msg.search ? t('chat.web_search', 'Web Search') : msg.model}
+                  {msg.role === 'shogun' && (msg.model || msg.search || msg.mode) && (
+                    <div className="flex items-center gap-1.5">
+                      {msg.mode && (
+                        <div className={cn(
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                          msg.mode === 'fast'
+                            ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                            : msg.mode === 'governed'
+                              ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                              : "bg-purple-500/10 border border-purple-500/30 text-purple-400"
+                        )}>
+                          {msg.mode === 'fast' ? <Zap className="w-2.5 h-2.5" /> : msg.mode === 'governed' ? <Shield className="w-2.5 h-2.5" /> : <Target className="w-2.5 h-2.5" />}
+                          {msg.mode === 'fast' ? 'Fast' : msg.mode === 'governed' ? 'Governed' : 'Mission'}
+                        </div>
+                      )}
+                      {msg.search ? (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-shogun-blue/10 border border-shogun-blue/30 text-shogun-blue">
+                          <Globe className="w-2.5 h-2.5" />
+                          {t('chat.web_search', 'Web Search')}
+                        </div>
+                      ) : msg.model ? (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-shogun-card border border-shogun-border text-shogun-subdued">
+                          <Bot className="w-2.5 h-2.5" />
+                          {msg.model}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -318,7 +345,37 @@ export const Chat = () => {
         </div>
 
         {/* Input bar */}
-        <div className="p-4 bg-[#050508]/50 border-t border-shogun-border">
+        <div className="p-4 bg-[#050508]/50 border-t border-shogun-border shrink-0">
+          {/* Mode selector */}
+          <div className="flex items-center gap-1 mb-3">
+            {([
+              { id: 'auto' as ChatMode, label: 'Auto', icon: Sparkles, color: 'cyan', desc: 'Automatically selects the best mode' },
+              { id: 'fast' as ChatMode, label: 'Fast Chat', icon: Zap, color: 'emerald', desc: 'Conversation only — no tools or memory' },
+              { id: 'governed' as ChatMode, label: 'Governed', icon: Shield, color: 'amber', desc: 'Context-aware with memory (coming soon)' },
+              { id: 'mission' as ChatMode, label: 'Mission', icon: Target, color: 'purple', desc: 'Full agent orchestration with tools' },
+            ]).map(({ id, label, icon: Icon, color }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setChatMode(id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all",
+                  chatMode === id
+                    ? `bg-${color}-500/15 border-${color}-500/40 text-${color}-400`
+                    : "bg-transparent border-shogun-border/50 text-shogun-subdued/60 hover:border-shogun-subdued hover:text-shogun-subdued"
+                )}
+                style={chatMode === id ? {
+                  backgroundColor: color === 'cyan' ? 'rgba(6,182,212,0.15)' : color === 'emerald' ? 'rgba(16,185,129,0.15)' : color === 'amber' ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)',
+                  borderColor: color === 'cyan' ? 'rgba(6,182,212,0.4)' : color === 'emerald' ? 'rgba(16,185,129,0.4)' : color === 'amber' ? 'rgba(245,158,11,0.4)' : 'rgba(168,85,247,0.4)',
+                  color: color === 'cyan' ? 'rgb(34,211,238)' : color === 'emerald' ? 'rgb(52,211,153)' : color === 'amber' ? 'rgb(251,191,36)' : 'rgb(192,132,252)',
+                } : {}}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="relative flex items-center">
             <input
               type="text"
@@ -326,7 +383,7 @@ export const Chat = () => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
               disabled={isThinking}
-              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : t('chat.placeholder', 'Enter directive for the Shogun...')}
+              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : chatMode === 'auto' ? 'Ask anything — Shogun routes automatically...' : chatMode === 'fast' ? 'Ask anything...' : chatMode === 'mission' ? 'Enter mission directive...' : 'Ask with context...'}
               className="w-full bg-shogun-card border border-shogun-border rounded-xl py-4 pl-6 pr-14 text-shogun-text placeholder:text-shogun-subdued focus:outline-none focus:border-shogun-blue focus:ring-1 focus:ring-shogun-blue/20 transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
@@ -358,15 +415,12 @@ export const Chat = () => {
       {/* ── History Drawer ─────────────────────────────────────── */}
       {showHistory && (
         <div className="fixed inset-0 z-50 flex">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowHistory(false)}
           />
 
-          {/* Panel */}
           <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-shogun-bg border-l border-shogun-border flex flex-col shadow-2xl">
-            {/* Panel header */}
             <div className="flex items-center justify-between p-5 border-b border-shogun-border shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-shogun-text flex items-center gap-2">
@@ -385,7 +439,6 @@ export const Chat = () => {
               </button>
             </div>
 
-            {/* Sessions list */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-shogun-subdued space-y-3 opacity-50">
@@ -399,7 +452,6 @@ export const Chat = () => {
                   const msgCount = session.messages.filter(m => m.role === 'user').length;
                   return (
                     <div key={session.id} className="border border-shogun-border rounded-xl overflow-hidden">
-                      {/* Session row */}
                       <div
                         className="flex items-center gap-3 p-3 cursor-pointer hover:bg-shogun-card/50 transition-colors"
                         onClick={() => setExpandedSession(isExpanded ? null : session.id)}
@@ -422,7 +474,6 @@ export const Chat = () => {
                         </button>
                       </div>
 
-                      {/* Expanded messages */}
                       {isExpanded && (
                         <div className="border-t border-shogun-border bg-[#050508] p-3 space-y-2 max-h-64 overflow-y-auto">
                           {session.messages.map((m, i) => (
@@ -446,7 +497,6 @@ export const Chat = () => {
               )}
             </div>
 
-            {/* Clear all history */}
             {history.length > 0 && (
               <div className="p-4 border-t border-shogun-border shrink-0">
                 <button
@@ -466,3 +516,59 @@ export const Chat = () => {
     </div>
   );
 };
+
+export const Chat = () => {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'chat' | 'mail' | 'calendar'>('chat');
+
+  return (
+    <div className="flex flex-col w-full min-w-0 h-[calc(100vh-140px)] space-y-4">
+      {/* Overall Header */}
+      <div className="flex justify-between items-center shrink-0">
+        <div>
+          <h2 className="text-3xl font-bold shogun-title flex items-center gap-3">
+            {t('chat.title', 'Comms')}{' '}
+            <span className="text-xs font-normal text-shogun-subdued bg-shogun-card px-2 py-1 rounded border border-shogun-border tracking-[0.2em] uppercase">
+              {activeTab === 'chat' && t('chat.badge', 'Command Console')}
+              {activeTab === 'mail' && t('mail.badge', 'Mail Client')}
+              {activeTab === 'calendar' && t('calendar.badge', 'Calendar Board')}
+            </span>
+          </h2>
+          <p className="text-shogun-subdued text-sm mt-1">{t('comms.subtitle', 'Chat · Mail · Calendar')}</p>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-shogun-border shrink-0">
+        {([
+          { id: 'chat', label: t('chat.tab_chat', 'Chat'), icon: MessageSquare },
+          { id: 'mail', label: t('chat.tab_mail', 'Mail'), icon: Mail },
+          { id: 'calendar', label: t('chat.tab_calendar', 'Calendar'), icon: Calendar }
+        ] as const).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={cn(
+              "px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all relative flex items-center gap-2",
+              activeTab === id ? "text-shogun-blue" : "text-shogun-subdued hover:text-shogun-text"
+            )}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+            {activeTab === id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-blue shadow-[0_0_10px_rgba(74,140,199,0.5)]" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content Panel */}
+      <div className="flex-1 min-h-0">
+        {activeTab === 'chat' && <ChatConsole />}
+        {activeTab === 'mail' && <MailView />}
+        {activeTab === 'calendar' && <CalendarView />}
+      </div>
+    </div>
+  );
+};
+
