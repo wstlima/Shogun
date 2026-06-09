@@ -49,7 +49,7 @@ const STATUS_COLORS: Record<string, { fill: string; stroke: string; glow: string
   harakiri: { fill: '#fb7185', stroke: '#e11d48', glow: 'rgba(251, 113, 133, 0.3)' },
 };
 
-const HUB_COLOR = { fill: '#22d3ee', stroke: '#06b6d4', glow: 'rgba(34, 211, 238, 0.35)' };
+const HUB_COLOR = { fill: '#1a1408', stroke: '#c8960c', glow: 'rgba(200, 150, 12, 0.35)' };
 const ROGUE_COLOR = { fill: '#1e1025', stroke: '#ef4444', glow: 'rgba(239, 68, 68, 0.3)' };
 const UNKNOWN_COLOR = { fill: '#1a1a2e', stroke: '#6b7280', glow: 'rgba(107, 114, 128, 0.2)' };
 
@@ -108,7 +108,7 @@ export default function NetworkTopology() {
   const INNER_RADIUS = Math.min(W, H) * 0.28;
   const OUTER_RADIUS = Math.min(W, H) * 0.42;
   const NODE_R = 24;
-  const HUB_R = 36;
+  const HUB_R = 42;
   const ROGUE_R = 18;
 
   // Position enrolled members in inner circle
@@ -199,7 +199,7 @@ export default function NetworkTopology() {
             { label: 'Online', color: STATUS_COLORS.online.fill },
             { label: 'Offline', color: STATUS_COLORS.offline.fill },
             { label: 'Harakiri', color: STATUS_COLORS.harakiri.fill },
-            { label: 'Gensui Hub', color: HUB_COLOR.fill },
+            { label: 'Gensui Hub', color: '#c8960c' },
           ].map(item => (
             <div key={item.label} className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ background: item.color }} />
@@ -314,11 +314,26 @@ export default function NetworkTopology() {
               <animate attributeName="opacity" from="0.5" to="0" dur="3s" repeatCount="indefinite" />
             </circle>
 
-            {/* Hub node (Gensui) */}
+            {/* Hub node (Gensui) — Shogun AFM Logo */}
             <g filter="url(#glow-hub)">
-              <circle cx={CX} cy={CY} r={HUB_R} fill={HUB_COLOR.fill} stroke={HUB_COLOR.stroke} strokeWidth="2.5" />
-              <text x={CX} y={CY - 4} textAnchor="middle" fill="#0a0e17" fontSize="10" fontWeight="800">GENSUI</text>
-              <text x={CX} y={CY + 8} textAnchor="middle" fill="#0a0e17" fontSize="7" fontWeight="600">HUB</text>
+              <defs>
+                <clipPath id="hub-clip">
+                  <circle cx={CX} cy={CY} r={HUB_R - 2} />
+                </clipPath>
+              </defs>
+              <circle cx={CX} cy={CY} r={HUB_R} fill="#0a0e17" stroke="#c8960c" strokeWidth="2.5" />
+              <image
+                href="/gensui-logo.png"
+                x={CX - HUB_R + 2}
+                y={CY - HUB_R + 2}
+                width={(HUB_R - 2) * 2}
+                height={(HUB_R - 2) * 2}
+                clipPath="url(#hub-clip)"
+                preserveAspectRatio="xMidYMid slice"
+              />
+              {/* Label below hub */}
+              <text x={CX} y={CY + HUB_R + 16} textAnchor="middle" fill="#c8960c" fontSize="10" fontWeight="800" letterSpacing="2">GENSUI</text>
+              <text x={CX} y={CY + HUB_R + 27} textAnchor="middle" fill="#94a3b8" fontSize="7" fontWeight="600">COMMAND HUB</text>
             </g>
 
             {/* Enrolled member nodes */}
