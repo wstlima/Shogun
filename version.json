@@ -1,8 +1,8 @@
 {
-  "version": "1.4.4",
+  "version": "1.5.0",
   "name": "Shogun OS",
-  "build": 29,
+  "build": 30,
   "channel": "stable",
-  "released": "2026-06-08T08:40:00Z",
-  "changelog": "Fixed Mado session creation by adding missing Alembic migration for the security_policy column."
+  "released": "2026-06-09T10:48:00Z",
+  "changelog": "Added Gensui Agent Fleet Management: network topology with pan/zoom, LAN scanner for rogue agent detection, enrollment token system, Shogun AFM branding."
 }

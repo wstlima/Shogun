@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/Shogun Logo.png" alt="Shogun Logo" width="120" />
+  <img src="Assets/shogun-logo.png" alt="Shogun Logo" width="120" />
 </p>
 
 <h1 align="center">🏯 Shogun — Your AI Command Center</h1>
@@ -53,6 +53,118 @@ Most AI tools give you a chat box. Shogun gives you an **entire operating system
 
 ---
 
+## 🎖️ Gensui — Agent Fleet Management
+
+<p align="center">
+  <img src="Assets/shogun-afm-logo.png" alt="Shogun AFM Logo" width="200" />
+</p>
+
+<p align="center">
+  <strong>Shogun AFM (Agent Fleet Management)</strong><br/>
+  A dedicated central command platform for managing, monitoring, and securing fleets of Shogun AI agents across your organization.
+</p>
+
+When you move beyond a single Shogun instance, **Gensui** becomes your command-and-control hub. It provides real-time visibility into every agent in your fleet — whether that's 3 machines in a startup or 500+ across a global enterprise.
+
+### What Gensui Does
+
+| Capability | Description |
+|---|---|
+| 📡 **Real-Time Fleet Dashboard** | Live status of every enrolled Shogun instance — online/offline state, samurai count, active workflows, and version info. |
+| 🗺️ **Interactive Network Topology** | Visual SVG map of your entire agent fleet with pan/zoom, hub-and-spoke layout, and nexus peer connection lines. |
+| 🔍 **LAN Network Scanner** | One-click scan of your local network to discover Shogun instances. Detects enrolled agents, unenrolled (rogue) agents, and unknown services on port 8000. |
+| ⚠️ **Rogue Agent Detection** | Instantly spot unauthorized Shogun instances running on your network — critical for security compliance and preventing shadow AI. |
+| 🎟️ **Enrollment Token System** | Generate secure enrollment tokens for new Shogun instances. Approve/reject enrollment requests with optional labels. |
+| 🏷️ **Group Management** | Organize agents into logical groups (by team, environment, region). Apply policies and postures at the group level. |
+| 🛡️ **Security Posture Control** | Define and enforce security postures across your fleet. Standard, Elevated, and Lockdown modes with granular permission control. |
+| 💀 **Remote Harakiri** | Emergency kill switch — instantly freeze any agent (soft freeze, hard stop, network isolate, or full terminate) from the Gensui dashboard. |
+| 📋 **Centralized Audit Log** | Tamper-proof HMAC-chained audit trail across all managed agents. NIS2/SOC2/EU AI Act compliant. |
+| 🔒 **Admin Authentication** | JWT-based admin portal with role-based access control (Owner, Admin, Viewer). |
+
+### Deployment Options
+
+Gensui runs independently from Shogun instances and can be deployed three ways:
+
+| Deployment | Command | Best For |
+|---|---|---|
+| **🪟 Windows Desktop** | Double-click `gensui/install.bat` | Personal fleet on a Windows machine |
+| **🍎 macOS / Linux Desktop** | `./gensui/install.sh` | Personal fleet on Mac or Linux |
+| **🐳 Docker (Server)** | `docker compose up` | Production server, always-on |
+| **🐳 Docker + TLS** | `docker compose --profile server up` | Production with Nginx reverse proxy, HTTPS, rate limiting |
+
+<details>
+<summary><strong>Quick Start — Local Install</strong></summary>
+
+```bash
+# Clone the repo
+git clone https://github.com/AlphaHorizon-AI/Shogun.git
+cd Shogun/gensui
+
+# Windows
+install.bat
+
+# macOS / Linux
+chmod +x install.sh && ./install.sh
+```
+
+Gensui starts at **http://localhost:8787**. Default credentials: `admin@gensui.local` / `changeme`.
+
+</details>
+
+<details>
+<summary><strong>Quick Start — Docker Server</strong></summary>
+
+```bash
+cd Shogun/gensui
+
+# Basic (no TLS)
+docker compose up -d
+
+# Production with TLS (place certs in ./certs/)
+docker compose --profile server up -d
+```
+
+Includes Nginx reverse proxy with:
+- TLS 1.2/1.3 termination
+- Rate limiting (30 req/s API, 5 req/min auth)
+- Security headers (HSTS, X-Frame-Options, CSP)
+- Health checks
+
+</details>
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────┐
+│                    GENSUI                       │
+│              Agent Fleet Manager                │
+│                                                 │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│   │ Dashboard │  │ Network  │  │ Enrollment│    │
+│   │          │  │ Topology │  │ & Tokens  │    │
+│   └──────────┘  └──────────┘  └──────────┘    │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│   │  Groups  │  │ Security │  │  Harakiri │    │
+│   │          │  │ Postures │  │ Kill Switch│    │
+│   └──────────┘  └──────────┘  └──────────┘    │
+└────────────────────┬────────────────────────────┘
+                     │ Heartbeat Protocol
+         ┌───────────┼───────────┐
+         │           │           │
+    ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
+    │ Shogun  │ │ Shogun  │ │ Shogun  │
+    │ Alpha   │ │ Bravo   │ │ Charlie │
+    │ (prod)  │ │ (prod)  │ │ (stage) │
+    └────┬────┘ └────┬────┘ └─────────┘
+         │           │
+         └─── Nexus ─┘
+        (peer-to-peer)
+```
+
+Each Shogun instance sends periodic heartbeats to Gensui with status, metrics, and version info. Gensui cross-references these against its enrollment database to classify every agent as enrolled, unenrolled, or unknown — providing instant visibility into your fleet's security posture.
+
+---
+
 ## 🚀 Install Shogun (One Click)
 
 **Prerequisites:** [Python 3.10+](https://www.python.org/downloads/) and [Node.js v18+](https://nodejs.org/en/download) must be installed.
@@ -99,7 +211,7 @@ Shogun opens at **http://localhost:8000** in your default browser. *(If your OS 
 Open your `Shogun` installation folder and run the uninstaller:
 
 | Platform | How to uninstall |
-|----------|-----------------|
+|----------|-----------------| 
 | **Windows** | Double-click **`uninstall.bat`** |
 | **macOS/Linux** | Run **`./uninstall.sh`** |
 
@@ -126,6 +238,7 @@ Shogun is built around a clear hierarchy of interconnected systems:
 | 🪟 **Mado** | Browser automation layer — web browsing, screenshots, content extraction via Playwright |
 | 🔗 **Nexus** | Agent-to-Agent collaboration — shared workspaces across Shogun instances |
 | 🔄 **Agent Flow** | Visual workflow builder — drag-and-drop multi-agent pipelines |
+| 🎖️ **Gensui** | Agent Fleet Management — central command for monitoring and securing fleets of Shogun agents |
 
 ---
 
@@ -205,6 +318,8 @@ No Docker, no external services. SQLite + Qdrant embedded handles everything loc
 | Validation | Pydantic v2 |
 | Scheduling | APScheduler |
 | Embeddings | sentence-transformers |
+| Fleet Management | Gensui (independent SQLite + React UI) |
+| Containerization | Docker, Docker Compose, Nginx |
 
 ---
 
