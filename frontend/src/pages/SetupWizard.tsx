@@ -217,7 +217,7 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
       provider_type: type,
       name: label,
       api_key: '',
-      base_url: isLocal ? 'http://localhost:11434' : '',
+      base_url: isLocal ? 'http://127.0.0.1:11434' : '',
       models: [],
       discoveredModels: [],
       status: 'pending' as const,
@@ -756,7 +756,7 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                     <input
                       value={activeProv.base_url}
                       onChange={e => updateProvider(activeProv.id, { base_url: e.target.value })}
-                      placeholder="http://localhost:11434"
+                      placeholder="http://127.0.0.1:11434"
                       className="w-full bg-[#050508] border border-[#2a2f3e] rounded-lg p-2.5 text-sm font-mono text-white focus:border-[#3b82f6] outline-none transition-colors"
                     />
                   </div>

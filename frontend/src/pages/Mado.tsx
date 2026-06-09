@@ -270,7 +270,7 @@ export function Mado() {
     try {
       const r = await axios.post(`/api/v1/mado/sessions/${quickSessionId}/screenshot`);
       setQuickResult(`📸 Screenshot saved: ${r.data?.data?.filename || 'unknown'}`);
-      await loadScreenshots();
+      await Promise.all([loadScreenshots(), loadSessions()]);
     } catch (err: any) {
       setQuickResult(`❌ ${err.response?.data?.detail || 'Screenshot failed'}`);
     }
@@ -295,6 +295,7 @@ export function Mado() {
       setQuickResult(`❌ ${err.response?.data?.detail || 'Extraction failed'}`);
     }
     setQuickLoading(false);
+    await loadSessions();
   };
 
   // ── Render ────────────────────────────────────────────────

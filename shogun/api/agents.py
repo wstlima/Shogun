@@ -308,16 +308,24 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         # Communication tools
         "email", "send mail", "send me", "send an", "send a", "inbox",
         "calendar", "schedule",
-        # Web browsing / search (+ common typos)
-        "browse", "brows ", "visit", "search", "look up", "google",
+        # Web browsing / search (+ common typos and natural phrases)
+        "browse", "brows ", "visit", "search", "look up", "look at",
+        "google", "go to",
         "fetch", "scrape", "navigate", "open ", "url",
-        "website", "web page", "check ", "find ",
+        "website", "web page", "web site", "check ",
         "wikipedia", "youtube", "reddit", "github",
+        # Action verbs that imply tool use
+        "find ", "show me", "pull ", "grab ", "get the", "get me",
+        "give me", "tell me about",
         # Extraction presets (matches natural chat like "get the headlines")
-        "extract", "headlines", "article content", "links from",
+        "extract", "headline", "article content", "links from",
         "tables from", "prices from", "screenshot",
-        # Domain / URL references (catches "nfl.com", "example.org", etc.)
+        # Domain / URL references — broad TLD coverage
         ".com", ".org", ".net", ".io", ".gov", ".edu",
+        ".dk", ".se", ".no", ".de", ".fr", ".uk", ".ai",
+        ".dev", ".app", ".co", ".info", ".me", ".us", ".ca",
+        ".au", ".nl", ".fi", ".jp", ".eu", ".ch", ".at",
+        ".es", ".it", ".pt", ".pl", ".cz", ".be", ".ie",
         "http://", "https://", "www.",
         # Live-data / real-time queries
         "weather", "latest", "news", "stock", "price of", "score",
@@ -502,7 +510,7 @@ async def _shogun_fast_chat(
 
     # ── Endpoint resolve ──────────────────────────────────────────
     PROVIDER_URLS: dict[str, str] = {
-        "ollama":     "http://localhost:11434",
+        "ollama":     "http://127.0.0.1:11434",
         "lmstudio":   "http://localhost:1234/v1",
         "local":      "http://localhost:1234/v1",
         "openai":     "https://api.openai.com/v1",
@@ -884,7 +892,7 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService,
 
         # Endpoint resolve
         PROVIDER_URLS: dict[str, str] = {
-            "ollama":     "http://localhost:11434",
+            "ollama":     "http://127.0.0.1:11434",
             "lmstudio":   "http://localhost:1234/v1",
             "local":      "http://localhost:1234/v1",
             "openai":     "https://api.openai.com/v1",

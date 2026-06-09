@@ -780,7 +780,7 @@ async def _exec_email_send(config: dict, context_str: str) -> str:
 
 
 PROVIDER_URLS = {
-    "ollama": "http://localhost:11434",
+    "ollama": "http://127.0.0.1:11434",
     "lmstudio": "http://localhost:1234/v1",
     "local": "http://localhost:1234/v1",
     "openai": "https://api.openai.com/v1",

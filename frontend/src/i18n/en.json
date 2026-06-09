@@ -30,6 +30,8 @@
     "alliance": "Alliance",
     "nexus": "Nexus",
     "nexus_sub": "A2A Workspaces",
+    "gensui": "Gensui",
+    "gensui_sub": "Fleet Command",
     "maintenance": "Maintenance",
     "backups": "Backups",
     "backups_sub": "Data Protection",
@@ -584,6 +586,18 @@
     "title": "Nexus",
     "subtitle": "Agent-to-Agent workspaces — plan, communicate, and collaborate with remote Shogun instances.",
     "new_workspace": "New Workspace"
+  },
+  "gensui": {
+    "title": "Gensui",
+    "subtitle": "Connect this Shogun instance to a Gensui server for centralized fleet management, posture enforcement, and security coordination.",
+    "not_connected": "Not Connected to Gensui",
+    "connect_desc": "Connect this Shogun instance to a Gensui Central Command server for fleet-wide security posture management, remote policy enforcement, telemetry monitoring, and emergency Harakiri capabilities.",
+    "connect_title": "Connect to Gensui Server",
+    "test": "Test Connection",
+    "connecting": "Connecting...",
+    "connect_btn": "Connect to Gensui",
+    "connected": "Connected to Gensui",
+    "enrolled_offline": "Enrolled — Connection Lost"
   },
   "samurai_network": {
     "title": "Samurai Network",

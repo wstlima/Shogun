@@ -60,7 +60,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   google:     'https://generativelanguage.googleapis.com/v1beta/openai',
   anthropic:  'https://api.anthropic.com/v1',
   openrouter: 'https://openrouter.ai/api/v1',
-  ollama:     'http://localhost:11434',
+  ollama:     'http://127.0.0.1:11434',
   lmstudio:   'http://localhost:1234/v1',
   local:      'http://localhost:1234/v1',
   custom:     '',
@@ -665,7 +665,7 @@ export function Katana() {
     try {
       const baseUrl = customBaseUrl || 
         (newProvider.provider_type === providerType ? newProvider.base_url : null) || 
-        (providerType === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1');
+        (providerType === 'ollama' ? 'http://127.0.0.1:11434' : 'http://localhost:1234/v1');
 
       const res = await axios.get('/api/v1/system/local-models', {
         params: {
@@ -709,7 +709,7 @@ export function Katana() {
 
   // Stream an Ollama model pull via SSE backend proxy
   const handlePullModel = async (modelId: string) => {
-    const baseUrl = (newProvider.provider_type === 'ollama' ? newProvider.base_url : null) || 'http://localhost:11434';
+    const baseUrl = (newProvider.provider_type === 'ollama' ? newProvider.base_url : null) || 'http://127.0.0.1:11434';
     setPullingModel(modelId);
     setPullStatus({ status: 'Connecting to Ollama…', percent: 0 });
     try {
@@ -768,7 +768,7 @@ export function Katana() {
     const activeOllama = providers.find(p => p.provider_type === 'ollama' && p.base_url);
     const baseUrl = activeOllama?.base_url || 
       (newProvider.provider_type === 'ollama' ? newProvider.base_url : null) || 
-      'http://localhost:11434';
+      'http://127.0.0.1:11434';
     setDeletingModel(modelId);
     try {
       const params = new URLSearchParams({ model: modelId, base_url: baseUrl });

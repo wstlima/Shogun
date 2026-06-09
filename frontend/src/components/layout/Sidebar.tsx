@@ -15,6 +15,7 @@ import {
   Download,
   HardDrive,
   AppWindow,
+  ShieldCheck,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -170,13 +171,6 @@ export const Sidebar = () => {
             active={location.pathname === '/logs'}
             onClick={() => navigate('/logs')}
           />
-          <NavItem 
-            icon={HelpCircle} 
-            label={t('nav.guide', 'Guide')} 
-            subLabel={t('nav.guide_sub', 'Documentation')} 
-            active={location.pathname === '/guide'}
-            onClick={() => navigate('/guide')}
-          />
         </nav>
       </div>
 
@@ -189,6 +183,13 @@ export const Sidebar = () => {
             subLabel={t('nav.nexus_sub', 'A2A Workspaces')} 
             active={location.pathname === '/nexus'}
             onClick={() => navigate('/nexus')}
+          />
+          <NavItem 
+            icon={ShieldCheck} 
+            label={t('nav.gensui', 'Gensui')} 
+            subLabel={t('nav.gensui_sub', 'Fleet Command')} 
+            active={location.pathname === '/gensui'}
+            onClick={() => navigate('/gensui')}
           />
         </nav>
       </div>
@@ -211,6 +212,13 @@ export const Sidebar = () => {
             active={location.pathname === '/updates'}
             badge={updateAvailable ? t('nav.update_available', 'UPDATE') : null}
             onClick={() => navigate('/updates')}
+          />
+          <NavItem 
+            icon={HelpCircle} 
+            label={t('nav.guide', 'Guide')} 
+            subLabel={t('nav.guide_sub', 'Documentation')} 
+            active={location.pathname === '/guide'}
+            onClick={() => navigate('/guide')}
           />
         </nav>
       </div>

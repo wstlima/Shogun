@@ -56,6 +56,19 @@ class Settings(BaseSettings):
     # ── GitHub (for update checker on private repos) ─────────
     github_token: str | None = None
 
+    # ── Gensui Membership ────────────────────────────────────
+    gensui_enabled: bool = False
+    gensui_server_url: str = "http://localhost:8787"
+    gensui_enrollment_token: str | None = None
+    gensui_instance_name: str = "Shogun Instance"
+    gensui_environment: str = "development"
+    gensui_heartbeat_interval_seconds: int = 15
+    gensui_command_poll_interval_seconds: int = 5
+    gensui_policy_sync_interval_seconds: int = 30
+    gensui_disconnect_behavior: str = "CONTINUE_LAST_POLICY"
+    gensui_telemetry_mode: str = "STANDARD"
+    gensui_data_path: Path = PROJECT_ROOT / "data"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

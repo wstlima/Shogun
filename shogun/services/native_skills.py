@@ -914,6 +914,8 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             # ── Mado browser automation ──────────────────────────
             from shogun.services.posture_guard import get_posture_tool_filter
             from shogun.services import mado_service
+            from shogun.services.mado_service_crud import MadoSessionService
+            from datetime import datetime, timezone
 
             posture = await get_posture_tool_filter()
             if not posture.get("mado_enabled", False):
@@ -942,12 +944,36 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             if extract_preset and extract_preset in PRESET_SELECTORS and not selector:
                 selector = PRESET_SELECTORS[extract_preset]
 
-            # Use a persistent native-skill session
-            session_id = "native_skill_browser"
+            # ── Resolve or create a Mado session via CRUD ────────
+            mado_svc = MadoSessionService(db_session)
+            db_record = await mado_svc.get_by_profile_name("native_skill")
+            if db_record is None:
+                db_record = await mado_svc.create(
+                    name="Agent Browser",
+                    profile_name="native_skill",
+                    browser_mode="headless",
+                    domain_allowlist=[],
+                    security_policy={
+                        "https_only": False, "downloads": "allowed",
+                        "uploads": "allowed", "form_submit": "allowed",
+                        "external_navigation": "allowed", "js_execution": "allowed",
+                        "max_page_loads": 0,
+                    },
+                )
+                await db_session.commit()
+
+            session_id = str(db_record.id)
+
             await mado_service.launch_browser(
                 session_id=session_id,
                 profile_name="native_skill",
                 mode="headless",
+            )
+
+            # Mark session as active
+            await mado_svc.update_status(
+                db_record.id, "active",
+                last_active_at=datetime.now(timezone.utc),
             )
 
             # Navigate (native_skill has no domain restrictions — per-session policies apply)
@@ -961,6 +987,14 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                     "status": "error",
                     "message": f"Navigation blocked: {nav_result.get('reason', 'Domain not allowed')}",
                 })
+
+            # Update last URL in session record
+            await mado_svc.update_status(
+                db_record.id, "active",
+                last_url=nav_result.get("url", url),
+                last_active_at=datetime.now(timezone.utc),
+            )
+            await db_session.commit()
 
             # Extract content
             extract_result = await mado_service.extract_content(
@@ -980,6 +1014,8 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
             # ── Mado screenshot ──────────────────────────────────
             from shogun.services.posture_guard import get_posture_tool_filter
             from shogun.services import mado_service
+            from shogun.services.mado_service_crud import MadoSessionService
+            from datetime import datetime, timezone
 
             posture = await get_posture_tool_filter()
             if not posture.get("mado_enabled", False):
@@ -988,13 +1024,29 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                     "message": "Browser automation is disabled. Enable Mado in the Torii.",
                 })
 
-            session_id = "native_skill_browser"
+            # Resolve the native skill session from DB
+            mado_svc = MadoSessionService(db_session)
+            db_record = await mado_svc.get_by_profile_name("native_skill")
+            if db_record is None:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No active browser session. Use browse_web first to navigate to a page.",
+                })
+
+            session_id = str(db_record.id)
             full_page = args.get("full_page", False)
 
             result = await mado_service.screenshot(
                 session_id=session_id,
                 full_page=full_page,
             )
+
+            # Update session status
+            await mado_svc.update_status(
+                db_record.id, "active",
+                last_active_at=datetime.now(timezone.utc),
+            )
+            await db_session.commit()
 
             if result.get("status") == "error":
                 return json.dumps({

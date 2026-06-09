@@ -42,6 +42,8 @@ import {
   Workflow,
   Camera,
   ShieldAlert,
+  Sword,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -175,7 +177,7 @@ export function Guide() {
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Terminal className="w-4 h-4 text-shogun-blue" /> Shogun Backend Running</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">The backend server must be running on <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">localhost:8000</code>. If you installed via Docker, it starts automatically. Otherwise, run <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">python main.py</code> from the project root.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The backend server must be running on <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">localhost:8000</code>. If you installed via Docker, it starts automatically. Otherwise, run <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">python -m shogun</code> from the project root.</p>
                    </div>
                 </div>
              </section>
@@ -263,7 +265,7 @@ export function Guide() {
                      { name: 'Comms (Chat)', purpose: 'Talk directly to your Shogun. Send questions or commands. Responses stream in real time. View chat history and restore old sessions. Also includes an integrated email client and calendar.', icon: MessageSquare, color: 'text-shogun-blue' },
                      { name: 'Shogun Profile', purpose: 'Configure your AI\'s identity — name, personality, primary model, fallback models, behavioral directives, permissions, and scheduled jobs.', icon: Cpu, color: 'text-shogun-gold' },
                      { name: 'Samurai Network', purpose: 'Deploy and manage specialized sub-agents. Each Samurai has a role, routing profile, and spawn policy. Monitor their tasks and status.', icon: Users, color: 'text-shogun-gold' },
-                     { name: 'Katana (System Forge)', purpose: 'Plug in AI providers (cloud or local), create routing profiles, manage tools, and configure Telegram integration.', icon: Cpu, color: 'text-shogun-blue' },
+                     { name: 'Katana (System Forge)', purpose: 'Plug in AI providers (cloud or local), create routing profiles, manage tools, and configure Telegram integration.', icon: Sword, color: 'text-shogun-blue' },
                      { name: 'Archives (Memory)', purpose: 'Search, browse, create, and manage the AI\'s memories. Supports semantic search, salience pinning, and memory type filtering.', icon: Database, color: 'text-shogun-gold' },
                      { name: 'Dojo (Training Hall)', purpose: 'Browse 4,000+ skills from the OpenClaw College. Study training material, take certification exams, and track achievements.', icon: Flame, color: 'text-shogun-gold' },
                      { name: 'Kaizen (Governance)', purpose: 'Write the Constitution (YAML rules) and the Mandate (Markdown mission statement). Manage revision history and audit trails.', icon: ShieldCheck, color: 'text-shogun-gold' },
@@ -274,9 +276,11 @@ export function Guide() {
                      { name: 'Mail (Email Client)', purpose: 'Full IMAP/SMTP email integration. Browse your inbox, read and compose emails, reply with CC/BCC, navigate folders. Your Shogun can also read, send, and manage emails via native skills.', icon: Mail, color: 'text-sky-400' },
                      { name: 'Calendar', purpose: 'CalDAV calendar integration. View upcoming events, create new ones (with time, location, and description), and manage your schedule. Your Shogun can query and create events via native skills.', icon: CalendarDays, color: 'text-emerald-400' },
                      { name: 'Nexus (Collaboration)', purpose: 'Create Joint Workspaces. Invite other Shogun instances over the network. Exchange typed messages and co-edit a shared whiteboard.', icon: Globe, color: 'text-indigo-400' },
+                     { name: 'Gensui (Fleet Command)', purpose: 'Connect this Shogun to a Gensui Central Command server for fleet-wide security posture management, remote policy enforcement, telemetry monitoring, and emergency Harakiri. Manage enrollment, view active posture, and monitor the fleet link.', icon: ShieldAlert, color: 'text-indigo-400' },
                      { name: 'Backups & Data', purpose: 'Scheduled and manual backups with configurable retention. Export/import your entire database. Manage backup settings and restore from any point.', icon: HardDrive, color: 'text-shogun-gold' },
                      { name: 'Updates', purpose: 'Auto-checks for new Shogun versions every 6 hours. One-click install to download and apply updates. Preserves your data, configs, and environment.', icon: Download, color: 'text-emerald-400' },
                      { name: 'Logs (Compliance Dashboard)', purpose: 'NIS2, SOC2, and EU AI Act-compliant event stream. Filter by 11 categories (Decision, Oversight, Risk, Model, Policy, Memory, Tools, Auth, Incident, System). Click trace IDs for full workflow reconstruction. Audit chain verifies tamper-proof integrity.', icon: Terminal, color: 'text-shogun-subdued' },
+                     { name: 'Guide (Documentation)', purpose: 'This page — a comprehensive knowledge base covering onboarding, architecture, reference manual, and safety protocols. Located in the Maintenance section.', icon: HelpCircle, color: 'text-shogun-subdued' },
                    ].map((item) => (
                      <div key={item.name} className="shogun-card flex gap-4 items-start">
                         <div className={`p-2 rounded-lg bg-shogun-bg border border-shogun-border shrink-0`}>
@@ -995,6 +999,59 @@ export function Guide() {
              </section>
 
              {/* ═══════════════════════════════════════════════════════════════ */}
+             {/* 11b. GENSUI (FLEET COMMAND) */}
+             {/* ═══════════════════════════════════════════════════════════════ */}
+             <section className="space-y-6">
+                <div className="flex items-center gap-3 border-b-2 border-indigo-400/40 pb-3">
+                   <ShieldAlert className="w-6 h-6 text-indigo-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">Gensui — Fleet Command</h4>
+                      <p className="text-xs text-shogun-subdued">Connect your Shogun to a centralized Gensui server for fleet management and security coordination.</p>
+                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="shogun-card space-y-2 md:col-span-2 border-l-2 border-indigo-400/40">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Network className="w-4 h-4 text-indigo-400" /> What is Gensui?</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Gensui is a <strong>Central Command server</strong> that manages a fleet of Shogun instances. When your Shogun is connected to a Gensui server, it receives security posture policies, reports telemetry, responds to commands (including remote Harakiri), and participates in coordinated fleet operations. Think of Gensui as the "general" commanding multiple Shogun "officers."</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Link2 className="w-4 h-4 text-indigo-400" /> Connection Form (Not Connected)</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">When not connected, the page shows a setup form with four fields:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Server URL:</strong> The address of the Gensui server (e.g., http://localhost:8787). Click "Test Connection" to verify reachability before connecting.</li>
+                         <li><strong>Enrollment Token:</strong> A one-time token generated in the Gensui admin panel. Paste it here to auto-enroll this Shogun instance.</li>
+                         <li><strong>Instance Name:</strong> A human-readable name for this Shogun (displayed in the Gensui fleet dashboard).</li>
+                         <li><strong>Environment:</strong> Choose Development, Staging, or Production to tag this instance.</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-400" /> Status Dashboard (Connected)</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Once connected, the page transforms into a live status dashboard showing:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Connection status:</strong> Green badge when actively connected, amber when enrolled but offline.</li>
+                         <li><strong>Shogun ID:</strong> The unique identifier assigned during enrollment.</li>
+                         <li><strong>Last Sync:</strong> Timestamp of the most recent heartbeat or policy sync.</li>
+                         <li><strong>Disconnect button:</strong> Severs the fleet link with a confirmation modal.</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-indigo-400" /> Active Posture Card</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Displays the security posture pushed from Gensui. Shows 14 permission flags (External Models, Mado Browser, Memory Write, etc.) as green ✅ or red ❌ badges. These posture rules are enforced locally by the Torii and override local settings when Gensui is connected.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-400" /> Background Services</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">When connected, four background tasks run automatically:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Heartbeat:</strong> Reports status to Gensui every 15 seconds.</li>
+                         <li><strong>Policy Sync:</strong> Fetches effective posture every 30 seconds.</li>
+                         <li><strong>Command Polling:</strong> Checks for pending commands (e.g., Harakiri) every 5 seconds.</li>
+                         <li><strong>Telemetry Push:</strong> Sends buffered events to Gensui every 10 seconds.</li>
+                      </ul>
+                   </div>
+                </div>
+             </section>
+
+             {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 12. LOGS (AUDIT TRAIL) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
              <section className="space-y-6">
@@ -1159,6 +1216,11 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">Other Shogun instances running on different machines. Connected via the Nexus collaboration module using the A2A Protocol. Peers exchange messages, share whiteboard content, and can coordinate on complex multi-agent tasks across network boundaries.</p>
                       <div className="text-[9px] text-shogun-subdued uppercase font-bold tracking-widest bg-shogun-bg p-2 rounded border border-shogun-border">Connected via: Nexus</div>
                    </div>
+                   <div className="shogun-card space-y-3 border-t-2 border-indigo-400 md:col-span-3">
+                      <div className="font-bold text-indigo-400 text-lg flex items-center gap-2"><ShieldAlert className="w-5 h-5" /> Gensui (Fleet Command)</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">An optional Central Command server that sits above multiple Shogun instances. When connected, Gensui pushes security postures, monitors telemetry, issues commands (including remote Harakiri), and coordinates fleet-wide policy. Think of Gensui as the "general" commanding an army of Shogun "officers." Each Shogun enrolls with Gensui and maintains a persistent background connection with heartbeats, policy sync, and command polling.</p>
+                      <div className="text-[9px] text-shogun-subdued uppercase font-bold tracking-widest bg-shogun-bg p-2 rounded border border-shogun-border">Connected via: Alliance → Gensui</div>
+                   </div>
                 </div>
              </section>
 
@@ -1182,7 +1244,7 @@ export function Guide() {
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Layers className="w-4 h-4 text-shogun-gold" /> Memory Types</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">Memories are categorized into three types: <strong>Semantic</strong> (facts and knowledge), <strong>Episodic</strong> (events and experiences), and <strong>Procedural</strong> (instructions and workflows). Each type has different retrieval priorities and consolidation rules. The type influences how aggressively the memory fades over time.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Memories are categorized into five types: <strong>Semantic</strong> (facts and knowledge), <strong>Episodic</strong> (events and experiences), <strong>Procedural</strong> (instructions and workflows), <strong>Persona</strong> (identity, preferences, and personal information), and <strong>Skills</strong> (learned capabilities from the Dojo). Each type has different retrieval priorities and consolidation rules. The type influences how aggressively the memory fades over time.</p>
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Star className="w-4 h-4 text-shogun-gold" /> Salience & Decay</div>
@@ -1364,8 +1426,8 @@ export function Guide() {
                 <div className="space-y-4">
                    {[
                      { tier: 'SHRINE', subtitle: 'Maximum Protection', color: 'border-green-500 bg-green-500/5', badge: 'text-green-500 bg-green-500/10 border-green-500/30', desc: 'Zero-trust mode. All external connections are blocked. Agents can only process information locally with no filesystem, network, or shell access. No sub-agent spawning. Every action requires explicit human approval. Use this when you suspect a breach, while auditing, or when running highly sensitive operations.', perms: ['Filesystem: None', 'Network: None (local only)', 'Shell: Blocked', 'Sub-agents: Blocked', 'Tools: Disabled', 'Mail: Disabled', 'Calendar: Disabled', 'Cron: Disabled', 'Mado Browser: Disabled', 'Human approval: Everything'] },
-                     { tier: 'GUARDED', subtitle: 'Restricted Operations', color: 'border-blue-500 bg-blue-500/5', badge: 'text-blue-500 bg-blue-500/10 border-blue-500/30', desc: 'Highly restricted. Limited read-only filesystem access. Network restricted to approved endpoints only. All tool usage requires human confirmation. Sub-agents can exist but cannot auto-spawn. Suitable for production environments where safety takes priority over speed.', perms: ['Filesystem: Read-only (scoped)', 'Network: Approved endpoints only', 'Shell: Blocked', 'Sub-agents: Manual spawn only', 'Tools: With approval', 'Mail: Read only', 'Calendar: Read only', 'Cron: View only', 'Mado Browser: Disabled', 'Human approval: Most actions'] },
-                     { tier: 'TACTICAL', subtitle: 'Balanced (Default)', color: 'border-shogun-gold bg-shogun-gold/5', badge: 'text-shogun-gold bg-shogun-gold/10 border-shogun-gold/30', desc: 'The recommended default. Agents have scoped file access (read and write within designated directories), can use approved tools autonomously, and have filtered network access. Shell commands are still blocked. Sub-agents can be spawned manually. A good balance between productivity and safety.', perms: ['Filesystem: Scoped read/write', 'Network: Filtered (no raw sockets)', 'Shell: Blocked', 'Sub-agents: Manual spawn', 'Tools: Approved auto-allowed', 'Mail: Read & Send', 'Calendar: Full access', 'Cron: View only', 'Mado Browser: Headless only', 'Human approval: Dangerous only'] },
+                     { tier: 'GUARDED', subtitle: 'Restricted Operations', color: 'border-blue-500 bg-blue-500/5', badge: 'text-blue-500 bg-blue-500/10 border-blue-500/30', desc: 'Highly restricted. Filesystem access limited to approved directories only. Network restricted to approved endpoints. All tool usage requires human confirmation. Sub-agents limited to 2 maximum. Suitable for production environments where safety takes priority over speed.', perms: ['Filesystem: Allowlist only', 'Network: Approved endpoints only', 'Shell: Blocked', 'Sub-agents: Max 2 (manual)', 'Tools: With approval', 'Mail: Read only', 'Calendar: Read only', 'Cron: View only', 'Mado Browser: Enabled (1 session)', 'Human approval: Most actions'] },
+                     { tier: 'TACTICAL', subtitle: 'Balanced (Default)', color: 'border-shogun-gold bg-shogun-gold/5', badge: 'text-shogun-gold bg-shogun-gold/10 border-shogun-gold/30', desc: 'The recommended default. Agents have scoped file access (read and write within designated directories), can use approved tools autonomously, and have filtered network access. Shell commands are still blocked. Up to 5 sub-agents can be spawned. A good balance between productivity and safety.', perms: ['Filesystem: Scoped read/write', 'Network: Filtered (allowlist)', 'Shell: Blocked', 'Sub-agents: Max 5 (manual)', 'Tools: Approved auto-allowed', 'Mail: Read & Send', 'Calendar: Full access', 'Cron: Full access', 'Mado Browser: Headless only', 'Human approval: Dangerous only'] },
                      { tier: 'CAMPAIGN', subtitle: 'High Autonomy', color: 'border-orange-500 bg-orange-500/5', badge: 'text-orange-500 bg-orange-500/10 border-orange-500/30', desc: 'Extended autonomy for advanced users. Broad filesystem access. Full internet access. Shell commands allowed with logging. Sub-agents can auto-spawn based on policies. Only use this in controlled environments where you have monitoring in place and trust the AI models you are running.', perms: ['Filesystem: Broad access', 'Network: Full internet', 'Shell: Allowed (logged)', 'Sub-agents: Auto-spawn enabled', 'Tools: All enabled', 'Mail: Read & Send', 'Calendar: Full access', 'Cron: Full access', 'Mado Browser: Enabled', 'Human approval: Critical only'] },
                      { tier: 'RONIN', subtitle: '⚠ Unrestricted', color: 'border-red-500 bg-red-500/5', badge: 'text-red-500 bg-red-500/10 border-red-500/30', desc: 'No restrictions whatsoever. Full filesystem, network, shell, and tool access with zero oversight. ONLY use this in completely isolated sandbox/test environments with no access to production data, external services, or sensitive information. This tier exists for testing and development purposes only.', perms: ['Filesystem: Unrestricted', 'Network: Unrestricted', 'Shell: Unrestricted', 'Sub-agents: Unrestricted', 'Tools: All enabled', 'Mail: Unrestricted', 'Calendar: Unrestricted', 'Cron: Full access', 'Mado Browser: Autonomous', 'Human approval: None'] },
                    ].map((item) => (

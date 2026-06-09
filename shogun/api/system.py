@@ -198,7 +198,7 @@ async def scan_local_models(
 @router.get("/pull-model")
 async def pull_model_stream(
     model: str = Query(..., description="Ollama model tag, e.g. llama3.2:3b"),
-    base_url: str = Query("http://localhost:11434", description="Ollama base URL"),
+    base_url: str = Query("http://127.0.0.1:11434", description="Ollama base URL"),
 ):
     """Stream an Ollama model pull as Server-Sent Events.
 
@@ -535,7 +535,7 @@ async def search_ollama_models(
 @router.delete("/delete-model")
 async def delete_ollama_model(
     model: str = Query(..., description="Ollama model tag to delete, e.g. llama3.2:3b"),
-    base_url: str = Query("http://localhost:11434", description="Ollama base URL"),
+    base_url: str = Query("http://127.0.0.1:11434", description="Ollama base URL"),
 ):
     """Delete a locally pulled Ollama model and remove its provider registration."""
     import httpx

@@ -29,6 +29,7 @@ async def check_kill_switch() -> None:
     """Raise HTTP 503 if the global kill switch (HARAKIRI) is active.
 
     Call this at the top of every AI-facing entry point.
+    Also checks Gensui posture if Gensui is enabled.
     """
     from shogun.api.security import _get_agent_posture
 
@@ -41,6 +42,10 @@ async def check_kill_switch() -> None:
             detail="⛩️ HARAKIRI active — all AI operations are suspended. "
                    "Deactivate the kill switch via the Torii to resume.",
         )
+
+    # ── Gensui external posture enforcement ──────────────────
+    from shogun.services.gensui_policy_guard import check_gensui_model_call
+    await check_gensui_model_call()
 
 
 # ── Subagent limit gate ─────────────────────────────────────────────
@@ -173,6 +178,10 @@ async def check_mado_access() -> None:
             detail=f"Security posture [{tier.upper()}] does not permit browser automation. "
                    "Change the security tier in the Torii to enable Mado.",
         )
+
+    # ── Gensui external Mado enforcement ─────────────────────
+    from shogun.services.gensui_policy_guard import check_gensui_mado
+    await check_gensui_mado()
 
 
 async def check_mado_session_limit() -> None:
