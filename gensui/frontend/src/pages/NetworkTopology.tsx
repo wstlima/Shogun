@@ -416,10 +416,20 @@ export default function NetworkTopology() {
         )}
 
         {/* Tooltip overlay */}
-        {tooltip && (
+        {tooltip && (() => {
+          const tooltipW = 240;
+          const tooltipH = 200;
+          const flipX = tooltip.x + tooltipW + 20 > window.innerWidth;
+          const flipY = tooltip.y + tooltipH + 20 > window.innerHeight;
+          return (
           <div
             className="fixed glass-card-sm p-3 pointer-events-none z-50 space-y-1.5"
-            style={{ left: tooltip.x + 12, top: tooltip.y - 10, minWidth: 200 }}
+            style={{
+              left: flipX ? tooltip.x - tooltipW - 12 : tooltip.x + 12,
+              top: flipY ? tooltip.y - tooltipH : tooltip.y - 10,
+              minWidth: 200,
+              maxWidth: tooltipW,
+            }}
           >
             {tooltip.member && (
               <>
@@ -495,7 +505,7 @@ export default function NetworkTopology() {
               </>
             )}
           </div>
-        )}
+        );})()}
       </div>
     </div>
   );

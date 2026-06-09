@@ -102,7 +102,7 @@ DEMO_AGENTS = [
         "active_workflow_count": 1,
         "active_mado_sessions": 0,
         "metadata_json": json.dumps({
-            "nexus_peers": [AGENT_IDS["echo"]],
+            "nexus_peers": [AGENT_IDS["echo"], AGENT_IDS["alpha"]],
         }),
     },
     {
@@ -123,7 +123,7 @@ DEMO_AGENTS = [
         "active_workflow_count": 0,
         "active_mado_sessions": 0,
         "metadata_json": json.dumps({
-            "nexus_peers": [AGENT_IDS["delta"]],
+            "nexus_peers": [AGENT_IDS["delta"], AGENT_IDS["foxtrot"]],
         }),
     },
     {
@@ -144,7 +144,7 @@ DEMO_AGENTS = [
         "active_workflow_count": 6,
         "active_mado_sessions": 3,
         "metadata_json": json.dumps({
-            "nexus_peers": [],
+            "nexus_peers": [AGENT_IDS["echo"], AGENT_IDS["charlie"]],
         }),
     },
     {
