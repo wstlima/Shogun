@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/shogun-logo.png" alt="Shogun Logo" width="120" />
+  <img src="Assets/shogun-afm-logo.png" alt="Shogun AFM Logo" width="200" />
 </p>
 
 <h1 align="center">🏯 Shogun AFM — Your AI Command Center</h1>
