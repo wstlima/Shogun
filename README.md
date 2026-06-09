@@ -2,7 +2,7 @@
   <img src="Assets/shogun-logo.png" alt="Shogun Logo" width="120" />
 </p>
 
-<h1 align="center">🏯 Shogun — Your AI Command Center</h1>
+<h1 align="center">🏯 Shogun AFM — Your AI Command Center</h1>
 
 <p align="center">
   <strong>The open AI agent framework that runs entirely on your machine.</strong><br/>
