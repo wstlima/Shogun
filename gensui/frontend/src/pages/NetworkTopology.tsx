@@ -21,10 +21,13 @@ interface DiscoveredHost {
   port: number;
   hostname: string | null;
   is_shogun: boolean;
+  is_self: boolean;
   version: string | null;
   instance_name: string | null;
   shogun_id: string | null;
   classification: 'enrolled' | 'unenrolled' | 'unknown';
+  all_ips?: string[];
+  interface_count?: number;
   x: number;
   y: number;
 }
@@ -430,9 +433,23 @@ export default function NetworkTopology() {
                   <p className="text-sm font-bold text-gensui-50">
                     {tooltip.host.instance_name || tooltip.host.ip}
                   </p>
+                  {tooltip.host.is_self && (
+                    <span className="text-[9px] bg-cyan-800/40 text-cyan-300 px-1.5 py-0.5 rounded-full font-bold">THIS MACHINE</span>
+                  )}
                 </div>
                 <div className="text-xs space-y-1 text-gensui-300">
-                  <div className="flex justify-between"><span className="text-gensui-500">IP</span><span className="font-mono">{tooltip.host.ip}:{tooltip.host.port}</span></div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gensui-500">IP</span>
+                    <span className="font-mono text-right">
+                      {tooltip.host.all_ips && tooltip.host.all_ips.length > 1
+                        ? tooltip.host.all_ips.map((ip, i) => <span key={i} className="block">{ip}:{tooltip.host!.port}</span>)
+                        : <span>{tooltip.host.ip}:{tooltip.host.port}</span>
+                      }
+                    </span>
+                  </div>
+                  {tooltip.host.interface_count && tooltip.host.interface_count > 1 && (
+                    <div className="flex justify-between"><span className="text-gensui-500">Interfaces</span><span className="text-cyan-400">{tooltip.host.interface_count} network interfaces</span></div>
+                  )}
                   {tooltip.host.hostname && (
                     <div className="flex justify-between"><span className="text-gensui-500">Hostname</span><span>{tooltip.host.hostname}</span></div>
                   )}
@@ -454,7 +471,10 @@ export default function NetworkTopology() {
                 </div>
                 {tooltip.host.classification === 'unenrolled' && (
                   <p className="text-[10px] text-red-400/70 pt-1 border-t border-red-900/30">
-                    ⚠ This Shogun instance is not enrolled in Gensui
+                    {tooltip.host.is_self
+                      ? '⚠ This is your own Shogun — enroll it to clear this warning'
+                      : '⚠ This Shogun instance is not enrolled in Gensui'
+                    }
                   </p>
                 )}
               </>

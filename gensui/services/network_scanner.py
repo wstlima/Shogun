@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import platform
 import socket
 import time
 from typing import Any
@@ -32,41 +31,41 @@ HTTP_IDENTIFY_TIMEOUT = 2.0
 MAX_CONCURRENT = 60
 
 
+def _get_local_ips() -> set[str]:
+    """Get all IPv4 addresses belonging to this machine."""
+    local_ips: set[str] = set()
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            local_ips.add(info[4][0])
+    except Exception:
+        pass
+    # Fallback: outbound socket trick
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        s.connect(("8.8.8.8", 80))
+        local_ips.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    local_ips.add("127.0.0.1")
+    return local_ips
+
+
 def _get_local_subnets() -> list[str]:
     """Discover /24 subnets from the machine's own network interfaces.
 
     Returns a list of subnet prefixes like ["192.168.1.", "10.0.0."].
     """
     subnets: set[str] = set()
-    try:
-        hostname = socket.gethostname()
-        # getaddrinfo returns all addresses for this host
-        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            if ip.startswith("127."):
-                continue
-            # Extract /24 prefix
-            parts = ip.split(".")
-            if len(parts) == 4:
-                prefix = ".".join(parts[:3]) + "."
-                subnets.add(prefix)
-    except Exception as exc:
-        log.warning("Failed to discover local subnets via hostname: %s", exc)
-
-    # Fallback: try netifaces-style approach via socket connections
-    if not subnets:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0.1)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
-            parts = local_ip.split(".")
-            if len(parts) == 4 and not local_ip.startswith("127."):
-                subnets.add(".".join(parts[:3]) + ".")
-        except Exception:
-            pass
-
+    for ip in _get_local_ips():
+        if ip.startswith("127."):
+            continue
+        parts = ip.split(".")
+        if len(parts) == 4:
+            prefix = ".".join(parts[:3]) + "."
+            subnets.add(prefix)
     return list(subnets)
 
 
@@ -127,6 +126,7 @@ async def _scan_host(
     ip: str,
     port: int,
     semaphore: asyncio.Semaphore,
+    local_ips: set[str],
 ) -> dict[str, Any] | None:
     """Scan a single host: TCP probe → HTTP identify."""
     async with semaphore:
@@ -150,10 +150,43 @@ async def _scan_host(
             "port": port,
             "hostname": hostname,
             "is_shogun": info is not None,
+            "is_self": ip in local_ips,
             "version": info.get("version") if info else None,
             "instance_name": info.get("instance_name") if info else None,
             "shogun_id": info.get("shogun_id") if info else None,
         }
+
+
+def _deduplicate_hosts(hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate Shogun instances found on multiple network interfaces.
+
+    Groups by shogun_id (or instance_name as fallback) and merges IPs.
+    Non-Shogun hosts are passed through unchanged.
+    """
+    non_shogun = [h for h in hosts if not h.get("is_shogun")]
+    shogun_hosts = [h for h in hosts if h.get("is_shogun")]
+
+    # Group by identity key
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for h in shogun_hosts:
+        key = h.get("shogun_id") or h.get("instance_name") or h["ip"]
+        groups.setdefault(key, []).append(h)
+
+    deduped: list[dict[str, Any]] = []
+    for key, group in groups.items():
+        # Pick the "best" representative (prefer non-self, or first)
+        primary = group[0]
+        all_ips = sorted({h["ip"] for h in group})
+        is_self = any(h.get("is_self") for h in group)
+
+        merged = {**primary}
+        merged["ip"] = ", ".join(all_ips) if len(all_ips) > 1 else all_ips[0]
+        merged["all_ips"] = all_ips
+        merged["interface_count"] = len(all_ips)
+        merged["is_self"] = is_self
+        deduped.append(merged)
+
+    return deduped + non_shogun
 
 
 async def scan_network(
@@ -171,6 +204,9 @@ async def scan_network(
     Returns a dict with discovered hosts, scan metadata, and classification.
     """
     start = time.monotonic()
+
+    # Collect local IPs for self-detection
+    local_ips = _get_local_ips()
 
     # Discover subnets
     if not subnets:
@@ -197,14 +233,17 @@ async def scan_network(
 
     # Scan all IPs concurrently (with semaphore)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-    tasks = [_scan_host(ip, port, semaphore) for ip in ips]
+    tasks = [_scan_host(ip, port, semaphore, local_ips) for ip in ips]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Collect discovered hosts (filter None and exceptions)
-    discovered: list[dict[str, Any]] = []
+    raw_discovered: list[dict[str, Any]] = []
     for r in results:
         if isinstance(r, dict):
-            discovered.append(r)
+            raw_discovered.append(r)
+
+    # Deduplicate same-instance hits across multiple interfaces
+    discovered = _deduplicate_hosts(raw_discovered)
 
     # Load all enrolled members for cross-reference
     result = await session.execute(
@@ -260,8 +299,8 @@ async def scan_network(
 
     duration_ms = int((time.monotonic() - start) * 1000)
     log.info(
-        "[NetworkScanner] Scan complete: %d hosts found (%d enrolled, %d unenrolled, %d unknown) in %dms",
-        len(discovered), len(enrolled_hosts), len(unenrolled_hosts), len(unknown_hosts), duration_ms,
+        "[NetworkScanner] Scan complete: %d unique hosts (%d raw hits, %d enrolled, %d unenrolled, %d unknown) in %dms",
+        len(discovered), len(raw_discovered), len(enrolled_hosts), len(unenrolled_hosts), len(unknown_hosts), duration_ms,
     )
 
     return {
@@ -271,6 +310,7 @@ async def scan_network(
         "unknown": unknown_hosts,
         "subnets_scanned": subnets,
         "total_ips_probed": len(ips),
+        "raw_hits": len(raw_discovered),
         "scan_duration_ms": duration_ms,
         "timestamp": time.time(),
     }
