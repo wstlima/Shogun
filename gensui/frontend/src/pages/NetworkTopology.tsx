@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Radar, AlertTriangle, HelpCircle, Loader2, Shield } from 'lucide-react';
+import { Network, Radar, AlertTriangle, HelpCircle, Loader2, Shield, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import api from '../lib/api';
 
 interface MemberNode {
@@ -102,8 +102,70 @@ export default function NetworkTopology() {
     }
   };
 
-  // Layout
+  // ── Pan & Zoom state ────────────────────────────────────
   const W = 900, H = 680;
+  const defaultVB = { x: 0, y: 0, w: W, h: H };
+  const [vb, setVb] = useState(defaultVB);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, vbX: 0, vbY: 0 });
+
+  const zoomLevel = Math.round((W / vb.w) * 100);
+
+  const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    const rect = svg.getBoundingClientRect();
+
+    // Mouse position as fraction of SVG viewport
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top) / rect.height;
+
+    setVb(prev => {
+      const newW = Math.max(200, Math.min(W * 4, prev.w * factor));
+      const newH = Math.max(150, Math.min(H * 4, prev.h * factor));
+      return {
+        x: prev.x + (prev.w - newW) * mx,
+        y: prev.y + (prev.h - newH) * my,
+        w: newW,
+        h: newH,
+      };
+    });
+  }, [W, H]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return; // left click only
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, vbX: vb.x, vbY: vb.y };
+  }, [vb.x, vb.y]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isPanning) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = vb.w / rect.width;
+    const scaleY = vb.h / rect.height;
+    const dx = (e.clientX - panStart.current.x) * scaleX;
+    const dy = (e.clientY - panStart.current.y) * scaleY;
+    setVb(prev => ({ ...prev, x: panStart.current.vbX - dx, y: panStart.current.vbY - dy }));
+  }, [isPanning, vb.w, vb.h]);
+
+  const handleMouseUp = useCallback(() => setIsPanning(false), []);
+
+  const resetView = () => setVb(defaultVB);
+  const zoomIn = () => setVb(prev => {
+    const f = 0.8;
+    const nw = prev.w * f, nh = prev.h * f;
+    return { x: prev.x + (prev.w - nw) / 2, y: prev.y + (prev.h - nh) / 2, w: nw, h: nh };
+  });
+  const zoomOut = () => setVb(prev => {
+    const f = 1.25;
+    const nw = Math.min(W * 4, prev.w * f), nh = Math.min(H * 4, prev.h * f);
+    return { x: prev.x + (prev.w - nw) / 2, y: prev.y + (prev.h - nh) / 2, w: nw, h: nh };
+  });
   const CX = W / 2, CY = H / 2;
   const INNER_RADIUS = Math.min(W, H) * 0.28;
   const OUTER_RADIUS = Math.min(W, H) * 0.42;
@@ -243,9 +305,14 @@ export default function NetworkTopology() {
         ) : (
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${W} ${H}`}
-            className="w-full"
-            style={{ minHeight: '540px' }}
+            viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+            className="w-full select-none"
+            style={{ minHeight: '540px', cursor: isPanning ? 'grabbing' : 'grab' }}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
           >
             <defs>
               {/* Glow filters */}
@@ -415,6 +482,21 @@ export default function NetworkTopology() {
           </svg>
         )}
 
+        {/* Zoom Controls — bottom left */}
+        {(members.length > 0 || positionedRogue.length > 0) && (
+          <div className="absolute bottom-4 left-4 flex items-center gap-1 z-10">
+            <button onClick={zoomIn} className="p-1.5 glass-card-sm hover:bg-gensui-700/40 rounded-lg text-gensui-400 hover:text-gensui-200 transition-colors" title="Zoom in">
+              <ZoomIn size={14} />
+            </button>
+            <span className="text-[10px] text-gensui-500 font-mono w-8 text-center">{zoomLevel}%</span>
+            <button onClick={zoomOut} className="p-1.5 glass-card-sm hover:bg-gensui-700/40 rounded-lg text-gensui-400 hover:text-gensui-200 transition-colors" title="Zoom out">
+              <ZoomOut size={14} />
+            </button>
+            <button onClick={resetView} className="p-1.5 glass-card-sm hover:bg-gensui-700/40 rounded-lg text-gensui-400 hover:text-gensui-200 transition-colors ml-1" title="Reset view">
+              <Maximize2 size={14} />
+            </button>
+          </div>
+        )}
         {/* Tooltip overlay */}
         {tooltip && (() => {
           const tooltipW = 240;
