@@ -103,7 +103,7 @@ export default function NetworkTopology() {
   };
 
   // ── Pan & Zoom state ────────────────────────────────────
-  const W = 900, H = 680;
+  const W = 1200, H = 680;
   const defaultVB = { x: 0, y: 0, w: W, h: H };
   const [vb, setVb] = useState(defaultVB);
   const [isPanning, setIsPanning] = useState(false);
@@ -211,7 +211,7 @@ export default function NetworkTopology() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gensui-50 flex items-center gap-3">
