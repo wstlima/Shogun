@@ -16,6 +16,7 @@ import {
   HardDrive,
   AppWindow,
   ShieldCheck,
+  Crosshair,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -143,6 +144,13 @@ export const Sidebar = () => {
             subLabel={t('nav.mado_sub', 'Browser Layer')} 
             active={location.pathname === '/mado'}
             onClick={() => navigate('/mado')}
+          />
+          <NavItem 
+            icon={Crosshair} 
+            label={t('nav.ronin', 'Ronin')} 
+            subLabel={t('nav.ronin_sub', 'Desktop Control')} 
+            active={location.pathname === '/ronin'}
+            onClick={() => navigate('/ronin')}
           />
         </nav>
       </div>

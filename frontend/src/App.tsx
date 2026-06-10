@@ -16,6 +16,7 @@ import { Nexus } from './pages/Nexus'
 import { Updates } from './pages/Updates'
 import { Backups } from './pages/Backups'
 import { Mado } from './pages/Mado'
+import { Ronin } from './pages/Ronin'
 import { Gensui } from './pages/Gensui'
 import { SetupWizard } from './pages/SetupWizard'
 import { useState, useEffect } from 'react'
@@ -101,6 +102,7 @@ function AppContent() {
           <Route path="/updates" element={<Shell><Updates /></Shell>} />
           <Route path="/backups" element={<Shell><Backups /></Shell>} />
           <Route path="/mado" element={<Shell><Mado /></Shell>} />
+          <Route path="/ronin" element={<Shell><Ronin /></Shell>} />
           <Route path="/gensui" element={<Shell><Gensui /></Shell>} />
 
           {/* Fallback */}

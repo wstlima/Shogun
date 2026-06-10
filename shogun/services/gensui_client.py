@@ -389,6 +389,8 @@ class GensuiClient:
             "TOOL_EXECUTION": "allow_tool_execution",
             "MADO_SESSION": "allow_mado",
             "MADO_NAVIGATION": "allow_mado",
+            "RONIN_SESSION": "allow_ronin",
+            "RONIN_ACTION": "allow_ronin",
             "MEMORY_WRITE": "allow_memory_write",
             "MEMORY_READ": "allow_memory_read",
             "AGENT_FLOW": "allow_agent_flow",

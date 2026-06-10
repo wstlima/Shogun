@@ -1,0 +1,498 @@
+"""Ronin API Router — FastAPI endpoints for desktop control.
+
+All endpoints under /api/v1/ronin.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+
+from shogun.schemas.common import ApiResponse
+from shogun.schemas.ronin import (
+    AppTrustEntryResponse,
+    EnvironmentInfoResponse,
+    RoninActionRequest,
+    RoninActionResult,
+    RoninApprovalRequest,
+    RoninApprovalResponse,
+    RoninCapabilityResponse,
+    RoninSessionCreate,
+    RoninSessionResponse,
+    RoninStatusResponse,
+)
+
+router = APIRouter(prefix="/ronin", tags=["Ronin"])
+
+
+# ── Status ───────────────────────────────────────────────────────────
+
+
+@router.get("/status")
+async def get_ronin_status():
+    """Get Ronin system status — enabled, posture, environment, Komainu."""
+    try:
+        from shogun.ronin.core.ronin_controller import get_controller
+        from shogun.ronin.core.komainu import get_status as get_komainu_status
+        from shogun.ronin.core.approval_gate import get_pending
+        from shogun.ronin.core.capabilities_registry import list_capabilities
+
+        controller = get_controller()
+        env = controller.get_environment()
+
+        # Get posture
+        try:
+            from shogun.api.security import _get_agent_posture
+            posture = await _get_agent_posture()
+        except Exception:
+            posture = {}
+
+        # Count active sessions
+        from shogun.db.engine import async_session_factory
+        from sqlalchemy import select, func
+        from shogun.db.models.ronin_session import RoninSession
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(func.count(RoninSession.id)).where(
+                    RoninSession.status.in_(["active", "paused", "idle"]),
+                    RoninSession.is_deleted == False,
+                )
+            )
+            active_count = result.scalar() or 0
+
+        return ApiResponse(
+            success=True,
+            data=RoninStatusResponse(
+                ronin_enabled=posture.get("ronin_enabled", False),
+                ronin_posture=posture.get("ronin_posture", "disabled"),
+                active_sessions=active_count,
+                environment=env.model_dump() if env else {},
+                komainu=get_komainu_status(),
+                pending_approvals=len(get_pending()),
+                capabilities_count=len(list_capabilities()),
+            ).model_dump(),
+        )
+    except Exception as exc:
+        return ApiResponse(success=True, data={
+            "ronin_enabled": False,
+            "ronin_posture": "disabled",
+            "active_sessions": 0,
+            "environment": {},
+            "komainu": {"status": "inactive"},
+            "pending_approvals": 0,
+            "capabilities_count": 0,
+        })
+
+
+# ── Sessions ─────────────────────────────────────────────────────────
+
+
+@router.post("/sessions")
+async def create_session(body: RoninSessionCreate):
+    """Create a new Ronin desktop session."""
+    from shogun.ronin.core.ronin_controller import get_controller
+    from shogun.ronin.core.audit_logger import RoninAuditLogger
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.ronin_session import RoninSession
+
+    controller = get_controller()
+    env = await controller.initialize()
+
+    new_session = RoninSession(
+        name=body.name,
+        agent_id=body.agent_id,
+        posture=body.posture,
+        status="idle",
+        environment_type=env.environment_type.value,
+        os_type=env.os_type,
+        os_version=env.os_version,
+        hostname=env.hostname,
+        machine_id=env.machine_id,
+        is_disposable=env.is_disposable,
+        komainu_level=body.komainu_level,
+        session_data={},
+    )
+
+    async with async_session_factory() as session:
+        session.add(new_session)
+        await session.commit()
+        await session.refresh(new_session)
+
+    await RoninAuditLogger.log_session_start(
+        session_id=str(new_session.id),
+        agent_id=str(body.agent_id) if body.agent_id else None,
+        environment_type=env.environment_type.value,
+        posture=body.posture,
+    )
+
+    return ApiResponse(success=True, data=_session_to_dict(new_session))
+
+
+@router.get("/sessions")
+async def list_sessions():
+    """List all Ronin sessions."""
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.ronin_session import RoninSession
+    from sqlalchemy import select
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(RoninSession)
+            .where(RoninSession.is_deleted == False)
+            .order_by(RoninSession.created_at.desc())
+        )
+        sessions = result.scalars().all()
+
+    return ApiResponse(
+        success=True,
+        data=[_session_to_dict(s) for s in sessions],
+    )
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: uuid.UUID):
+    """Get a specific Ronin session."""
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.ronin_session import RoninSession
+    from sqlalchemy import select
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(RoninSession).where(RoninSession.id == session_id)
+        )
+        ronin_session = result.scalar_one_or_none()
+
+    if not ronin_session:
+        raise HTTPException(status_code=404, detail="Ronin session not found")
+
+    return ApiResponse(success=True, data=_session_to_dict(ronin_session))
+
+
+@router.delete("/sessions/{session_id}")
+async def close_session(session_id: uuid.UUID):
+    """Close and destroy a Ronin session."""
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.ronin_session import RoninSession
+    from shogun.ronin.core.audit_logger import RoninAuditLogger
+    from sqlalchemy import select
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(RoninSession).where(RoninSession.id == session_id)
+        )
+        ronin_session = result.scalar_one_or_none()
+
+        if not ronin_session:
+            raise HTTPException(status_code=404, detail="Ronin session not found")
+
+        ronin_session.status = "closed"
+        ronin_session.is_deleted = True
+        ronin_session.deleted_at = datetime.now(timezone.utc)
+        await session.commit()
+
+    await RoninAuditLogger.log_session_close(
+        session_id=str(session_id),
+        agent_id=str(ronin_session.agent_id) if ronin_session.agent_id else None,
+        reason="operator_closed",
+    )
+
+    return ApiResponse(success=True, data={"closed": True, "session_id": str(session_id)})
+
+
+# ── Execute Action ───────────────────────────────────────────────────
+
+
+@router.post("/execute")
+async def execute_action(body: RoninActionRequest):
+    """Execute a Ronin action through the full pipeline."""
+    from shogun.ronin.core.ronin_controller import execute_action as _execute
+    from shogun.ronin.policies.ronin_policy_schema import RoninAction
+
+    action = RoninAction(
+        agent_id=str(body.agent_id) if body.agent_id else "api",
+        session_id=str(body.session_id) if body.session_id else None,
+        action_type=body.action_type,
+        target=body.target,
+        value=body.value,
+        reason=body.reason,
+        metadata=body.metadata,
+    )
+
+    result = await _execute(action)
+
+    return ApiResponse(
+        success=result.status.value == "success",
+        data=RoninActionResult(
+            status=result.status.value,
+            action_type=result.action_type,
+            target=result.target,
+            result_data=result.result_data,
+            screenshot_before=result.screenshot_before,
+            screenshot_after=result.screenshot_after,
+            confidence=result.confidence,
+            verified=result.verified,
+            error=result.error,
+            duration_ms=result.duration_ms,
+            approval_id=result.approval_id,
+        ).model_dump(),
+    )
+
+
+# ── Approvals ────────────────────────────────────────────────────────
+
+
+@router.get("/approvals")
+async def list_approvals():
+    """List pending approval requests."""
+    from shogun.ronin.core.approval_gate import get_pending
+    return ApiResponse(success=True, data=get_pending())
+
+
+@router.post("/approvals/{approval_id}")
+async def respond_approval(approval_id: str, body: RoninApprovalRequest):
+    """Approve or deny a pending action."""
+    from shogun.ronin.core.approval_gate import respond_to_approval
+    from shogun.ronin.core.audit_logger import RoninAuditLogger
+
+    success = respond_to_approval(approval_id, body.decision, body.decided_by)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Approval request '{approval_id}' not found")
+
+    await RoninAuditLogger.log_approval_response(
+        approval_id=approval_id,
+        decision=body.decision,
+    )
+
+    return ApiResponse(success=True, data={"approval_id": approval_id, "decision": body.decision})
+
+
+# ── Harakiri ─────────────────────────────────────────────────────────
+
+
+@router.post("/harakiri")
+async def ronin_harakiri():
+    """Emergency stop all Ronin activity."""
+    from shogun.ronin.core.komainu import stop_komainu
+    from shogun.ronin.core.approval_gate import cancel_all
+    from shogun.ronin.core.audit_logger import RoninAuditLogger
+
+    # Stop Komainu
+    stop_komainu()
+
+    # Cancel all pending approvals
+    cancel_all("harakiri")
+
+    # Close all active sessions
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.ronin_session import RoninSession
+    from sqlalchemy import select, update
+
+    async with async_session_factory() as session:
+        await session.execute(
+            update(RoninSession)
+            .where(RoninSession.status.in_(["active", "paused", "idle"]))
+            .values(status="closed")
+        )
+        await session.commit()
+
+    await RoninAuditLogger.log_harakiri("api_triggered")
+
+    return ApiResponse(success=True, data={"harakiri": True, "message": "All Ronin activity stopped"})
+
+
+# ── Audit Trail ──────────────────────────────────────────────────────
+
+
+@router.get("/audit")
+async def get_audit_trail(limit: int = 50):
+    """Get Ronin audit trail from execution events."""
+    try:
+        from shogun.db.engine import async_session_factory
+        from sqlalchemy import select, text
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT id, event_type, action, result, severity, risk_score,
+                           agent_id, created_at, detail
+                    FROM execution_events
+                    WHERE event_category = 'ronin'
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """),
+                {"limit": limit},
+            )
+            rows = result.fetchall()
+
+        events = [
+            {
+                "id": str(row[0]),
+                "event_type": row[1],
+                "action": row[2],
+                "result": row[3],
+                "severity": row[4],
+                "risk_score": row[5],
+                "agent_id": str(row[6]) if row[6] else None,
+                "created_at": row[7].isoformat() if row[7] else None,
+            }
+            for row in rows
+        ]
+        return ApiResponse(success=True, data=events)
+    except Exception:
+        return ApiResponse(success=True, data=[])
+
+
+# ── Screenshots ──────────────────────────────────────────────────────
+
+
+@router.get("/screenshots/{filename}")
+async def get_screenshot(filename: str):
+    """Serve a Ronin screenshot file."""
+    from fastapi.responses import FileResponse
+    from shogun.ronin.telemetry.screenshot_store import get_screenshots_dir
+
+    filepath = get_screenshots_dir() / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+
+    return FileResponse(str(filepath), media_type="image/png")
+
+
+# ── Capabilities ─────────────────────────────────────────────────────
+
+
+@router.get("/capabilities")
+async def list_capabilities(category: str | None = None):
+    """List registered Ronin capabilities with risk levels."""
+    from shogun.ronin.core.capabilities_registry import list_capabilities as _list
+
+    caps = _list(category=category)
+    return ApiResponse(
+        success=True,
+        data=[
+            RoninCapabilityResponse(
+                name=c.name,
+                category=c.category,
+                risk_level=c.risk_level.value,
+                requires_approval=c.requires_approval,
+                description=c.description,
+                posture_minimum=c.posture_minimum.value,
+                app_trust_minimum=c.app_trust_minimum.value,
+                enabled=c.enabled,
+            ).model_dump()
+            for c in caps
+        ],
+    )
+
+
+# ── App Trust ────────────────────────────────────────────────────────
+
+
+@router.get("/trust")
+async def get_trust_registry():
+    """Get the current app trust registry."""
+    from shogun.ronin.core.app_trust_registry import get_all_entries
+
+    entries = get_all_entries()
+    return ApiResponse(
+        success=True,
+        data=[
+            AppTrustEntryResponse(
+                process=e.process,
+                process_pattern=e.process_pattern,
+                name=e.name,
+                trust_level=e.trust_level.value,
+                platform=e.platform,
+            ).model_dump()
+            for e in entries
+        ],
+    )
+
+
+@router.patch("/trust")
+async def update_trust_entry(body: dict[str, Any]):
+    """Update an app trust entry."""
+    from shogun.ronin.core.app_trust_registry import update_trust_level
+    from shogun.ronin.policies.ronin_policy_schema import AppTrustLevel
+
+    process = body.get("process")
+    level = body.get("trust_level")
+
+    if not process or not level:
+        raise HTTPException(status_code=400, detail="Both 'process' and 'trust_level' required")
+
+    try:
+        trust_level = AppTrustLevel(level)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid trust level: {level}")
+
+    updated = update_trust_level(process, trust_level)
+    if not updated:
+        # Add as new entry
+        from shogun.ronin.core.app_trust_registry import add_entry
+        from shogun.ronin.policies.ronin_policy_schema import AppTrustEntry
+        add_entry(AppTrustEntry(
+            process=process,
+            name=body.get("name", process),
+            trust_level=trust_level,
+        ))
+
+    return ApiResponse(success=True, data={"process": process, "trust_level": level})
+
+
+# ── Environment ──────────────────────────────────────────────────────
+
+
+@router.get("/environment")
+async def get_environment():
+    """Get detected execution environment info."""
+    from shogun.ronin.core.ronin_controller import get_controller
+    controller = get_controller()
+    env = await controller.initialize()
+
+    return ApiResponse(
+        success=True,
+        data=EnvironmentInfoResponse(
+            environment_type=env.environment_type.value,
+            os_type=env.os_type,
+            os_version=env.os_version,
+            hostname=env.hostname,
+            machine_id=env.machine_id,
+            is_disposable=env.is_disposable,
+            hypervisor=env.hypervisor,
+            details=env.details,
+        ).model_dump(),
+    )
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+
+def _session_to_dict(s) -> dict[str, Any]:
+    """Convert a RoninSession ORM object to a response dict."""
+    return {
+        "id": str(s.id),
+        "name": s.name,
+        "agent_id": str(s.agent_id) if s.agent_id else None,
+        "posture": s.posture,
+        "status": s.status,
+        "environment_type": s.environment_type,
+        "os_type": s.os_type,
+        "os_version": s.os_version,
+        "hostname": s.hostname,
+        "machine_id": s.machine_id,
+        "is_disposable": s.is_disposable,
+        "last_screenshot_path": s.last_screenshot_path,
+        "last_action": s.last_action,
+        "last_action_at": s.last_action_at.isoformat() if s.last_action_at else None,
+        "current_app": s.current_app,
+        "current_app_trust": s.current_app_trust,
+        "action_count": s.action_count,
+        "komainu_level": s.komainu_level,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+    }

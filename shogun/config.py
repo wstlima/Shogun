@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     config_path: Path = PROJECT_ROOT / "configs"
     uploads_path: Path = PROJECT_ROOT / "data" / "uploads"
     mado_path: Path = PROJECT_ROOT / "data" / "mado"
+    ronin_path: Path = PROJECT_ROOT / "data" / "ronin"
 
     # ── Telegram ─────────────────────────────────────────────
     telegram_bot_token: str | None = None
@@ -92,6 +93,9 @@ class Settings(BaseSettings):
             self.mado_path / "sessions",
             self.mado_path / "cache",
             self.mado_path / "screenshots",
+            # Ronin desktop automation directories
+            self.ronin_path,
+            self.ronin_path / "screenshots",
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 

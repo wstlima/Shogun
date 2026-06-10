@@ -131,6 +131,23 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    # Stop Ronin and Komainu
+    try:
+        from shogun.ronin.core.komainu import stop_komainu
+        stop_komainu()
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.ronin_session import RoninSession
+        from sqlalchemy import update
+        async with async_session_factory() as session:
+            await session.execute(
+                update(RoninSession)
+                .where(RoninSession.status.in_(["active", "paused", "idle"]))
+                .values(status="closed")
+            )
+            await session.commit()
+    except Exception:
+        pass
+
     try:
         from shogun.services.event_logger import EventLogger as _EL
         import asyncio
@@ -202,6 +219,7 @@ def create_app() -> FastAPI:
     from shogun.api.agent_flow import router as agent_flow_router
     from shogun.api.mado import router as mado_router
     from shogun.api.gensui_config import router as gensui_config_router
+    from shogun.api.ronin import router as ronin_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -230,6 +248,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_flow_router, prefix=prefix)
     app.include_router(mado_router, prefix=prefix)
     app.include_router(gensui_config_router, prefix=prefix)
+    app.include_router(ronin_router, prefix=prefix)
 
     # ── Health / Identity Endpoint ───────────────────────────
     # Used by Gensui network scanner to identify Shogun instances on the LAN.
@@ -268,6 +287,12 @@ def create_app() -> FastAPI:
     if not mado_screenshots_path.exists():
         mado_screenshots_path.mkdir(parents=True, exist_ok=True)
     app.mount("/mado/screenshots", StaticFiles(directory=str(mado_screenshots_path)), name="mado_screenshots")
+
+    # Static serving for Ronin screenshots
+    ronin_screenshots_path = Path(settings.ronin_path) / "screenshots"
+    if not ronin_screenshots_path.exists():
+        ronin_screenshots_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/ronin/screenshots", StaticFiles(directory=str(ronin_screenshots_path)), name="ronin_screenshots")
 
     # Static file serving for React frontend (anchored to PROJECT_ROOT)
     frontend_path = PROJECT_ROOT / "frontend" / "dist"

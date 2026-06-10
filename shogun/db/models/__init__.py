@@ -27,6 +27,7 @@ from shogun.db.models.email_account import EmailAccount
 from shogun.db.models.agent_flow import AgentFlow, AgentFlowNode, AgentFlowEdge
 from shogun.db.models.agent_flow_run import AgentFlowRun
 from shogun.db.models.mado_session import MadoSession
+from shogun.db.models.ronin_session import RoninSession
 
 __all__ = [
     "Operator",
@@ -63,4 +64,5 @@ __all__ = [
     "AgentFlowEdge",
     "AgentFlowRun",
     "MadoSession",
+    "RoninSession",
 ]

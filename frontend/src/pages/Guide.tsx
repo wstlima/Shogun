@@ -44,6 +44,9 @@ import {
   ShieldAlert,
   Sword,
   HelpCircle,
+  Crosshair,
+  Monitor as MonitorIcon,
+  Power,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -238,6 +241,8 @@ export function Guide() {
                      { term: 'Routing Profile', def: 'A set of rules that decides which AI model handles which type of task. For example: code → GPT-4, research → Perplexity.', icon: GitBranch, color: 'text-shogun-blue' },
                      { term: 'Salience', def: 'A memory importance score (0.0–1.0). High-salience memories are retrieved first. The system auto-adjusts salience over time.', icon: Star, color: 'text-shogun-gold' },
                      { term: 'Reflection Cycle', def: 'An automated self-improvement loop where the AI analyzes its own performance and generates optimization insights. Run from Bushido.', icon: RefreshCw, color: 'text-shogun-blue' },
+                     { term: 'Ronin (Desktop)', def: 'The desktop control capability. Allows agents to interact with OS desktops — mouse, keyboard, screenshots, native apps. Governed by Posture Guard, App Trust, and Komainu. Requires explicit enabling in Torii.', icon: Crosshair, color: 'text-orange-400' },
+                     { term: 'Komainu (Guardian)', def: 'The physical override system for Ronin. A three-tier safety mechanism: Level 1 (Pause), Level 2 (Terminate), Level 3 (Harakiri). Detects human mouse/keyboard input and stops the AI. Named after Japanese shrine guardians.', icon: ShieldAlert, color: 'text-red-400' },
                    ].map((item) => (
                      <div key={item.term} className="shogun-card space-y-2">
                         <div className={`font-bold text-shogun-text flex items-center gap-2`}>
@@ -272,6 +277,7 @@ export function Guide() {
                      { name: 'Bushido (Reflection)', purpose: 'Calibrate self-improvement behavior. Tune reflection intensity, consolidation rate, and exploration variance. View AI-generated insights.', icon: RefreshCw, color: 'text-shogun-blue' },
                      { name: 'Torii (Security)', purpose: 'Set the system\'s security posture (5 tiers from SHRINE to RONIN). Create and manage security policies. Access the Harakiri kill switch.', icon: Lock, color: 'text-red-400' },
                      { name: 'Mado (Browser)', purpose: 'Browser automation layer powered by Playwright. Your AI can navigate to URLs, extract page content, take screenshots, and interact with web pages — all controlled through the secure Torii permission system.', icon: AppWindow, color: 'text-cyan-400' },
+                     { name: 'Ronin (Desktop Control)', purpose: 'Desktop automation layer. Allows governed mouse, keyboard, screenshot, and native app control. Protected by Posture Guard, App Trust (4 levels), Komainu physical override, and environment detection. Only available at TACTICAL tier or higher.', icon: Crosshair, color: 'text-orange-400' },
                      { name: 'Agent Flow (Workflows)', purpose: 'Visual drag-and-drop workflow builder. Design multi-step AI pipelines by chaining Input, Samurai, Shogun Approval, Logic Gate, Browser, and Output nodes. Execute complex orchestration flows.', icon: Workflow, color: 'text-violet-400' },
                      { name: 'Mail (Email Client)', purpose: 'Full IMAP/SMTP email integration. Browse your inbox, read and compose emails, reply with CC/BCC, navigate folders. Your Shogun can also read, send, and manage emails via native skills.', icon: Mail, color: 'text-sky-400' },
                      { name: 'Calendar', purpose: 'CalDAV calendar integration. View upcoming events, create new ones (with time, location, and description), and manage your schedule. Your Shogun can query and create events via native skills.', icon: CalendarDays, color: 'text-emerald-400' },
@@ -916,6 +922,165 @@ export function Guide() {
 
 
              {/* ═══════════════════════════════════════════════════════════════ */}
+
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              {/* RONIN (DESKTOP CONTROL) */}
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              <section className="space-y-6">
+                 <div className="flex items-center gap-3 border-b-2 border-orange-400/40 pb-3">
+                    <Crosshair className="w-6 h-6 text-orange-400" />
+                    <div>
+                       <h4 className="text-xl font-bold uppercase tracking-widest">Ronin - Desktop Control Layer</h4>
+                       <p className="text-xs text-shogun-subdued">Governed desktop automation: mouse, keyboard, screenshots, native apps, and OS interaction.</p>
+                    </div>
+                 </div>
+
+                 <div className="shogun-card bg-red-500/10 border-red-500/30 border-l-4 border-l-red-500">
+                    <h5 className="text-sm font-bold text-red-500 flex items-center gap-2 mb-3">
+                       <ShieldAlert className="w-5 h-5" />
+                       CRITICAL: Understand the Repercussions Before Enabling
+                    </h5>
+                    <div className="space-y-3 text-xs text-shogun-subdued leading-relaxed">
+                       <p><strong className="text-red-400">Ronin gives the AI direct physical control of your computer.</strong> This is not a sandboxed operation. When enabled, Shogun can move your mouse, press keys, read your screen, interact with any application, and execute OS-level commands. This is fundamentally different from browser automation (Mado), which runs in an isolated Chromium sandbox.</p>
+                       <div className="bg-[#050508] rounded-lg p-3 border border-red-500/20 space-y-2">
+                          <p className="text-red-400 font-bold text-[10px] uppercase tracking-widest">What can go wrong:</p>
+                          <ul className="ml-4 list-disc space-y-1.5">
+                             <li><strong className="text-red-400">Data Loss:</strong> The AI can click Delete buttons, overwrite files, or drag items to trash. At CAMPAIGN/RONIN tier, file deletion is allowed or only requires approval but mistakes happen in milliseconds.</li>
+                             <li><strong className="text-red-400">Credential Exposure:</strong> If the AI types into a password field, opens a password manager, or interacts with banking/crypto apps your credentials could be exposed, logged, or transmitted. At RONIN tier, credential entry is ALLOWED with no gate.</li>
+                             <li><strong className="text-red-400">Financial Damage:</strong> The AI can click purchase buttons, submit orders, confirm transactions, or interact with trading platforms. There is no undo for financial actions.</li>
+                             <li><strong className="text-red-400">Software Installation:</strong> At CAMPAIGN tier, software installation requires approval. At RONIN tier, the AI can download and install arbitrary software without asking.</li>
+                             <li><strong className="text-red-400">Admin Escalation:</strong> At RONIN tier, admin escalation is enabled. The AI can accept UAC prompts, run as administrator, and modify system settings.</li>
+                             <li><strong className="text-red-400">External Data Upload:</strong> The AI can open a browser, paste sensitive data, and upload it to external services. At RONIN tier, this is ALLOWED without approval.</li>
+                          </ul>
+                       </div>
+                       <p className="text-red-400 font-bold">Rule of thumb: If you would not give a stranger unsupervised access to your desktop, do not enable CAMPAIGN or RONIN posture on that machine.</p>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-orange-400" /> Posture Levels</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"Ronin has four posture levels. The active posture is set in Torii \u2192 Security Posture and shown in the Ronin header."}</p>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-[#7a8899] bg-[#7a8899]/10 px-2 py-0.5 rounded">DISABLED</span><span className="text-xs text-shogun-subdued">No desktop access at all. Shrine and Guarded tiers.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-shogun-blue bg-shogun-blue/10 px-2 py-0.5 rounded">OBSERVE ONLY</span><span className="text-xs text-shogun-subdued">Screenshots and window listing only. Read-only.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-green-400 bg-green-400/10 px-2 py-0.5 rounded">BROWSER ONLY</span><span className="text-xs text-shogun-subdued">Playwright/Mado browser control only. No desktop.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded">DESKTOP LIMITED</span><span className="text-xs text-shogun-subdued">Mouse, keyboard, screenshots. No native apps, no shell, no admin. Tactical tier.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-red-400 bg-red-400/10 px-2 py-0.5 rounded">DESKTOP FULL</span><span className="text-xs text-shogun-subdued">{"Full control: native apps, shell commands, admin escalation. Campaign/Ronin tier."} <strong className="text-red-400">DANGEROUS.</strong></span></div>
+                       </div>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Crosshair className="w-4 h-4 text-orange-400" /> Where to Configure</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">Ronin posture is controlled by the Security Tier selected in Torii. You cannot enable Ronin independently. It follows the global posture.</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>SHRINE / GUARDED:</strong> Ronin is disabled. No desktop control at all.</li>
+                          <li><strong>TACTICAL:</strong> Ronin is desktop_limited. Mouse + keyboard + screenshots. 1 session max. Dangerous actions blocked.</li>
+                          <li><strong>CAMPAIGN:</strong> Ronin is desktop_full. Native apps + shell. 5 sessions max. Dangerous actions require approval.</li>
+                          <li><strong>RONIN:</strong> Ronin is desktop_full. Everything allowed. 10 sessions. Admin escalation enabled. <strong className="text-red-400">No safety gates. VM only recommended.</strong></li>
+                       </ul>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">After selecting a tier, the Ronin constraints appear in the Current Constraints card on the left side of Torii (Ronin Desktop, Ronin Sessions, Mouse/Keyboard).</p>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-orange-400" /> Application Trust Levels</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">Every application on your OS is classified into one of four trust levels. The Posture Guard evaluates: Agent + Posture + App Trust + Environment = Decision.</p>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-green-400 bg-green-400/10 px-2 py-0.5 rounded">TRUSTED</span><span className="text-xs text-shogun-subdued">VS Code, Notepad, Calculator, Shogun. Safe to interact.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">RESTRICTED</span><span className="text-xs text-shogun-subdued">Chrome, Excel, PowerPoint. Some caution required.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded">SENSITIVE</span><span className="text-xs text-shogun-subdued">Outlook, SAP, Salesforce, CRM. Requires elevated posture.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-red-400 bg-red-400/10 px-2 py-0.5 rounded">FORBIDDEN</span><span className="text-xs text-shogun-subdued">Password managers, banking apps, crypto wallets. <strong className="text-red-400">Always blocked, no override.</strong></span></div>
+                       </div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">The trust registry comes pre-populated with 50+ applications. View and filter them on the App Trust tab in Ronin.</p>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-red-400" /> Komainu Guardian (Physical Override)</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">Komainu is a hardware-level safety mechanism. It monitors for human mouse and keyboard activity and can instantly override the AI. Three levels:</p>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">LEVEL 1: PAUSE</span><span className="text-xs text-shogun-subdued">Any human input pauses the active Ronin session. Resume manually.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded">LEVEL 2: TERMINATE</span><span className="text-xs text-shogun-subdued">Any human input kills the active session immediately.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-red-400 bg-red-400/10 px-2 py-0.5 rounded">LEVEL 3: HARAKIRI</span><span className="text-xs text-shogun-subdued">Any human input triggers full emergency stop for all sessions and agents.</span></div>
+                       </div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed"><strong>Triple-Escape</strong> (press Escape 3 times rapidly) is a hard-coded Level 3 trigger that cannot be disabled, overridden, or circumvented. It always triggers Harakiri.</p>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-orange-400" /> Capabilities Registry</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">20+ registered actions organized by category. Each has a risk level, minimum posture requirement, and an approval flag. View them on the Capabilities tab in Ronin.</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>Desktop:</strong> screenshot, click, move_mouse, type, hotkey, locate_image, read_screen</li>
+                          <li><strong>Browser:</strong> open, click, type, extract, screenshot (bridges to Mado)</li>
+                          <li><strong>OS:</strong> list_windows, focus_window, get_foreground_app</li>
+                       </ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><MonitorIcon className="w-4 h-4 text-orange-400" /> Environment Detection</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">Ronin automatically detects the environment type at startup. This affects which posture policies are allowed.</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>Physical Machine:</strong> Your real hardware. Highest risk surface.</li>
+                          <li><strong>VM:</strong> VirtualBox, VMware, Hyper-V. Recommended for full desktop posture.</li>
+                          <li><strong>Sandbox:</strong> Windows Sandbox, Docker. Safe for testing.</li>
+                          <li><strong>Remote Desktop:</strong> RDP sessions. Higher latency, lower risk.</li>
+                          <li><strong>Citrix / Cloud Workspace:</strong> Enterprise environments. Policy may be enforced by Gensui.</li>
+                       </ul>
+                    </div>
+                 </div>
+
+                 <div className="shogun-card space-y-3 border-l-4 border-l-red-500">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><AlertCircle className="w-4 h-4 text-red-400" /> Tier-by-Tier Ronin Repercussions</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">This table shows exactly what the AI can do at each security tier. <strong className="text-red-400">Read this carefully before changing your posture.</strong></p>
+                    <div className="bg-shogun-bg rounded-lg overflow-hidden border border-shogun-border">
+                       <table className="w-full text-xs">
+                          <thead>
+                             <tr className="border-b border-shogun-border">
+                                <th className="text-left p-2.5 text-shogun-subdued font-bold uppercase tracking-widest text-[10px]">Dangerous Action</th>
+                                <th className="text-center p-2.5 text-shogun-blue font-bold uppercase tracking-widest text-[10px]">Tactical</th>
+                                <th className="text-center p-2.5 text-orange-400 font-bold uppercase tracking-widest text-[10px]">Campaign</th>
+                                <th className="text-center p-2.5 text-red-400 font-bold uppercase tracking-widest text-[10px]">Ronin</th>
+                             </tr>
+                          </thead>
+                          <tbody className="text-shogun-subdued">
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">Credential Entry</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-yellow-400">Approval</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">File Deletion</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-yellow-400">Approval</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">External Uploads</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-yellow-400">Approval</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">Software Install</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-yellow-400">Approval</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">Native App Interaction</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-green-400">Allowed</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr className="border-b border-shogun-border/50"><td className="p-2.5">Shell Commands</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-green-400">Allowed</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                             <tr><td className="p-2.5 font-bold text-red-400">Admin Escalation (UAC)</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-red-400">Blocked</td><td className="text-center p-2.5 text-green-400">Allowed</td></tr>
+                          </tbody>
+                       </table>
+                    </div>
+                    <p className="text-xs text-red-400 font-bold leading-relaxed">At RONIN tier, every dangerous action is allowed WITHOUT operator approval. This means the AI can delete files, enter credentials, install software, and escalate to admin autonomously. Only use RONIN tier in fully isolated, disposable environments (VMs, sandboxes).</p>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Crosshair className="w-4 h-4 text-orange-400" /> Dashboard Tabs</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">The Ronin page has 5 tabs:</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>Control:</strong> Status cards, environment detection panel, and a Quick Action executor for manual desktop commands.</li>
+                          <li><strong>Sessions:</strong> Create and manage desktop sessions. Choose posture level and Komainu guardian level per session.</li>
+                          <li><strong>App Trust:</strong> View the pre-classified trust registry. Filter by trust level.</li>
+                          <li><strong>Capabilities:</strong> View all registered desktop actions with risk levels and posture requirements.</li>
+                          <li><strong>Audit Trail:</strong> Chronological feed of all Ronin events with severity coloring.</li>
+                       </ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Power className="w-4 h-4 text-red-400" /> Emergency Controls</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">Multiple layers of emergency shutdown:</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong className="text-red-400">STOP Button:</strong> The red skull button in the Ronin header. Triggers Harakiri.</li>
+                          <li><strong className="text-red-400">Triple-Escape:</strong> Press Escape 3 times rapidly. Hard-coded, cannot be disabled.</li>
+                          <li><strong className="text-yellow-400">Komainu Override:</strong> Any human mouse or keyboard input triggers the configured level.</li>
+                          <li><strong className="text-red-400">Torii Harakiri:</strong> The global kill switch on the Torii page. Stops everything system-wide.</li>
+                       </ul>
+                    </div>
+                 </div>
+              </section>
+
              {/* 10. TORII (SECURITY) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
              <section className="space-y-6">

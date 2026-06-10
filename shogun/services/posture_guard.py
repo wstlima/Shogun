@@ -272,6 +272,11 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
             denied.append(name)
             continue
 
+        # ── Ronin: Desktop control tools ──
+        if name in ("desktop_screenshot", "desktop_click", "desktop_type") and not posture.get("ronin_enabled", False):
+            denied.append(name)
+            continue
+
         allowed.append(tool)
 
     return allowed, denied

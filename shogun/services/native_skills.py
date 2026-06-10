@@ -430,6 +430,78 @@ NATIVE_TOOLS = [
             },
         },
     },
+    # ── Ronin Desktop Control ──────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_screenshot",
+            "description": "Take a screenshot of the entire desktop screen (not just a browser — the full OS desktop). Requires Ronin desktop control to be enabled in Torii security settings (TACTICAL tier or higher). Use this when you need to see what is on screen.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "region": {
+                        "type": "string",
+                        "description": "Optional region as 'x,y,width,height' pixels. Omit for full screen.",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_click",
+            "description": "Click a position on the desktop screen. Requires Ronin desktop control with mouse enabled (TACTICAL tier or higher). Use desktop_screenshot first to see the screen and identify coordinates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "integer",
+                        "description": "X coordinate (pixels from left).",
+                    },
+                    "y": {
+                        "type": "integer",
+                        "description": "Y coordinate (pixels from top).",
+                    },
+                    "button": {
+                        "type": "string",
+                        "enum": ["left", "right", "middle"],
+                        "description": "Mouse button to click. Defaults to 'left'.",
+                    },
+                    "clicks": {
+                        "type": "integer",
+                        "description": "Number of clicks (1=single, 2=double). Defaults to 1.",
+                    },
+                },
+                "required": ["x", "y"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "desktop_type",
+            "description": "Type text using the keyboard on the desktop. Requires Ronin desktop control with keyboard enabled (TACTICAL tier or higher). Can also send hotkeys like 'ctrl+c', 'alt+tab', 'enter'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The text to type. For hotkeys, use format like 'ctrl+c', 'alt+tab', 'enter', 'escape'.",
+                    },
+                    "is_hotkey": {
+                        "type": "boolean",
+                        "description": "If true, interpret 'text' as a hotkey combo instead of literal text. Defaults to false.",
+                    },
+                    "interval": {
+                        "type": "number",
+                        "description": "Delay between keystrokes in seconds. Defaults to 0.02.",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
 ]
 
 
@@ -1059,6 +1131,73 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 "message": f"Screenshot saved: {result.get('filename', 'unknown')}",
                 "path": result.get("path", ""),
             })
+
+        # ── Ronin Desktop Control ─────────────────────────────
+        elif name in ("desktop_screenshot", "desktop_click", "desktop_type"):
+            from shogun.services.posture_guard import get_posture_tool_filter
+            from shogun.ronin.core.ronin_controller import get_controller
+
+            posture = await get_posture_tool_filter()
+            if not posture.get("ronin_enabled", False):
+                tier = posture.get('active_tier', 'unknown').upper()
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Desktop control is disabled at tier {tier}. Switch to TACTICAL or higher in Torii to enable Ronin.",
+                })
+
+            # Check specific capability
+            if name == "desktop_click" and not posture.get("ronin_mouse_enabled", False):
+                return json.dumps({"status": "error", "message": "Mouse control is not enabled at the current posture level."})
+            if name == "desktop_type" and not posture.get("ronin_keyboard_enabled", False):
+                return json.dumps({"status": "error", "message": "Keyboard control is not enabled at the current posture level."})
+            if name == "desktop_screenshot" and not posture.get("ronin_screenshots_enabled", False):
+                return json.dumps({"status": "error", "message": "Screenshots are not enabled at the current posture level."})
+
+            controller = get_controller()
+
+            if name == "desktop_screenshot":
+                region_str = args.get("region")
+                region = None
+                if region_str:
+                    parts = [int(p.strip()) for p in region_str.split(",")]
+                    if len(parts) == 4:
+                        region = {"left": parts[0], "top": parts[1], "width": parts[2], "height": parts[3]}
+                result = await controller.screenshot(region=region)
+                if result.get("status") == "error":
+                    return json.dumps({"status": "error", "message": result.get("error", "Screenshot failed.")})
+                return json.dumps({
+                    "status": "success",
+                    "message": f"Desktop screenshot saved: {result.get('filename', 'unknown')}",
+                    "path": result.get("path", ""),
+                })
+
+            elif name == "desktop_click":
+                x = int(args["x"])
+                y = int(args["y"])
+                button = args.get("button", "left")
+                clicks = int(args.get("clicks", 1))
+                result = await controller.click(x=x, y=y, button=button, clicks=clicks)
+                if result.get("status") == "error":
+                    return json.dumps({"status": "error", "message": result.get("error", "Click failed.")})
+                return json.dumps({
+                    "status": "success",
+                    "message": f"Clicked at ({x}, {y}) with {button} button ({clicks}x).",
+                })
+
+            elif name == "desktop_type":
+                text = args["text"]
+                is_hotkey = args.get("is_hotkey", False)
+                interval = float(args.get("interval", 0.02))
+                if is_hotkey:
+                    result = await controller.hotkey(keys=text)
+                else:
+                    result = await controller.type_text(text=text, interval=interval)
+                if result.get("status") == "error":
+                    return json.dumps({"status": "error", "message": result.get("error", "Typing failed.")})
+                return json.dumps({
+                    "status": "success",
+                    "message": f"{'Hotkey' if is_hotkey else 'Typed'}: {text[:50]}{'...' if len(text) > 50 else ''}",
+                })
 
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})

@@ -5,6 +5,7 @@ import {
   Trash2, Copy, Check, Activity,
   Globe, HardDrive, Terminal, Zap, Users,
   ChevronDown, ChevronRight, Database, Mail, Calendar, Clock, AppWindow,
+  Crosshair, Monitor, MousePointer2,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -32,6 +33,22 @@ interface Posture {
   mado_headless_only: boolean;
   mado_max_sessions: number;
   mado_autonomous_browsing: boolean;
+  // Ronin desktop automation
+  ronin_enabled: boolean;
+  ronin_posture: string;
+  ronin_max_sessions: number;
+  ronin_screenshots_enabled: boolean;
+  ronin_mouse_enabled: boolean;
+  ronin_keyboard_enabled: boolean;
+  ronin_native_apps_enabled: boolean;
+  ronin_shell_commands: boolean;
+  ronin_admin_escalation: boolean;
+  ronin_credential_entry: string;
+  ronin_file_deletion: string;
+  ronin_external_uploads: string;
+  ronin_install_software: string;
+  ronin_komainu_level: number;
+  ronin_environment_policy: string;
 }
 
 interface Policy {
@@ -388,6 +405,9 @@ export function Torii() {
                 { icon: Calendar,  label: t('torii.calendar_access'), value: !posture.comms_read_calendar ? t('torii.disabled') : posture.comms_create_events ? t('torii.full_access') : t('torii.read_only') },
                 { icon: Clock,     label: t('torii.cron_access'), value: !posture.comms_list_cron ? t('torii.disabled') : posture.comms_manage_cron ? t('torii.full_access') : t('torii.read_only') },
                 { icon: AppWindow,  label: 'Mado Browser', value: !posture.mado_enabled ? t('torii.disabled') : posture.mado_headless_only ? 'Headless' : posture.mado_autonomous_browsing ? 'Autonomous' : 'Enabled' },
+                { icon: Crosshair,  label: 'Ronin Desktop', value: !posture.ronin_enabled ? t('torii.disabled') : posture.ronin_posture.replace('_', ' ') },
+                { icon: Monitor,    label: 'Ronin Sessions', value: !posture.ronin_enabled ? '—' : String(posture.ronin_max_sessions) },
+                { icon: MousePointer2, label: 'Mouse/Keyboard', value: !posture.ronin_enabled ? '—' : (posture.ronin_mouse_enabled && posture.ronin_keyboard_enabled ? 'Enabled' : posture.ronin_mouse_enabled ? 'Mouse Only' : posture.ronin_keyboard_enabled ? 'Keyboard Only' : t('torii.disabled')) },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 text-shogun-subdued">
