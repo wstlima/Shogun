@@ -88,10 +88,12 @@ Download **one file** for your platform, double-click it, and you're done:
 |----------|----------|-------------|
 | **🪟 Windows** | [⬇️ **Gensui-Install.bat**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Install.bat) | **Click to download** → Double-click the file |
 | **🍎 macOS** | [⬇️ **Gensui-Install.command**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Install.command) | **Click to download** → Double-click the file |
+| **🐳 Docker (Server)** | [⬇️ **Gensui-Docker-Install.sh**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Docker-Install.sh) | **Click to download** → `bash Gensui-Docker-Install.sh` |
+| **🪟 Docker (Windows)** | [⬇️ **Gensui-Docker-Install.bat**](https://github.com/AlphaHorizon-AI/Shogun/releases/latest/download/Gensui-Docker-Install.bat) | **Click to download** → Double-click the file |
 
 ### Deployment Options (Advanced)
 
-Gensui runs independently from Shogun instances and can also be deployed via Docker:
+Gensui runs independently from Shogun instances and can also be deployed manually via Docker if you prefer not to use the one-click scripts:
 
 | Deployment | Command | Best For |
 |---|---|---|
@@ -120,15 +122,19 @@ Gensui starts at **http://localhost:8787**. Default credentials: `admin@gensui.l
 </details>
 
 <details>
-<summary><strong>Quick Start — Docker Server</strong></summary>
+<summary><strong>Quick Start — Manual Docker Server</strong></summary>
 
 ```bash
 cd Shogun/gensui
 
+# Setup config
+cp .env.example .env
+# Edit .env and change GENSUI_JWT_SECRET to a random 64-char string
+
 # Basic (no TLS)
 docker compose up -d
 
-# Production with TLS (place certs in ./certs/)
+# Production with TLS (place certs in ./certs/gensui.crt and ./certs/gensui.key)
 docker compose --profile server up -d
 ```
 
