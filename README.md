@@ -320,6 +320,191 @@ Every gateway operation produces dual-logged audit events:
 
 All events include: task ID, source agent, source platform, requested action, policy decision, execution result, latency, and timestamp.
 
+### Connecting Enterprise Agents — Step by Step
+
+The Nexus External Gateway is a **receiving** endpoint. External enterprise agents call **into** Shogun — Shogun doesn't reach out to them. No vendor SDKs, no platform lock-in. Just standard HTTP + Bearer tokens.
+
+```
+Enterprise Agent → HTTP POST → Shogun Nexus Gateway → Policy Check → Execute → Return Result
+```
+
+Every integration follows the same 3-step pattern:
+
+1. **Register** the external agent in Shogun → receive an API token
+2. **Configure** the enterprise platform to call Shogun's `/nexus/external/a2a/task` endpoint with that token
+3. **Tasks flow in** automatically — authenticated, policy-checked, routed, executed, result returned
+
+---
+
+<details>
+<summary><strong>🔵 Example: Microsoft 365 Copilot Agent</strong></summary>
+
+Microsoft 365 Copilot uses **custom agent actions** (API plugins) that call external REST APIs. Here's how to wire it up:
+
+**Step 1 — Register the M365 agent in Shogun:**
+
+```
+POST http://localhost:8000/api/v1/nexus/external/register-agent
+
+{
+  "name": "M365-Copilot-Research",
+  "platform": "microsoft_365",
+  "endpoint_url": "https://your-m365-callback.com/webhook"
+}
+```
+
+Shogun returns an **API token** — save it for the M365 side.
+
+**Step 2 — Create a Copilot Agent Action in the M365 Admin Center:**
+
+In **Microsoft 365 Admin Center → Copilot → Agent Builder**, create a custom action:
+
+| Setting | Value |
+|---------|-------|
+| Action Type | API Plugin (OpenAPI) |
+| Base URL | `https://your-shogun.example.com/api/v1/nexus` |
+| Authentication | Bearer token (the token from Step 1) |
+| Endpoint | `POST /external/a2a/task` |
+
+**Step 3 — When a user asks Copilot something it delegates to Shogun:**
+
+The Copilot agent fires an HTTP request:
+
+```json
+POST /api/v1/nexus/external/a2a/task
+Authorization: Bearer <token-from-step-1>
+
+{
+  "task_id": "copilot-req-8291",
+  "action": "document.summarize",
+  "input": { "content": "Summarize Q2 revenue trends from the attached report..." },
+  "source_agent_id": "copilot-agent-42",
+  "source_platform": "microsoft_365"
+}
+```
+
+Shogun verifies the token, checks platform allowlists, routes to the best agent, executes via LLM, and returns the result.
+
+**What Microsoft 365 agents CAN access:**
+
+| ✅ Allowed | 🚫 Blocked |
+|-----------|-----------|
+| `document.summarize` | `desktop.execute` |
+| `spreadsheet.analyze` | `browser.login` |
+| `email.draft` | `finance.portal_access` |
+| `file.analyze` | `ronin.harakiri` / `ronin.stop` |
+
+</details>
+
+---
+
+<details>
+<summary><strong>☁️ Example: Salesforce Agentforce (Einstein)</strong></summary>
+
+Salesforce Agentforce uses **custom actions** that call external REST APIs. Same pattern:
+
+**Step 1 — Register the Salesforce agent in Shogun:**
+
+```json
+POST /api/v1/nexus/external/register-agent
+
+{
+  "name": "Einstein-CRM-Assistant",
+  "platform": "salesforce",
+  "endpoint_url": "https://your-sf-instance.my.salesforce.com/callback"
+}
+```
+
+**Step 2 — In Salesforce Setup → Agentforce → Custom Actions:**
+
+Create an **External Service** (or Apex HTTP callout) pointing to Shogun's public URL with the bearer token from Step 1.
+
+| Setting | Value |
+|---------|-------|
+| External Service URL | `https://your-shogun.example.com/api/v1/nexus` |
+| Auth Header | `Authorization: Bearer <token>` |
+| Method | `POST` |
+| Path | `/external/a2a/task` |
+
+**Step 3 — A sales rep asks Einstein to prepare a customer summary:**
+
+```json
+POST /api/v1/nexus/external/a2a/task
+Authorization: Bearer <salesforce-token>
+
+{
+  "task_id": "sf-case-44021",
+  "action": "crm.prepare_update",
+  "input": {
+    "customer_id": "ACME-001",
+    "context": "Prepare renewal talking points based on support ticket history"
+  },
+  "source_agent_id": "einstein-agent-7",
+  "source_platform": "salesforce"
+}
+```
+
+Shogun processes the task, returns the result. The Salesforce agent displays it to the sales rep inside their CRM view.
+
+**What Salesforce agents CAN access:**
+
+| ✅ Allowed | 🚫 Blocked |
+|-----------|-----------|
+| `crm.prepare_update` | `local_file_access` |
+| `customer.summary` | `desktop.execute` |
+| `case.analysis` | `unrestricted_browser_control` |
+| `document.summarize` | `ronin.harakiri` / `ronin.stop` |
+
+</details>
+
+---
+
+<details>
+<summary><strong>🌐 Other Platforms (Google, ServiceNow, Custom)</strong></summary>
+
+Any platform that can make HTTP REST calls works with the same pattern:
+
+1. Register the agent → get a token
+2. `POST /api/v1/nexus/external/a2a/task` with the token as a Bearer header
+3. Receive the result in the HTTP response, or via a callback URL
+
+**Google Vertex AI Agents** — Use the "OpenAPI Tool" action type to call Shogun's endpoint.
+
+**ServiceNow Virtual Agent** — Use a "REST Message" Integration Hub action pointing to Shogun.
+
+**Custom / In-house agents** — Any HTTP client works. `curl`, Python `requests`, Node.js `fetch` — just POST to the endpoint with a valid token.
+
+```bash
+# Quick test from the command line
+curl -X POST https://your-shogun.example.com/api/v1/nexus/external/a2a/task \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_id": "test-001",
+    "action": "document.summarize",
+    "input": {"content": "Summarize this quarterly report..."},
+    "source_agent_id": "my-agent",
+    "source_platform": "custom"
+  }'
+```
+
+</details>
+
+---
+
+### Networking: Making Shogun Reachable
+
+Shogun runs on `localhost:8000` by default. For enterprise agents to reach it over the network, you need to expose it. Choose the approach that fits your environment:
+
+| Approach | Complexity | Best For |
+|----------|------------|----------|
+| 🐳 **Gensui Docker + TLS** | Low | Production — already built into the project with Nginx, TLS 1.2/1.3, and rate limiting |
+| 🔒 **Reverse proxy** (Nginx / Caddy) | Medium | Self-hosted production with custom domain |
+| 🚇 **Tunnel** (ngrok / Cloudflare Tunnel) | Low | Development and testing |
+| 🏢 **VPN / private network** | Medium | On-prem enterprise with no public exposure |
+
+> ⚠️ **Security note:** Never expose the gateway without TLS and rate limiting in production. The Gensui Docker TLS profile handles this out of the box.
+
 ---
 
 ## 🚀 Install Shogun (One Click)
