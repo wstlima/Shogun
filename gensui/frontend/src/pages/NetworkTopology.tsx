@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, Radar, AlertTriangle, HelpCircle, Loader2, Shield, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Network, Radar, AlertTriangle, HelpCircle, Loader2, Shield, Maximize2, ZoomIn, ZoomOut, Globe } from 'lucide-react';
 import api from '../lib/api';
 
 interface MemberNode {
@@ -12,6 +12,19 @@ interface MemberNode {
   samurai_count: number;
   environment: string;
   nexus_peers: string[];
+  external_agents: ExternalAgent[];
+  x: number;
+  y: number;
+}
+
+interface ExternalAgent {
+  id: string;
+  name: string;
+  platform: string;
+  direction: string;
+  has_endpoint: boolean;
+  host_shogun_id: string;
+  host_shogun_name: string;
   x: number;
   y: number;
 }
@@ -53,10 +66,20 @@ const HUB_COLOR = { fill: '#1a1408', stroke: '#c8960c', glow: 'rgba(200, 150, 12
 const ROGUE_COLOR = { fill: '#1e1025', stroke: '#ef4444', glow: 'rgba(239, 68, 68, 0.3)' };
 const UNKNOWN_COLOR = { fill: '#1a1a2e', stroke: '#6b7280', glow: 'rgba(107, 114, 128, 0.2)' };
 
+const PLATFORM_COLORS: Record<string, { fill: string; stroke: string; glow: string }> = {
+  microsoft_365: { fill: '#0e1a2d', stroke: '#0078d4', glow: 'rgba(0, 120, 212, 0.3)' },
+  salesforce:    { fill: '#0e1a2d', stroke: '#00a1e0', glow: 'rgba(0, 161, 224, 0.25)' },
+  google:        { fill: '#1a1e0e', stroke: '#34a853', glow: 'rgba(52, 168, 83, 0.25)' },
+  servicenow:    { fill: '#1a1a0e', stroke: '#81b532', glow: 'rgba(129, 181, 50, 0.25)' },
+  custom:        { fill: '#1a0e1e', stroke: '#a855f7', glow: 'rgba(168, 85, 247, 0.25)' },
+};
+const getAgentColor = (platform: string) => PLATFORM_COLORS[platform] || PLATFORM_COLORS.custom;
+const AGENT_R = 18;
+
 export default function NetworkTopology() {
   const [members, setMembers] = useState<MemberNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; member?: MemberNode; host?: DiscoveredHost } | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; member?: MemberNode; host?: DiscoveredHost; agent?: ExternalAgent } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -76,6 +99,13 @@ export default function NetworkTopology() {
         samurai_count: m.samurai_count || 0,
         environment: m.environment,
         nexus_peers: m.metadata?.nexus_peers || [],
+        external_agents: (m.metadata?.external_agents || []).map((a: any) => ({
+          ...a,
+          host_shogun_id: m.id,
+          host_shogun_name: m.instance_name,
+          x: 0,
+          y: 0,
+        })),
         x: 0,
         y: 0,
       })));
@@ -168,7 +198,8 @@ export default function NetworkTopology() {
   });
   const CX = W / 2, CY = H / 2;
   const INNER_RADIUS = Math.min(W, H) * 0.28;
-  const OUTER_RADIUS = Math.min(W, H) * 0.42;
+  const AGENT_RING_RADIUS = Math.min(W, H) * 0.18;
+  const OUTER_RADIUS = Math.min(W, H) * 0.46;
   const NODE_R = 24;
   const HUB_R = 42;
   const ROGUE_R = 18;
@@ -177,6 +208,23 @@ export default function NetworkTopology() {
   const positioned = members.map((m, i) => {
     const angle = (2 * Math.PI * i) / Math.max(members.length, 1) - Math.PI / 2;
     return { ...m, x: CX + INNER_RADIUS * Math.cos(angle), y: CY + INNER_RADIUS * Math.sin(angle) };
+  });
+
+  // Collect and position external agents — orbit around their host Shogun
+  const allExternalAgents: ExternalAgent[] = [];
+  positioned.forEach(host => {
+    host.external_agents.forEach((agent, i) => {
+      const count = host.external_agents.length;
+      const baseAngle = Math.atan2(host.y - CY, host.x - CX);
+      const spread = Math.PI * 0.6;
+      const agentAngle = baseAngle - spread / 2 + (spread * i) / Math.max(count - 1, 1);
+      const r = AGENT_RING_RADIUS * 0.45;
+      allExternalAgents.push({
+        ...agent,
+        x: host.x + r * Math.cos(count === 1 ? baseAngle + Math.PI : agentAngle),
+        y: host.y + r * Math.sin(count === 1 ? baseAngle + Math.PI : agentAngle),
+      });
+    });
   });
 
   // Position discovered hosts (unenrolled + unknown) in outer ring
@@ -283,6 +331,17 @@ export default function NetworkTopology() {
               </div>
             </>
           )}
+          {allExternalAgents.length > 0 && (
+            <>
+              <div className="border-t border-gensui-700/50 pt-2 mt-2">
+                <p className="text-[10px] font-bold text-gensui-400 uppercase tracking-widest mb-1">External Agents</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rotate-45 border border-purple-400 bg-purple-900/30" style={{ borderRadius: 2 }} />
+                <span className="text-[10px] text-purple-300">Enterprise Agent</span>
+              </div>
+            </>
+          )}
           <div className="border-t border-gensui-700/50 pt-2 mt-2">
             <p className="text-[10px] font-bold text-gensui-400 uppercase tracking-widest mb-1">Connections</p>
             <div className="flex items-center gap-2">
@@ -292,6 +351,10 @@ export default function NetworkTopology() {
             <div className="flex items-center gap-2 mt-1">
               <div className="w-6 h-px bg-amber-400/50" style={{ borderTop: '2px dashed' }} />
               <span className="text-[10px] text-gensui-300">Nexus Peer</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-6 h-px bg-purple-400/50" style={{ borderTop: '2px dotted' }} />
+              <span className="text-[10px] text-gensui-300">Nexus Gateway</span>
             </div>
           </div>
         </div>
@@ -374,6 +437,57 @@ export default function NetworkTopology() {
                 strokeDasharray="6 4"
               />
             ))}
+
+            {/* External agent edges — from host Shogun to agent node */}
+            {allExternalAgents.map((agent, i) => {
+              const host = positioned.find(m => m.id === agent.host_shogun_id);
+              if (!host) return null;
+              const ac = getAgentColor(agent.platform);
+              return (
+                <line
+                  key={`ext-edge-${i}`}
+                  x1={host.x} y1={host.y}
+                  x2={agent.x} y2={agent.y}
+                  stroke={ac.stroke}
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  opacity={0.5}
+                />
+              );
+            })}
+
+            {/* External agent nodes — diamond shape */}
+            {allExternalAgents.map((agent, i) => {
+              const ac = getAgentColor(agent.platform);
+              const sz = AGENT_R;
+              // Diamond path
+              const d = `M ${agent.x} ${agent.y - sz} L ${agent.x + sz} ${agent.y} L ${agent.x} ${agent.y + sz} L ${agent.x - sz} ${agent.y} Z`;
+              return (
+                <g
+                  key={`ext-node-${i}`}
+                  className="cursor-default"
+                  onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, agent })}
+                  onMouseLeave={() => setTooltip(null)}
+                >
+                  {/* Glow pulse */}
+                  <path d={d} fill="none" stroke={ac.glow} strokeWidth="1">
+                    <animate attributeName="opacity" from="0.6" to="0" dur="3s" repeatCount="indefinite" />
+                  </path>
+                  <path d={d} fill={ac.fill} stroke={ac.stroke} strokeWidth="1.5" />
+                  {/* Direction arrows */}
+                  <text x={agent.x} y={agent.y + 1} textAnchor="middle" dominantBaseline="central" fill={ac.stroke} fontSize="10" fontWeight="800">
+                    {agent.direction === 'bidirectional' ? '⇄' : agent.direction === 'outbound' ? '→' : '←'}
+                  </text>
+                  {/* Name below */}
+                  <text x={agent.x} y={agent.y + sz + 12} textAnchor="middle" fill={ac.stroke} fontSize="7" fontWeight="600">
+                    {agent.name.length > 18 ? agent.name.slice(0, 16) + '…' : agent.name}
+                  </text>
+                  <text x={agent.x} y={agent.y + sz + 21} textAnchor="middle" fill="#555" fontSize="6" fontWeight="500">
+                    {agent.platform.replace('_', ' ').toUpperCase()}
+                  </text>
+                </g>
+              );
+            })}
 
             {/* Animated pulse rings for hub */}
             <circle cx={CX} cy={CY} r={HUB_R + 4} fill="none" stroke={HUB_COLOR.glow} strokeWidth="1" opacity="0.5">
@@ -584,6 +698,23 @@ export default function NetworkTopology() {
                     }
                   </p>
                 )}
+              </>
+            )}
+            {tooltip.agent && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Globe size={14} className="text-purple-400" />
+                  <p className="text-sm font-bold text-gensui-50">{tooltip.agent.name}</p>
+                </div>
+                <div className="text-xs space-y-1 text-gensui-300">
+                  <div className="flex justify-between"><span className="text-gensui-500">Platform</span><span className="text-purple-300">{tooltip.agent.platform.replace('_', ' ')}</span></div>
+                  <div className="flex justify-between"><span className="text-gensui-500">Direction</span><span>{tooltip.agent.direction === 'bidirectional' ? '⇄ Bidirectional' : tooltip.agent.direction === 'outbound' ? '→ Outbound (Shogun → Agent)' : '← Inbound (Agent → Shogun)'}</span></div>
+                  <div className="flex justify-between"><span className="text-gensui-500">Endpoint</span><span className={tooltip.agent.has_endpoint ? 'text-emerald-400' : 'text-gensui-500'}>{tooltip.agent.has_endpoint ? 'Configured' : 'None'}</span></div>
+                  <div className="flex justify-between"><span className="text-gensui-500">Host Shogun</span><span className="text-cyan-400">{tooltip.agent.host_shogun_name}</span></div>
+                </div>
+                <p className="text-[10px] text-purple-400/60 pt-1 border-t border-purple-900/30">
+                  Connected via Nexus External Gateway
+                </p>
               </>
             )}
           </div>

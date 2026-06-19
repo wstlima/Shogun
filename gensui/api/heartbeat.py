@@ -27,6 +27,7 @@ class HeartbeatRequest(BaseModel):
     active_mado_sessions: int = 0
     health: dict | None = None
     nexus_peers: list[str] | None = None  # List of peer Shogun IDs for topology
+    external_agents: list[dict] | None = None  # External enterprise agents connected via Nexus Gateway
 
 
 @router.post("")
@@ -47,6 +48,7 @@ async def heartbeat(
         active_mado_sessions=req.active_mado_sessions,
         health=req.health,
         nexus_peers=req.nexus_peers,
+        external_agents=req.external_agents,
     )
 
     # Return current posture and pending commands info

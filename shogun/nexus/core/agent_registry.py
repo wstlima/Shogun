@@ -31,6 +31,8 @@ class AgentRegistry:
             name=req.name,
             platform=req.platform,
             token=token,
+            endpoint_url=req.endpoint_url,
+            direction=req.direction,
             is_active=True
         )
         self.db.add(agent)

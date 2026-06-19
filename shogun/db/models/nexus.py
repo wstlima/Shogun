@@ -19,6 +19,8 @@ class ExternalAgentModel(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     platform: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g., "microsoft_365", "salesforce", "google"
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)  # API token for authenticating calls
+    endpoint_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)  # Callback URL for outbound dispatch
+    direction: Mapped[str] = mapped_column(String(20), default="bidirectional", nullable=False)  # inbound, outbound, bidirectional
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 

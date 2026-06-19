@@ -37,7 +37,7 @@ Most AI tools give you a chat box. Shogun gives you an **entire operating system
 | 🌐 **Browser Automation (Mado)** | Your AI can browse the web, extract content, and take screenshots — all controlled through a secure Playwright layer. |
 | 📧 **Email & Calendar** | Connect your IMAP/SMTP inbox and CalDAV calendar. Your Shogun can read, compose, and send emails — and manage your schedule. |
 | 💬 **Telegram Integration** | Talk to your AI from your phone. Full streaming responses with live typing indicators. |
-| 🔗 **Agent-to-Agent (Nexus)** | Connect multiple Shogun instances via peer-to-peer Nexus, **and** accept tasks from external enterprise agents (Microsoft 365, Salesforce, Google, ServiceNow) through the Nexus External Gateway with governed A2A interoperability. |
+| 🔗 **Agent-to-Agent (Nexus)** | Connect multiple Shogun instances via peer-to-peer Nexus, **and** send/receive tasks with external enterprise agents (Microsoft 365, Salesforce, Google, ServiceNow) through the bidirectional Nexus External Gateway. Inbound A2A + outbound dispatch with governed security. |
 | 🔄 **Visual Workflow Builder** | Design multi-step AI pipelines with a drag-and-drop canvas. Chain agents, approvals, logic gates, and browser actions into executable flows. |
 | 📜 **Constitutional Governance** | Write YAML rules your AI can never break. Version-controlled, auditable, with enforcement modes (Block / Warn / Audit). |
 | 🛡️ **5-Tier Security** | From SHRINE (zero-trust) to RONIN (unrestricted). Fine-grained control over filesystem, network, shell, and tool access. Emergency kill switch (Harakiri) freezes everything instantly. |
@@ -70,7 +70,7 @@ When you move beyond a single Shogun instance, **Gensui** becomes your command-a
 | Capability | Description |
 |---|---|
 | 📡 **Real-Time Fleet Dashboard** | Live status of every enrolled Shogun instance — online/offline state, samurai count, active workflows, and version info. |
-| 🗺️ **Interactive Network Topology** | Visual SVG map of your entire agent fleet with pan/zoom, hub-and-spoke layout, and nexus peer connection lines. |
+| 🗺️ **Interactive Network Topology** | Visual SVG map of your entire agent fleet with pan/zoom, hub-and-spoke layout, nexus peer connections, and **external enterprise agents** shown as diamond-shaped nodes with platform-specific colors. |
 | 🔍 **LAN Network Scanner** | One-click scan of your local network to discover Shogun instances. Detects enrolled agents, unenrolled (rogue) agents, and unknown services on port 8000. |
 | ⚠️ **Rogue Agent Detection** | Instantly spot unauthorized Shogun instances running on your network — critical for security compliance and preventing shadow AI. |
 | 🎟️ **Enrollment Token System** | Generate secure enrollment tokens for new Shogun instances. Approve/reject enrollment requests with optional labels. |

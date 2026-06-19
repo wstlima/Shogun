@@ -249,6 +249,16 @@ export default function Guide() {
                 <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><AlertTriangle size={14} className="text-red-400" /> Rogue Detection</div>
                 <p className="text-xs text-gensui-400 leading-relaxed">After a network scan, <strong>unenrolled Shogun instances</strong> appear as red dashed-border nodes with a warning icon. These are Shogun instances on your network that are <em>not</em> enrolled in Gensui &mdash; potential security risks. <strong>Unknown hosts</strong> (port 8000 open but not Shogun) appear as gray dotted nodes. A red trust boundary ring separates enrolled nodes from external ones.</p>
               </div>
+              <div className="glass-card p-4 space-y-2 md:col-span-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Globe size={14} className="text-purple-400" /> External Enterprise Agents</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">When Shogun instances have external agents registered via the <strong>Nexus External Gateway</strong>, they appear on the topology as <strong>diamond-shaped nodes</strong> connected to their host Shogun with dashed purple lines. Each agent node shows:</p>
+                <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
+                  <li><strong className="text-gensui-200">Platform-specific colors:</strong> Microsoft 365 (blue), Salesforce (cyan), Google (green), ServiceNow (lime), Custom (purple).</li>
+                  <li><strong className="text-gensui-200">Direction arrows:</strong> &larr; = inbound (agent sends tasks to Shogun), &rarr; = outbound (Shogun sends tasks to agent), &#x21c4; = bidirectional (both directions).</li>
+                  <li><strong className="text-gensui-200">Tooltip on hover:</strong> Shows agent name, platform, communication direction, whether an outbound endpoint is configured, and which Shogun hosts the connection.</li>
+                </ul>
+                <p className="text-xs text-gensui-400 leading-relaxed">The legend shows an "External Agents" section when agents are present, and a "Nexus Gateway" connection type in the Connections list.</p>
+              </div>
             </div>
           </section>
 

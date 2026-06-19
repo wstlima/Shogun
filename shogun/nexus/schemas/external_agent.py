@@ -18,11 +18,15 @@ class ExternalAgentRegister(BaseModel):
     name: str = Field(..., description="Name of the external agent")
     platform: str = Field(..., description="Platform type")
     token: str | None = Field(None, description="Optional custom authentication token. If not provided, one will be generated.")
+    endpoint_url: str | None = Field(None, description="Callback URL for bidirectional communication. Shogun can dispatch tasks to this URL.")
+    direction: str = Field("bidirectional", description="Communication direction: inbound, outbound, or bidirectional")
 
 
 class ExternalAgentResponse(ExternalAgentBase):
     id: uuid.UUID
     token: str = Field(..., description="Authentication API token for the agent")
+    endpoint_url: str | None = Field(None, description="Callback URL for outbound dispatch")
+    direction: str = Field("bidirectional", description="Communication direction")
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

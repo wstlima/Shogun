@@ -178,6 +178,30 @@ class GensuiClient:
         except Exception:
             pass
 
+        # Gather external agents from Nexus Gateway
+        external_agents = []
+        try:
+            from shogun.db.engine import async_session_factory
+            from shogun.db.models.nexus import ExternalAgentModel
+            from sqlalchemy import select
+            async with async_session_factory() as db:
+                result = await db.execute(
+                    select(ExternalAgentModel).where(
+                        ExternalAgentModel.is_active == True,
+                        ExternalAgentModel.is_deleted == False,
+                    )
+                )
+                for agent in result.scalars().all():
+                    external_agents.append({
+                        "id": str(agent.id),
+                        "name": agent.name,
+                        "platform": agent.platform,
+                        "direction": agent.direction,
+                        "has_endpoint": bool(agent.endpoint_url),
+                    })
+        except Exception:
+            pass
+
         result = await self._request("POST", "/api/gensui/heartbeat", json={
             "shogun_id": self._shogun_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -187,6 +211,7 @@ class GensuiClient:
             "active_samurai_count": samurai_count,
             "active_workflow_count": workflow_count,
             "active_mado_sessions": mado_sessions,
+            "external_agents": external_agents,
             "health": {
                 "archives": "healthy",
                 "mado": "healthy",

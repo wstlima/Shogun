@@ -194,6 +194,7 @@ class MemberService:
         active_mado_sessions: int = 0,
         health: dict | None = None,
         nexus_peers: list[str] | None = None,
+        external_agents: list[dict] | None = None,
     ) -> ShogunMember | None:
         """Process a heartbeat from a member Shogun."""
         member = await self.get_by_id(shogun_id)
@@ -215,6 +216,8 @@ class MemberService:
             meta["health"] = health
         if nexus_peers is not None:
             meta["nexus_peers"] = nexus_peers
+        if external_agents is not None:
+            meta["external_agents"] = external_agents
         member.metadata_json = meta
 
         await self.session.flush()

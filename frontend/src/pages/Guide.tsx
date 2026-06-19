@@ -1247,12 +1247,12 @@ export function Guide() {
                    <Link2 className="w-6 h-6 text-indigo-400" />
                    <div>
                       <h4 className="text-xl font-bold uppercase tracking-widest">Nexus External Gateway</h4>
-                      <p className="text-xs text-shogun-subdued">Accept tasks from Microsoft 365, Salesforce, Google, and ServiceNow agents through governed A2A interoperability.</p>
+                      <p className="text-xs text-shogun-subdued">Bidirectional interoperability with Microsoft 365, Salesforce, Google, and ServiceNow agents. Send and receive tasks through governed A2A channels.</p>
                    </div>
                 </div>
                 <div className="shogun-card space-y-3 border-l-2 border-indigo-400/40">
                    <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-400" /> What Is the External Gateway?</div>
-                   <p className="text-xs text-shogun-subdued leading-relaxed">The Nexus External Gateway lets enterprise AI agents from <strong>other platforms</strong> send tasks directly into your Shogun for execution. Microsoft 365 Copilot, Salesforce Einstein/Agentforce, Google Vertex AI, ServiceNow Virtual Agent can all connect. Shogun acts as an independent execution layer that works <em>alongside</em> enterprise agents, not as a replacement. No vendor SDKs, no platform lock-in. Just standard HTTP + Bearer tokens.</p>
+                   <p className="text-xs text-shogun-subdued leading-relaxed">The Nexus External Gateway enables <strong>bidirectional</strong> communication between Shogun and enterprise AI agents. <strong>Inbound:</strong> external platforms (Microsoft 365 Copilot, Salesforce Einstein/Agentforce, Google Vertex AI, ServiceNow) send tasks into Shogun for execution. <strong>Outbound:</strong> Shogun can dispatch tasks <em>to</em> external agents &mdash; e.g. ask Salesforce to update a CRM record, ask M365 to schedule a meeting, or trigger a ServiceNow workflow. Shogun acts as an independent execution and orchestration layer that works <em>alongside</em> enterprise agents, not as a replacement. No vendor SDKs, no platform lock-in. Just standard HTTP + Bearer tokens.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                    <div className="shogun-card space-y-2 border-l-2 border-shogun-blue/40">
@@ -1271,7 +1271,7 @@ export function Guide() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Key className="w-4 h-4 text-indigo-400" /> Register an External Agent</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/nexus/external/register-agent</code> &mdash; Provide a name, platform (e.g. microsoft_365, salesforce), and optional endpoint_url for callbacks. Shogun returns a unique API token that the external agent uses as a Bearer token for all subsequent requests.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/nexus/external/register-agent</code> &mdash; Provide a <strong>name</strong>, <strong>platform</strong> (e.g. microsoft_365, salesforce), optional <strong>endpoint_url</strong> (for outbound dispatch), and optional <strong>direction</strong> (<code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">inbound</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">outbound</code>, or <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">bidirectional</code>). Shogun returns a unique API token. Set <strong>endpoint_url</strong> to enable Shogun to dispatch tasks <em>to</em> the external agent.</p>
                    </div>
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Search className="w-4 h-4 text-indigo-400" /> Discover Capabilities</div>
@@ -1311,6 +1311,21 @@ export function Guide() {
                 <div className="shogun-card space-y-2">
                    <div className="font-bold text-shogun-text flex items-center gap-2"><FileKey className="w-4 h-4 text-indigo-400" /> Audit Trail</div>
                    <p className="text-xs text-shogun-subdued leading-relaxed">Every gateway operation produces dual-logged audit events: <strong>Layer 1 (Operational)</strong> in the main SQLite database with 90-day retention, and <strong>Layer 2 (Immutable)</strong> in the HMAC-chained append-only database for NIS2/SOC2/EU AI Act compliance with 7-year retention.</p>
+                </div>
+
+                {/* Outbound Dispatch */}
+                <div className="shogun-card space-y-3 border-l-2 border-purple-400/40">
+                   <div className="font-bold text-shogun-text flex items-center gap-2"><ExternalLink className="w-4 h-4 text-purple-400" /> Outbound Dispatch (Shogun &rarr; External Agent)</div>
+                   <p className="text-xs text-shogun-subdued leading-relaxed">Shogun can also <strong>send tasks to external agents</strong>. When an external agent has an <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">endpoint_url</code> configured and its direction is <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">outbound</code> or <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">bidirectional</code>, Shogun can dispatch tasks to it.</p>
+                   <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                      <p className="text-[10px] text-purple-400/80 font-bold uppercase tracking-widest">API Endpoints</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1.5 ml-2 list-disc">
+                         <li><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/nexus/external/dispatch</code> &mdash; Send a task to an external agent. Provide the <strong>agent_id</strong>, <strong>action</strong> (e.g. <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">crm.update_contact</code>), and <strong>input_context</strong>. Shogun POSTs the payload to the agent's endpoint_url with the agent's token as a Bearer header.</li>
+                         <li><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">GET /api/v1/nexus/external/dispatchable-agents</code> &mdash; List all agents that can receive outbound tasks (direction is outbound or bidirectional AND endpoint_url is set).</li>
+                      </ul>
+                   </div>
+                   <p className="text-xs text-shogun-subdued leading-relaxed"><strong>Use cases:</strong> Ask Salesforce to update a CRM record, ask M365 to schedule a meeting, trigger a ServiceNow incident workflow, send processed data back to Google Cloud. The external agent receives a JSON payload with the action, input context, and a task_id for tracking.</p>
+                   <p className="text-xs text-shogun-subdued leading-relaxed"><strong>Direction field:</strong> <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">inbound</code> = agent can only send tasks to Shogun. <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">outbound</code> = Shogun can only send tasks to the agent. <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">bidirectional</code> = both directions.</p>
                 </div>
              </section>
 

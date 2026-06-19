@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shogun.api.deps import get_db
@@ -185,3 +186,54 @@ async def receive_task_callback(
         data=NexusTaskResponse.model_validate(task),
         meta={"message": f"Task callback status updated successfully to '{status}'"}
     )
+
+
+# ── Outbound Dispatch (Shogun → External Agent) ─────────────
+
+class OutboundDispatchRequest(BaseModel):
+    """Request body for dispatching a task to an external agent."""
+    agent_id: str = Field(..., description="UUID of the target external agent")
+    action: str = Field(..., description="The action to request, e.g. 'crm.update_contact'")
+    input_context: dict[str, Any] = Field(default_factory=dict, description="Input data for the task")
+    callback_url: str | None = Field(None, description="Optional URL for the external agent to call back with results")
+
+
+@router.post("/external/dispatch", response_model=ApiResponse)
+async def dispatch_outbound_task(
+    body: OutboundDispatchRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Dispatch a task FROM Shogun TO an external enterprise agent.
+
+    This is the reverse of the inbound A2A flow. Use this when Shogun needs
+    to delegate work to an external platform (e.g. update a CRM record in
+    Salesforce, schedule a meeting in Microsoft 365, create a ticket in ServiceNow).
+    """
+    from shogun.nexus.core.outbound_dispatcher import OutboundDispatcher
+
+    dispatcher = OutboundDispatcher(db)
+    try:
+        task = await dispatcher.dispatch_task(
+            agent_id=uuid.UUID(body.agent_id),
+            action=body.action,
+            input_context=body.input_context,
+            callback_url=body.callback_url,
+        )
+        await db.commit()
+        return ApiResponse(
+            data=NexusTaskResponse.model_validate(task),
+            meta={"message": f"Task dispatched to external agent (status: {task.status})"}
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/external/dispatchable-agents", response_model=ApiResponse)
+async def list_dispatchable_agents(db: AsyncSession = Depends(get_db)):
+    """List all external agents that can receive outbound tasks from Shogun."""
+    from shogun.nexus.core.outbound_dispatcher import OutboundDispatcher
+
+    dispatcher = OutboundDispatcher(db)
+    agents = await dispatcher.list_dispatchable_agents()
+    return ApiResponse(data=[ExternalAgentResponse.model_validate(a) for a in agents])
+
