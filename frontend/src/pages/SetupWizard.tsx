@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Globe, FolderOpen, User, Shield, Cpu, FileText, Zap, ChevronRight,
   ChevronLeft, Check, CheckCircle2, AlertCircle, Database, HardDrive,
-  Settings, ScrollText, X, GripVertical, Loader2, Sparkles
+  Settings, ScrollText, X, GripVertical, Loader2, Sparkles, Crosshair,
+  Monitor, Mouse, Keyboard, Camera, AlertTriangle
 } from 'lucide-react';
 import axios from 'axios';
 import { AVAILABLE_LANGUAGES, useTranslation } from '../i18n';
@@ -28,7 +29,7 @@ interface SetupWizardProps {
 
 // ── Constants ──────────────────────────────────────────────────
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 const PROVIDER_CARDS = [
   { type: 'openai',     label: 'OpenAI',      icon: '⚡', color: '#10a37f' },
@@ -164,7 +165,14 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
   const [primaryModel, setPrimaryModel] = useState('');
   const [fallbackModels, setFallbackModels] = useState<string[]>([]);
 
-  // Step 8: Completing
+  // Step 8: Ronin Desktop Control (optional)
+  const [roninEnabled, setRoninEnabled] = useState(false);
+  const [roninCheck, setRoninCheck] = useState<any>(null);
+  const [roninInstalling, setRoninInstalling] = useState(false);
+  const [roninInstallResult, setRoninInstallResult] = useState<string | null>(null);
+  const [roninAcknowledged, setRoninAcknowledged] = useState(false);
+
+  // Step 9: Completing
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
 
@@ -363,6 +371,7 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
         mandate,
         primary_model: primaryModel,
         fallback_models: fallbackModels,
+        ronin_enabled: roninEnabled,
       });
 
       // Store language & operator in localStorage
@@ -1067,7 +1076,248 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
       // ═══════════════════════════════════════════════════════════
       // STEP 8: Rise, Shogun!
       // ═══════════════════════════════════════════════════════════
-      case 8:
+      // ═══════════════════════════════════════════════════════════
+      // STEP 8: Ronin Desktop Control (Optional)
+      // ═══════════════════════════════════════════════════════════
+      case 8: {
+        const handleRoninCheck = async () => {
+          try {
+            const res = await axios.get('/api/v1/setup/ronin-check');
+            setRoninCheck(res.data.data);
+          } catch { setRoninCheck(null); }
+        };
+
+        const handleRoninInstall = async () => {
+          setRoninInstalling(true);
+          setRoninInstallResult(null);
+          try {
+            const res = await axios.post('/api/v1/setup/ronin-install');
+            if (res.data.data?.status === 'success') {
+              setRoninInstallResult('success');
+              handleRoninCheck(); // refresh status
+            } else {
+              setRoninInstallResult(res.data.data?.message || 'Installation failed.');
+            }
+          } catch {
+            setRoninInstallResult('Network error during installation.');
+          } finally {
+            setRoninInstalling(false);
+          }
+        };
+
+        // Auto-check on first render of this step
+        if (!roninCheck) { handleRoninCheck(); }
+
+        return (
+          <div className="space-y-6">
+            <div className="text-center">
+              <Crosshair className="w-12 h-12 text-[#f97316] mx-auto mb-4" />
+              <h2 className="text-3xl font-bold text-white">Desktop Control (Ronin)</h2>
+              <p className="text-sm text-[#888] mt-2 max-w-lg mx-auto">
+                Optional — Enable AI-powered desktop automation for mouse, keyboard, and screenshot control.
+              </p>
+            </div>
+
+            <div className="max-w-3xl mx-auto bg-[#0d1117]/60 border border-[#1a1f2e] rounded-xl p-4 text-sm text-[#999] leading-relaxed">
+              <p>
+                Ronin gives Shogun the ability to see your screen, move your mouse, and type on your keyboard.
+                This is completely optional and can be enabled later in the Shogun Profile settings.
+                When enabled, all actions are governed by your security posture in the Torii.
+              </p>
+            </div>
+
+            {/* Enable toggle */}
+            <div className="max-w-3xl mx-auto">
+              <div className="bg-[#0d1117] border border-[#2a2f3e] rounded-xl p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Monitor className="w-5 h-5 text-[#f97316]" />
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Enable Ronin Desktop Control</h3>
+                      <p className="text-[10px] text-[#666]">Install dependencies and enable desktop automation capabilities</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setRoninEnabled(!roninEnabled); if (!roninEnabled && !roninCheck) { handleRoninCheck(); } }}
+                    className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                      roninEnabled ? 'bg-[#f97316]' : 'bg-[#2a2f3e]'
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${
+                      roninEnabled ? 'left-[26px]' : 'left-0.5'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {roninEnabled && (
+              <div className="max-w-3xl mx-auto space-y-4 animate-in slide-in-from-top-3 duration-300">
+                {/* OS Detection */}
+                {roninCheck && (
+                  <div className="bg-[#0d1117] border border-[#2a2f3e] rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-[#3b82f6] uppercase tracking-widest">System Detection</h3>
+                      <button onClick={handleRoninCheck} className="text-[10px] text-[#3b82f6] hover:text-[#d4a017] font-bold uppercase tracking-widest">
+                        Refresh
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-[#0a0e1a] border border-[#1a1f2e] rounded-lg p-3">
+                        <p className="text-[9px] text-[#888] uppercase tracking-widest font-bold">Operating System</p>
+                        <p className="text-sm font-bold text-white mt-1">{roninCheck.os}</p>
+                      </div>
+                      {roninCheck.display_server && (
+                        <div className="bg-[#0a0e1a] border border-[#1a1f2e] rounded-lg p-3">
+                          <p className="text-[9px] text-[#888] uppercase tracking-widest font-bold">Display Server</p>
+                          <p className="text-sm font-bold text-white mt-1 uppercase">{roninCheck.display_server}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Dependency status — click to install missing */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] text-[#888] uppercase tracking-widest font-bold">Dependencies <span className="text-[#555] normal-case font-normal">— click to install missing</span></p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(roninCheck.deps || {}).map(([name, info]: [string, any]) => {
+                          const isInstalling = (roninCheck as any)?.[`_installing_${name}`];
+                          return (
+                            <button
+                              key={name}
+                              disabled={info.installed || isInstalling}
+                              onClick={async () => {
+                                if (info.installed) return;
+                                setRoninCheck((prev: any) => ({ ...prev, [`_installing_${name}`]: true }));
+                                try {
+                                  const res = await axios.post('/api/v1/setup/ronin-install-dep', { dep_name: name });
+                                  if (res.data.data?.status === 'success') {
+                                    handleRoninCheck();
+                                  } else {
+                                    setRoninInstallResult(res.data.data?.message || `Failed to install ${name}`);
+                                  }
+                                } catch {
+                                  setRoninInstallResult(`Failed to install ${name}`);
+                                } finally {
+                                  setRoninCheck((prev: any) => ({ ...prev, [`_installing_${name}`]: false }));
+                                }
+                              }}
+                              className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                                info.installed
+                                  ? 'bg-green-500/5 border-green-500/20'
+                                  : isInstalling
+                                    ? 'bg-orange-500/5 border-orange-500/20 animate-pulse'
+                                    : 'bg-red-500/5 border-red-500/20 hover:border-[#f97316]/50 hover:bg-[#f97316]/5 cursor-pointer'
+                              } disabled:cursor-default`}
+                            >
+                              {isInstalling
+                                ? <Loader2 className="w-3.5 h-3.5 text-[#f97316] animate-spin shrink-0" />
+                                : info.installed
+                                  ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                                  : <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                              }
+                              <div>
+                                <p className="text-xs font-bold text-white">{name}</p>
+                                <p className="text-[9px] text-[#666]">{
+                                  isInstalling ? 'Installing...' :
+                                  info.installed ? `v${info.version}` : 'Click to install'
+                                }</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Install button */}
+                    {!roninCheck.all_core_installed && (
+                      <button
+                        onClick={handleRoninInstall}
+                        disabled={roninInstalling}
+                        className="w-full py-3 rounded-lg bg-[#f97316] hover:bg-[#f97316]/80 text-black font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {roninInstalling ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Installing dependencies...</>
+                        ) : (
+                          <>Install Ronin Dependencies</>
+                        )}
+                      </button>
+                    )}
+
+                    {roninInstallResult === 'success' && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className="text-sm text-green-500 font-medium">Ronin dependencies installed successfully!</span>
+                      </div>
+                    )}
+                    {roninInstallResult && roninInstallResult !== 'success' && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <AlertCircle className="w-4 h-4 text-red-400" />
+                        <span className="text-sm text-red-400 font-medium">{roninInstallResult}</span>
+                      </div>
+                    )}
+
+                    {/* OS-specific notes */}
+                    {roninCheck.notes?.length > 0 && (
+                      <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                          <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Platform Notes</span>
+                        </div>
+                        {roninCheck.notes.map((note: string, i: number) => (
+                          <p key={i} className="text-[11px] text-[#999] leading-relaxed pl-5">{note}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Capabilities preview */}
+                <div className="bg-[#0d1117] border border-[#2a2f3e] rounded-xl p-5">
+                  <h3 className="text-sm font-bold text-[#d4a017] uppercase tracking-widest mb-3">Ronin Capabilities</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { icon: Camera, label: 'Screenshots', desc: 'See your screen' },
+                      { icon: Mouse, label: 'Mouse Control', desc: 'Click & move cursor' },
+                      { icon: Keyboard, label: 'Keyboard', desc: 'Type text & hotkeys' },
+                    ].map(({ icon: Icon, label, desc }) => (
+                      <div key={label} className="bg-[#0a0e1a] border border-[#1a1f2e] rounded-lg p-3 text-center">
+                        <Icon className="w-6 h-6 text-[#f97316] mx-auto mb-2" />
+                        <p className="text-xs font-bold text-white">{label}</p>
+                        <p className="text-[9px] text-[#666] mt-0.5">{desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Risk acknowledgment */}
+                <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={roninAcknowledged}
+                      onChange={e => setRoninAcknowledged(e.target.checked)}
+                      className="mt-1 accent-[#f97316] w-4 h-4 shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm font-bold text-white">I understand the risks</p>
+                      <p className="text-[10px] text-[#999] leading-relaxed mt-1">
+                        Ronin gives the AI direct control of my mouse and keyboard. All actions are logged and governed by the Torii security posture.
+                        I can disable this at any time via the Torii kill switch or by pressing Escape three times (Komainu guardian).
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // ═══════════════════════════════════════════════════════════
+      // STEP 9: Complete Setup
+      // ═══════════════════════════════════════════════════════════
+      case 9:
         if (completed) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[400px] animate-in fade-in zoom-in duration-700">
@@ -1201,7 +1451,7 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
         </div>
 
         {/* Navigation */}
-        {step < 8 && (
+        {step < 9 && step !== 8 && (
           <div className="flex items-center justify-between mt-10 max-w-3xl mx-auto">
             <button
               onClick={goBack}
@@ -1221,6 +1471,33 @@ export const SetupWizard = ({ onComplete }: SetupWizardProps) => {
             <button
               onClick={goNext}
               className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#3b82f6] hover:bg-[#3b82f6]/80 text-sm font-bold text-white shadow-lg shadow-[#3b82f6]/20 transition-all"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Step 8 (Ronin) custom navigation */}
+        {step === 8 && (
+          <div className="flex items-center justify-between mt-10 max-w-3xl mx-auto">
+            <button
+              onClick={goBack}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#2a2f3e] text-sm font-bold text-[#888] hover:text-white hover:border-[#555] transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back
+            </button>
+            {!roninEnabled && (
+              <button
+                onClick={goNext}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-[#888] hover:text-[#d4a017] transition-all"
+              >
+                Skip — I don't need desktop control <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={goNext}
+              disabled={roninEnabled && !roninAcknowledged}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#3b82f6] hover:bg-[#3b82f6]/80 text-sm font-bold text-white shadow-lg shadow-[#3b82f6]/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>

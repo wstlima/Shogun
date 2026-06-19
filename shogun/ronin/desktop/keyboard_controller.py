@@ -39,13 +39,23 @@ async def type_text(action: RoninAction) -> RoninResult:
             error="No text provided. Set action.value or action.target.",
         )
 
-    interval = action.metadata.get("interval", 0.03) if action.metadata else 0.03
+    interval = action.metadata.get("interval", 0.05) if action.metadata else 0.05
 
     try:
         def _do():
             pag = _get_pyautogui()
+            log.info(f"[Ronin Keyboard] Typing {len(text)} chars at {interval}s/char: {text[:60]}{'...' if len(text) > 60 else ''}")
             with ronin_acting():
-                pag.typewrite(text, interval=interval) if text.isascii() else pag.write(text)
+                # Type character-by-character at a human-visible pace
+                for char in text:
+                    if char == '\n':
+                        pag.press('enter')
+                    elif char == '\t':
+                        pag.press('tab')
+                    else:
+                        pag.write(char)
+                    import time
+                    time.sleep(interval)
 
         await asyncio.get_event_loop().run_in_executor(_executor, _do)
         return RoninResult(

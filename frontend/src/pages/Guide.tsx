@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   BookOpen, 
   Terminal, 
@@ -47,6 +47,7 @@ import {
   Crosshair,
   Monitor as MonitorIcon,
   Power,
+  List,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -56,6 +57,57 @@ type DocTab = 'onboarding' | 'architecture' | 'reference' | 'safety';
 export function Guide() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<DocTab>('onboarding');
+  const [activeSection, setActiveSection] = useState<string>('ref-tenshu');
+  const refContentRef = useRef<HTMLDivElement>(null);
+
+  const REFERENCE_SECTIONS = [
+    { id: 'ref-tenshu', label: 'Tenshu', icon: Layout, color: 'text-shogun-blue' },
+    { id: 'ref-comms', label: 'Comms', icon: MessageSquare, color: 'text-shogun-blue' },
+    { id: 'ref-profile', label: 'Shogun Profile', icon: Cpu, color: 'text-shogun-gold' },
+    { id: 'ref-samurai', label: 'Samurai Network', icon: Users, color: 'text-shogun-gold' },
+    { id: 'ref-katana', label: 'Katana', icon: Sword, color: 'text-shogun-blue' },
+    { id: 'ref-archives', label: 'Archives', icon: Database, color: 'text-shogun-gold' },
+    { id: 'ref-dojo', label: 'Dojo', icon: Flame, color: 'text-shogun-gold' },
+    { id: 'ref-kaizen', label: 'Kaizen', icon: ShieldCheck, color: 'text-shogun-gold' },
+    { id: 'ref-bushido', label: 'Bushido', icon: RefreshCw, color: 'text-shogun-blue' },
+    { id: 'ref-mado', label: 'Mado', icon: AppWindow, color: 'text-cyan-400' },
+    { id: 'ref-ronin', label: 'Ronin', icon: Crosshair, color: 'text-orange-400' },
+    { id: 'ref-torii', label: 'Torii', icon: Lock, color: 'text-red-400' },
+    { id: 'ref-nexus', label: 'Nexus', icon: Globe, color: 'text-indigo-400' },
+    { id: 'ref-nexus-gateway', label: 'Nexus Gateway', icon: Link2, color: 'text-indigo-400' },
+    { id: 'ref-gensui', label: 'Gensui', icon: ShieldAlert, color: 'text-indigo-400' },
+    { id: 'ref-logs', label: 'Logs', icon: Terminal, color: 'text-shogun-subdued' },
+    { id: 'ref-maintenance', label: 'Maintenance', icon: HardDrive, color: 'text-shogun-gold' },
+  ];
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveSection(sectionId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'reference') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        }
+      },
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0.1 }
+    );
+    const timer = setTimeout(() => {
+      REFERENCE_SECTIONS.forEach(({ id }) => {
+        const el = document.getElementById(id);
+        if (el) observer.observe(el);
+      });
+    }, 100);
+    return () => { clearTimeout(timer); observer.disconnect(); };
+  }, [activeTab]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
@@ -343,7 +395,33 @@ export function Guide() {
 
         {/* Reference Manual (Comprehensive Function List) */}
         {activeTab === 'reference' && (
-          <div className="space-y-16 animate-in slide-in-from-bottom-4">
+          <div className="flex gap-8 animate-in slide-in-from-bottom-4">
+            {/* Sticky Sidebar Navigation */}
+            <nav className="hidden lg:block w-56 shrink-0">
+              <div className="sticky top-6 space-y-1 p-3 bg-shogun-card border border-shogun-border rounded-xl max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div className="flex items-center gap-2 px-2 pb-2 mb-2 border-b border-shogun-border">
+                  <List className="w-4 h-4 text-shogun-blue" />
+                  <span className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Sections</span>
+                </div>
+                {REFERENCE_SECTIONS.map((sec) => (
+                  <button
+                    key={sec.id}
+                    onClick={() => scrollToSection(sec.id)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[11px] font-medium transition-all duration-200 text-left",
+                      activeSection === sec.id
+                        ? "bg-shogun-blue/10 text-shogun-blue border border-shogun-blue/20 shadow-sm"
+                        : "text-shogun-subdued hover:text-shogun-text hover:bg-shogun-bg border border-transparent"
+                    )}
+                  >
+                    <sec.icon className={cn("w-3.5 h-3.5 shrink-0", activeSection === sec.id ? 'text-shogun-blue' : sec.color)} />
+                    {sec.label}
+                  </button>
+                ))}
+              </div>
+            </nav>
+            {/* Main Content */}
+            <div className="flex-1 min-w-0 space-y-16" ref={refContentRef}>
              {/* Introduction */}
              <div className="text-center max-w-3xl mx-auto space-y-4">
                 <h3 className="text-3xl font-bold shogun-title">The Grand Reference</h3>
@@ -353,7 +431,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 1. TENSHU (DASHBOARD) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-tenshu" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-blue/40 pb-3">
                    <Layout className="w-6 h-6 text-shogun-blue" />
                    <div>
@@ -408,7 +486,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 2. COMMS (CHAT) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-comms" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-blue/40 pb-3">
                    <MessageSquare className="w-6 h-6 text-shogun-blue" />
                    <div>
@@ -455,7 +533,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 3. SHOGUN PROFILE */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-profile" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-gold/40 pb-3">
                    <Cpu className="w-6 h-6 text-shogun-gold" />
                    <div>
@@ -490,7 +568,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 4. SAMURAI NETWORK */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-samurai" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-gold/40 pb-3">
                    <Users className="w-6 h-6 text-shogun-gold" />
                    <div>
@@ -551,7 +629,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 5. KATANA (THE FORGE) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-katana" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-blue/40 pb-3">
                    <Cpu className="w-6 h-6 text-shogun-blue" />
                    <div>
@@ -586,7 +664,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 6. ARCHIVES (MEMORY) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-archives" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-gold/40 pb-3">
                    <Database className="w-6 h-6 text-shogun-gold" />
                    <div>
@@ -626,7 +704,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 7. DOJO (TRAINING HALL) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-dojo" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-gold/40 pb-3">
                    <Flame className="w-6 h-6 text-shogun-gold" />
                    <div>
@@ -661,7 +739,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 8. KAIZEN (GOVERNANCE) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-kaizen" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-blue/40 pb-3">
                    <ShieldCheck className="w-6 h-6 text-shogun-gold" />
                    <div>
@@ -692,7 +770,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 9. BUSHIDO (REFLECTION ENGINE) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-bushido" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-blue/40 pb-3">
                    <RefreshCw className="w-6 h-6 text-shogun-blue" />
                    <div>
@@ -719,7 +797,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* MADO (BROWSER AUTOMATION) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-mado" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-cyan-400/40 pb-3">
                    <AppWindow className="w-6 h-6 text-cyan-400" />
                    <div>
@@ -926,7 +1004,7 @@ export function Guide() {
               {/* ═══════════════════════════════════════════════════════════════ */}
               {/* RONIN (DESKTOP CONTROL) */}
               {/* ═══════════════════════════════════════════════════════════════ */}
-              <section className="space-y-6">
+              <section id="ref-ronin" className="space-y-6 scroll-mt-6">
                  <div className="flex items-center gap-3 border-b-2 border-orange-400/40 pb-3">
                     <Crosshair className="w-6 h-6 text-orange-400" />
                     <div>
@@ -1083,7 +1161,7 @@ export function Guide() {
 
              {/* 10. TORII (SECURITY) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-torii" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-red-400/40 pb-3">
                    <Lock className="w-6 h-6 text-red-400" />
                    <div>
@@ -1127,7 +1205,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 11. NEXUS (COLLABORATION) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-nexus" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-indigo-400/40 pb-3">
                    <Users className="w-6 h-6 text-indigo-400" />
                    <div>
@@ -1163,10 +1241,82 @@ export function Guide() {
                 </div>
              </section>
 
-             {/* ═══════════════════════════════════════════════════════════════ */}
+             {/* 11a. NEXUS EXTERNAL GATEWAY */}
+             <section id="ref-nexus-gateway" className="space-y-6 scroll-mt-6">
+                <div className="flex items-center gap-3 border-b-2 border-indigo-400/40 pb-3">
+                   <Link2 className="w-6 h-6 text-indigo-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">Nexus External Gateway</h4>
+                      <p className="text-xs text-shogun-subdued">Accept tasks from Microsoft 365, Salesforce, Google, and ServiceNow agents through governed A2A interoperability.</p>
+                   </div>
+                </div>
+                <div className="shogun-card space-y-3 border-l-2 border-indigo-400/40">
+                   <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-400" /> What Is the External Gateway?</div>
+                   <p className="text-xs text-shogun-subdued leading-relaxed">The Nexus External Gateway lets enterprise AI agents from <strong>other platforms</strong> send tasks directly into your Shogun for execution. Microsoft 365 Copilot, Salesforce Einstein/Agentforce, Google Vertex AI, ServiceNow Virtual Agent can all connect. Shogun acts as an independent execution layer that works <em>alongside</em> enterprise agents, not as a replacement. No vendor SDKs, no platform lock-in. Just standard HTTP + Bearer tokens.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div className="shogun-card space-y-2 border-l-2 border-shogun-blue/40">
+                      <div className="font-bold text-shogun-text text-sm">Standalone Mode</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Shogun runs independently with local agents, models, browser control, and memory. No external connectivity needed.</p>
+                   </div>
+                   <div className="shogun-card space-y-2 border-l-2 border-indigo-400/40">
+                      <div className="font-bold text-shogun-text text-sm">Enterprise-Connected Mode</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">External agents submit tasks via A2A, webhooks, or MCP. Shogun executes and returns results.</p>
+                   </div>
+                   <div className="shogun-card space-y-2 border-l-2 border-red-400/40">
+                      <div className="font-bold text-shogun-text text-sm">Governed Hybrid Mode</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Both modes combined, with Gensui enforcing postures, platform allowlists, and real-time policy checks on every task.</p>
+                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Key className="w-4 h-4 text-indigo-400" /> Register an External Agent</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/nexus/external/register-agent</code> &mdash; Provide a name, platform (e.g. microsoft_365, salesforce), and optional endpoint_url for callbacks. Shogun returns a unique API token that the external agent uses as a Bearer token for all subsequent requests.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Search className="w-4 h-4 text-indigo-400" /> Discover Capabilities</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">GET /api/v1/nexus/capabilities</code> &mdash; Returns the 9 default capabilities Shogun exposes (e.g. document.summarize, spreadsheet.analyze, email.draft) plus any custom-registered capabilities. External agents query this to know what they can ask for.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-400" /> Submit a Task (A2A)</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /api/v1/nexus/external/a2a/task</code> &mdash; Send a JSON payload with the action, input context, source_agent_id, and source_platform. Shogun authenticates, policy-checks, routes to the best internal agent, executes via LLM, and returns the result.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-indigo-400" /> Task Status &amp; Callbacks</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed"><code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">GET /external/task/id</code> &mdash; Poll for task status (pending, executing, completed, blocked, failed). <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">POST /external/task/id/callback</code> &mdash; Receive async callback updates from remote systems.</p>
+                   </div>
+                </div>
+                <div className="shogun-card space-y-3 border-l-2 border-red-400/40">
+                   <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-red-400" /> Four-Layer Security Model</div>
+                   <p className="text-xs text-shogun-subdued leading-relaxed">Every inbound task passes through four enforcement layers before execution:</p>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      <div className="p-3 bg-shogun-bg border border-shogun-border rounded-lg space-y-1">
+                         <div className="text-xs font-bold text-shogun-text">Bearer Authentication</div>
+                         <p className="text-[10px] text-shogun-subdued">Each registered agent has a unique token. Invalid tokens get an immediate 401.</p>
+                      </div>
+                      <div className="p-3 bg-shogun-bg border border-shogun-border rounded-lg space-y-1">
+                         <div className="text-xs font-bold text-shogun-text">Hardcoded Blocks</div>
+                         <p className="text-[10px] text-shogun-subdued">desktop.execute, ronin.stop, ronin.harakiri are permanently blocked for all external agents. No override possible.</p>
+                      </div>
+                      <div className="p-3 bg-shogun-bg border border-shogun-border rounded-lg space-y-1">
+                         <div className="text-xs font-bold text-shogun-text">Platform Allowlists</div>
+                         <p className="text-[10px] text-shogun-subdued">Per-platform rules control which capabilities each platform can use. M365 can summarize docs but not touch local files.</p>
+                      </div>
+                      <div className="p-3 bg-shogun-bg border border-shogun-border rounded-lg space-y-1">
+                         <div className="text-xs font-bold text-shogun-text">Gensui Posture</div>
+                         <p className="text-[10px] text-shogun-subdued">When Gensui is active, its real-time posture can disable all Nexus communication, block browser/desktop sessions, or restrict file writes fleet-wide.</p>
+                      </div>
+                   </div>
+                </div>
+                <div className="shogun-card space-y-2">
+                   <div className="font-bold text-shogun-text flex items-center gap-2"><FileKey className="w-4 h-4 text-indigo-400" /> Audit Trail</div>
+                   <p className="text-xs text-shogun-subdued leading-relaxed">Every gateway operation produces dual-logged audit events: <strong>Layer 1 (Operational)</strong> in the main SQLite database with 90-day retention, and <strong>Layer 2 (Immutable)</strong> in the HMAC-chained append-only database for NIS2/SOC2/EU AI Act compliance with 7-year retention.</p>
+                </div>
+             </section>
+
              {/* 11b. GENSUI (FLEET COMMAND) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-gensui" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-indigo-400/40 pb-3">
                    <ShieldAlert className="w-6 h-6 text-indigo-400" />
                    <div>
@@ -1219,7 +1369,7 @@ export function Guide() {
              {/* ═══════════════════════════════════════════════════════════════ */}
              {/* 12. LOGS (AUDIT TRAIL) */}
              {/* ═══════════════════════════════════════════════════════════════ */}
-             <section className="space-y-6">
+             <section id="ref-logs" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-subdued/40 pb-3">
                    <Terminal className="w-6 h-6 text-shogun-subdued" />
                    <div>
@@ -1286,7 +1436,7 @@ export function Guide() {
              </section>
 
              {/* 13. MAINTENANCE — BACKUPS, DATA & UPDATES */}
-             <section className="space-y-6">
+             <section id="ref-maintenance" className="space-y-6 scroll-mt-6">
                 <div className="flex items-center gap-3 border-b-2 border-shogun-subdued/40 pb-3">
                    <HardDrive className="w-6 h-6 text-shogun-subdued" />
                    <div>
@@ -1314,6 +1464,7 @@ export function Guide() {
                 </div>
              </section>
 
+            </div>
           </div>
         )}
 

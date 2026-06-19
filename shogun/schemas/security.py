@@ -150,4 +150,20 @@ class SecurityPostureResponse(ShogunBase):
     mado_autonomous_browsing: bool = False
     mado_downloads_enabled: bool = True
     mado_uploads_enabled: bool = True
+    # Ronin desktop automation
+    ronin_enabled: bool = False
+    ronin_posture: str = "disabled"
+    ronin_max_sessions: int = 0
+    ronin_screenshots_enabled: bool = False
+    ronin_mouse_enabled: bool = False
+    ronin_keyboard_enabled: bool = False
+    ronin_native_apps_enabled: bool = False
+    ronin_shell_commands: bool = False
+    ronin_admin_escalation: bool = False
+    ronin_credential_entry: str = "blocked"
+    ronin_file_deletion: str = "blocked"
+    ronin_external_uploads: str = "blocked"
+    ronin_install_software: str = "blocked"
+    ronin_komainu_level: int = 1
+    ronin_environment_policy: str = "any"
 

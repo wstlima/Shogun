@@ -14,6 +14,7 @@ import AuditLog from './pages/AuditLog';
 import Alerts from './pages/Alerts';
 import Enrollment from './pages/Enrollment';
 import Settings from './pages/Settings';
+import Guide from './pages/Guide';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />;
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="alerts" element={<Alerts />} />
           <Route path="enrollment" element={<Enrollment />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="guide" element={<Guide />} />
         </Route>
       </Routes>
     </BrowserRouter>

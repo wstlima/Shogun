@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Shield, Users, Layers, Activity,
   FileSearch, Bell, UserPlus, Skull, LogOut, ChevronLeft, ChevronRight,
-  Network, Settings
+  Network, Settings, BookOpen
 } from 'lucide-react';
 import { clearAuth, getAdmin } from '../../lib/auth';
 
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/enrollment', label: 'Enrollment', icon: UserPlus },
   { path: '/settings', label: 'Settings', icon: Settings },
+  { path: '/guide', label: 'Reference', icon: BookOpen },
 ];
 
 export default function Sidebar() {

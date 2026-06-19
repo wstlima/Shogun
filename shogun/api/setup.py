@@ -91,6 +91,7 @@ class SetupCompletePayload(BaseModel):
     mandate: str | None = None
     primary_model: str = ""
     fallback_models: list[str] = Field(default_factory=list)
+    ronin_enabled: bool = False
 
 
 @router.post("/complete", response_model=ApiResponse)
@@ -271,6 +272,7 @@ async def complete_setup(payload: SetupCompletePayload):
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "agent_name": payload.agent_name,
         "providers_created": len(created_provider_ids),
+        "ronin_enabled": payload.ronin_enabled,
     }
     _write_setup(setup_data)
 
@@ -281,3 +283,223 @@ async def complete_setup(payload: SetupCompletePayload):
             "providers_created": created_provider_ids,
         }
     )
+
+
+# ── Ronin Dependency Management ─────────────────────────────────
+
+
+def _check_module(module_name: str) -> dict:
+    """Check if a Python module is installed and return version info."""
+    try:
+        mod = __import__(module_name)
+        version = getattr(mod, "__version__", getattr(mod, "VERSION", "unknown"))
+        return {"installed": True, "version": str(version)}
+    except ImportError:
+        return {"installed": False, "version": None}
+
+
+def _detect_os_info() -> dict:
+    """Detect the current OS and display server."""
+    import platform
+    import os
+
+    system = platform.system()
+    os_name = "Windows" if system == "Windows" else "macOS" if system == "Darwin" else "Linux"
+
+    display_server = None
+    if system == "Linux":
+        if os.environ.get("WAYLAND_DISPLAY"):
+            display_server = "wayland"
+        elif os.environ.get("DISPLAY"):
+            display_server = "x11"
+        else:
+            display_server = "unknown"
+
+    # OS-specific notes
+    notes: list[str] = []
+    if os_name == "macOS":
+        notes.append("macOS requires Accessibility permissions for keyboard and mouse control.")
+        notes.append("Go to: System Preferences → Privacy & Security → Accessibility")
+    elif os_name == "Linux" and display_server == "x11":
+        notes.append("Linux X11 requires: xdotool, python3-tk, python3-dev")
+    elif os_name == "Linux" and display_server == "wayland":
+        notes.append("Wayland has limited desktop control support. X11 is recommended.")
+        notes.append("Consider switching to an X11 session for full Ronin functionality.")
+
+    return {
+        "os": os_name,
+        "platform": platform.platform(),
+        "display_server": display_server,
+        "notes": notes,
+    }
+
+
+@router.get("/ronin-check", response_model=ApiResponse)
+async def check_ronin_deps():
+    """Check Ronin desktop control dependency status and OS compatibility."""
+    os_info = _detect_os_info()
+
+    deps = {
+        "mss": _check_module("mss"),
+        "pyautogui": _check_module("pyautogui"),
+        "pynput": _check_module("pynput"),
+        "opencv": _check_module("cv2"),
+    }
+
+    all_core_installed = all(deps[d]["installed"] for d in ["mss", "pyautogui", "pynput"])
+
+    # Determine recommendation
+    if all_core_installed:
+        recommendation = "ready"
+    elif os_info["os"] == "Linux" and os_info.get("display_server") == "wayland":
+        recommendation = "limited"
+    else:
+        recommendation = "install_required"
+
+    # Check setup.json for saved ronin preference
+    setup = _read_setup()
+
+    return ApiResponse(
+        data={
+            **os_info,
+            "deps": deps,
+            "all_core_installed": all_core_installed,
+            "recommendation": recommendation,
+            "ronin_enabled_in_setup": setup.get("ronin_enabled", False),
+        }
+    )
+
+
+@router.post("/ronin-install", response_model=ApiResponse)
+async def install_ronin_deps():
+    """Install Ronin desktop control dependencies via pip."""
+    import subprocess
+    import sys
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", ".[ronin]",
+             "--quiet", "--disable-pip-version-check"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(PROJECT_ROOT),
+        )
+
+        if result.returncode == 0:
+            # Re-check what got installed
+            deps = {
+                "mss": _check_module("mss"),
+                "pyautogui": _check_module("pyautogui"),
+                "pynput": _check_module("pynput"),
+                "opencv": _check_module("cv2"),
+            }
+
+            # Update setup.json
+            setup = _read_setup()
+            setup["ronin_enabled"] = True
+            _write_setup(setup)
+
+            return ApiResponse(
+                data={
+                    "status": "success",
+                    "message": "Ronin dependencies installed successfully.",
+                    "deps": deps,
+                }
+            )
+        else:
+            return ApiResponse(
+                data={
+                    "status": "error",
+                    "message": f"Installation failed: {result.stderr[:500]}",
+                    "stdout": result.stdout[:500],
+                }
+            )
+    except subprocess.TimeoutExpired:
+        return ApiResponse(
+            data={
+                "status": "error",
+                "message": "Installation timed out after 120 seconds.",
+            }
+        )
+    except Exception as exc:
+        return ApiResponse(
+            data={
+                "status": "error",
+                "message": f"Installation error: {str(exc)}",
+            }
+        )
+
+
+# Map display names to pip package names
+_RONIN_DEP_MAP: dict[str, tuple[str, str]] = {
+    "mss":       ("mss",                     "mss"),
+    "pyautogui": ("pyautogui",               "pyautogui"),
+    "pynput":    ("pynput",                   "pynput"),
+    "opencv":    ("opencv-python-headless",   "cv2"),
+}
+
+
+class RoninDepInstallPayload(BaseModel):
+    dep_name: str
+
+
+@router.post("/ronin-install-dep", response_model=ApiResponse)
+async def install_single_ronin_dep(payload: RoninDepInstallPayload):
+    """Install a single Ronin dependency by name."""
+    import subprocess
+    import sys
+
+    dep_name = payload.dep_name.lower()
+    if dep_name not in _RONIN_DEP_MAP:
+        return ApiResponse(
+            data={
+                "status": "error",
+                "message": f"Unknown dependency: {dep_name}. Allowed: {', '.join(_RONIN_DEP_MAP.keys())}",
+            }
+        )
+
+    pip_package, import_name = _RONIN_DEP_MAP[dep_name]
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", pip_package,
+             "--quiet", "--disable-pip-version-check"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(PROJECT_ROOT),
+        )
+
+        if result.returncode == 0:
+            info = _check_module(import_name)
+            return ApiResponse(
+                data={
+                    "status": "success",
+                    "message": f"{dep_name} installed successfully.",
+                    "dep": {dep_name: info},
+                }
+            )
+        else:
+            return ApiResponse(
+                data={
+                    "status": "error",
+                    "message": f"Failed to install {dep_name}: {result.stderr[:500]}",
+                }
+            )
+    except subprocess.TimeoutExpired:
+        return ApiResponse(
+            data={
+                "status": "error",
+                "message": f"Installation of {dep_name} timed out.",
+            }
+        )
+    except Exception as exc:
+        return ApiResponse(
+            data={
+                "status": "error",
+                "message": f"Installation error: {str(exc)}",
+            }
+        )
+
+

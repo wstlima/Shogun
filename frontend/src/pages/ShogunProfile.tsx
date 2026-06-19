@@ -18,6 +18,7 @@ import {
   Server,
   X,
   GripVertical,
+  Crosshair,
 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -1868,6 +1869,160 @@ delegation_rules:
                 </div>
               </div>
             )}
+
+            {/* Ronin Desktop Control — Dependency Manager */}
+            <div className="shogun-card space-y-4 md:col-span-2 mt-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-shogun-text">
+                  <Crosshair className="w-5 h-5 text-orange-500" /> {t('profile.ronin_desktop', 'Ronin Desktop Control')}
+                </h3>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await axios.get('/api/v1/setup/ronin-check');
+                      setShogunData((prev: any) => ({ ...prev, _roninCheck: res.data.data }));
+                    } catch { /* ignore */ }
+                  }}
+                  className="text-[10px] font-bold text-shogun-blue hover:text-shogun-gold uppercase tracking-widest transition-colors"
+                >
+                  {t('common.refresh', 'Refresh')}
+                </button>
+              </div>
+
+              <p className="text-[10px] text-shogun-subdued leading-relaxed">
+                Ronin gives Shogun desktop automation capabilities: screenshots, mouse control, and keyboard input.
+                Install the dependencies here if you skipped this during setup.
+              </p>
+
+              {/* Auto-fetch on mount */}
+              {!shogunData._roninCheck && (() => {
+                axios.get('/api/v1/setup/ronin-check').then(res => {
+                  setShogunData((prev: any) => ({ ...prev, _roninCheck: res.data.data }));
+                }).catch(() => {});
+                return null;
+              })()}
+
+              {shogunData._roninCheck && (() => {
+                const rc = shogunData._roninCheck;
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-4 gap-2">
+                      {Object.entries(rc.deps || {}).map(([name, info]: [string, any]) => {
+                        const isInstalling = rc[`_installing_${name}`];
+                        return (
+                          <button
+                            key={name}
+                            disabled={info.installed || isInstalling}
+                            onClick={async () => {
+                              if (info.installed) return;
+                              setShogunData((prev: any) => ({
+                                ...prev,
+                                _roninCheck: { ...prev._roninCheck, [`_installing_${name}`]: true }
+                              }));
+                              try {
+                                const res = await axios.post('/api/v1/setup/ronin-install-dep', { dep_name: name });
+                                if (res.data.data?.status === 'success') {
+                                  setStatusMessage({ type: 'success', text: `${name} installed successfully!` });
+                                  const check = await axios.get('/api/v1/setup/ronin-check');
+                                  setShogunData((prev: any) => ({ ...prev, _roninCheck: check.data.data }));
+                                } else {
+                                  setStatusMessage({ type: 'error', text: res.data.data?.message || `Failed to install ${name}` });
+                                  setShogunData((prev: any) => ({
+                                    ...prev,
+                                    _roninCheck: { ...prev._roninCheck, [`_installing_${name}`]: false }
+                                  }));
+                                }
+                              } catch {
+                                setStatusMessage({ type: 'error', text: `Failed to install ${name}` });
+                                setShogunData((prev: any) => ({
+                                  ...prev,
+                                  _roninCheck: { ...prev._roninCheck, [`_installing_${name}`]: false }
+                                }));
+                              }
+                            }}
+                            className={cn(
+                              "flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all",
+                              info.installed
+                                ? "bg-green-500/5 border-green-500/20"
+                                : isInstalling
+                                  ? "bg-orange-500/5 border-orange-500/20 animate-pulse"
+                                  : "bg-red-500/5 border-red-500/20 hover:border-orange-500/50 hover:bg-orange-500/5 cursor-pointer",
+                              (info.installed || isInstalling) && "cursor-default"
+                            )}
+                          >
+                            {isInstalling
+                              ? <div className="w-3.5 h-3.5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                              : info.installed
+                                ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                                : <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                            }
+                            <div>
+                              <p className="text-xs font-bold text-shogun-text">{name}</p>
+                              <p className="text-[9px] text-shogun-subdued">{
+                                isInstalling ? 'Installing...' :
+                                info.installed ? `v${info.version}` : 'Click to install'
+                              }</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="bg-[#0a0e1a] border border-shogun-border rounded-lg px-3 py-1.5">
+                        <span className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold">OS: </span>
+                        <span className="text-xs font-bold text-shogun-text">{rc.os}</span>
+                        {rc.display_server && <span className="text-xs text-shogun-subdued ml-2">({rc.display_server})</span>}
+                      </div>
+                      <span className={cn(
+                        "text-[9px] font-bold px-2 py-0.5 rounded border uppercase",
+                        rc.all_core_installed ? "text-green-500 border-green-500/30" : "text-orange-400 border-orange-400/30"
+                      )}>
+                        {rc.all_core_installed ? 'Ready' : 'Install Required'}
+                      </span>
+                    </div>
+
+                    {!rc.all_core_installed && (
+                      <button
+                        onClick={async () => {
+                          setShogunData((prev: any) => ({ ...prev, _roninInstalling: true }));
+                          try {
+                            const res = await axios.post('/api/v1/setup/ronin-install');
+                            if (res.data.data?.status === 'success') {
+                              setStatusMessage({ type: 'success', text: 'Ronin dependencies installed successfully!' });
+                              const check = await axios.get('/api/v1/setup/ronin-check');
+                              setShogunData((prev: any) => ({ ...prev, _roninCheck: check.data.data, _roninInstalling: false }));
+                            } else {
+                              setStatusMessage({ type: 'error', text: res.data.data?.message || 'Installation failed.' });
+                              setShogunData((prev: any) => ({ ...prev, _roninInstalling: false }));
+                            }
+                          } catch {
+                            setStatusMessage({ type: 'error', text: 'Failed to install Ronin dependencies.' });
+                            setShogunData((prev: any) => ({ ...prev, _roninInstalling: false }));
+                          }
+                        }}
+                        disabled={shogunData._roninInstalling}
+                        className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-500/80 text-black font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {shogunData._roninInstalling ? (
+                          <><div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" /> Installing...</>
+                        ) : (
+                          <>Install Ronin Dependencies</>
+                        )}
+                      </button>
+                    )}
+
+                    {rc.notes?.length > 0 && (
+                      <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1">
+                        {rc.notes.map((note: string, i: number) => (
+                          <p key={i} className="text-[10px] text-shogun-subdued leading-relaxed">{note}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>

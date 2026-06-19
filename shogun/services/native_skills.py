@@ -1142,7 +1142,7 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 tier = posture.get('active_tier', 'unknown').upper()
                 return json.dumps({
                     "status": "error",
-                    "message": f"Desktop control is disabled at tier {tier}. Switch to TACTICAL or higher in Torii to enable Ronin.",
+                    "message": f"Desktop control is disabled at tier {tier}. Desktop control is ONLY available at the RONIN security posture. Switch to Ronin in the Torii to enable it.",
                 })
 
             # Check specific capability
@@ -1150,54 +1150,132 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                 return json.dumps({"status": "error", "message": "Mouse control is not enabled at the current posture level."})
             if name == "desktop_type" and not posture.get("ronin_keyboard_enabled", False):
                 return json.dumps({"status": "error", "message": "Keyboard control is not enabled at the current posture level."})
-            if name == "desktop_screenshot" and not posture.get("ronin_screenshots_enabled", False):
+            if name == "desktop_screenshot" and not posture.get("ronin_screenshots_enabled", True):
                 return json.dumps({"status": "error", "message": "Screenshots are not enabled at the current posture level."})
 
             controller = get_controller()
+            await controller.initialize()  # ensure environment detection ran
 
             if name == "desktop_screenshot":
+                from shogun.ronin.desktop.screenshot_controller import take_screenshot_raw
                 region_str = args.get("region")
                 region = None
                 if region_str:
                     parts = [int(p.strip()) for p in region_str.split(",")]
                     if len(parts) == 4:
                         region = {"left": parts[0], "top": parts[1], "width": parts[2], "height": parts[3]}
-                result = await controller.screenshot(region=region)
-                if result.get("status") == "error":
-                    return json.dumps({"status": "error", "message": result.get("error", "Screenshot failed.")})
+                path = await take_screenshot_raw(prefix="agent", region=region)
+                if not path:
+                    return json.dumps({"status": "error", "message": "Screenshot failed. Is `mss` installed? (pip install mss)"})
+                from pathlib import Path as _P
                 return json.dumps({
                     "status": "success",
-                    "message": f"Desktop screenshot saved: {result.get('filename', 'unknown')}",
-                    "path": result.get("path", ""),
+                    "message": f"Desktop screenshot saved: {_P(path).name}",
+                    "path": path,
                 })
 
             elif name == "desktop_click":
+                import ctypes
+                import time as _time
+                import asyncio as _aio
+                from concurrent.futures import ThreadPoolExecutor as _TPool
+                from shogun.ronin.core.komainu import ronin_acting, set_expected_position
+
                 x = int(args["x"])
                 y = int(args["y"])
                 button = args.get("button", "left")
-                clicks = int(args.get("clicks", 1))
-                result = await controller.click(x=x, y=y, button=button, clicks=clicks)
-                if result.get("status") == "error":
-                    return json.dumps({"status": "error", "message": result.get("error", "Click failed.")})
+                clicks_count = int(args.get("clicks", 1))
+
+                def _smooth_click():
+                    import pyautogui
+                    pyautogui.FAILSAFE = True
+                    # Get current cursor position
+                    start = pyautogui.position()
+                    sx, sy = start.x, start.y
+
+                    logger.info(f"[Ronin Click] Smooth glide ({sx},{sy}) → ({x},{y}) over 0.8s")
+
+                    with ronin_acting(expected_pos=(x, y)):
+                        # Smooth cursor interpolation with ease-in-out
+                        steps = 50
+                        duration = 0.8
+                        step_delay = duration / steps
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            # Smooth ease-in-out: 3t² - 2t³
+                            t_eased = t * t * (3 - 2 * t)
+                            cx = int(sx + (x - sx) * t_eased)
+                            cy = int(sy + (y - sy) * t_eased)
+                            ctypes.windll.user32.SetCursorPos(cx, cy)
+                            _time.sleep(step_delay)
+
+                        # Brief pause so user sees cursor arrive
+                        _time.sleep(0.15)
+
+                        # Click
+                        pyautogui.click(button=button, clicks=clicks_count)
+
+                    set_expected_position(x, y)
+                    logger.info(f"[Ronin Click] Clicked at ({x},{y}) with {button}")
+
+                loop = _aio.get_event_loop()
+                _pool = _TPool(max_workers=1, thread_name_prefix="ronin-click")
+                await loop.run_in_executor(_pool, _smooth_click)
+                _pool.shutdown(wait=False)
+
                 return json.dumps({
                     "status": "success",
-                    "message": f"Clicked at ({x}, {y}) with {button} button ({clicks}x).",
+                    "message": f"Clicked at ({x}, {y}) with {button} button ({clicks_count}x).",
                 })
 
             elif name == "desktop_type":
                 text = args["text"]
                 is_hotkey = args.get("is_hotkey", False)
-                interval = float(args.get("interval", 0.02))
+                interval = float(args.get("interval", 0.05))
+
                 if is_hotkey:
-                    result = await controller.hotkey(keys=text)
+                    from shogun.ronin.policies.ronin_policy_schema import RoninAction as _RA
+                    from shogun.ronin.desktop.keyboard_controller import hotkey as ronin_hotkey
+                    action_obj = _RA(
+                        action_type="desktop.hotkey",
+                        agent_id="shogun",
+                        target=text,
+                        metadata={"keys": text},
+                    )
+                    result = await ronin_hotkey(action_obj)
+                    if result.status.value != "success":
+                        return json.dumps({"status": "error", "message": result.error or "Hotkey failed."})
+                    return json.dumps({"status": "success", "message": f"Hotkey: {text}"})
                 else:
-                    result = await controller.type_text(text=text, interval=interval)
-                if result.get("status") == "error":
-                    return json.dumps({"status": "error", "message": result.get("error", "Typing failed.")})
-                return json.dumps({
-                    "status": "success",
-                    "message": f"{'Hotkey' if is_hotkey else 'Typed'}: {text[:50]}{'...' if len(text) > 50 else ''}",
-                })
+                    import time as _time
+                    import asyncio as _aio
+                    from concurrent.futures import ThreadPoolExecutor as _TPool
+                    from shogun.ronin.core.komainu import ronin_acting
+
+                    def _smooth_type():
+                        import pyautogui
+                        pyautogui.FAILSAFE = True
+                        logger.info(f"[Ronin Keyboard] Typing {len(text)} chars at {interval}s/char")
+                        with ronin_acting():
+                            for char in text:
+                                if char == '\n':
+                                    pyautogui.press('enter')
+                                elif char == '\t':
+                                    pyautogui.press('tab')
+                                else:
+                                    pyautogui.write(char)
+                                _time.sleep(interval)
+                        logger.info(f"[Ronin Keyboard] Done typing")
+
+                    loop = _aio.get_event_loop()
+                    _pool = _TPool(max_workers=1, thread_name_prefix="ronin-kbd")
+                    await loop.run_in_executor(_pool, _smooth_type)
+                    _pool.shutdown(wait=False)
+
+                    return json.dumps({
+                        "status": "success",
+                        "message": f"Typed: {text[:50]}{'...' if len(text) > 50 else ''}",
+                    })
 
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})

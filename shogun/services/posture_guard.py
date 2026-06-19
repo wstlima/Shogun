@@ -153,6 +153,11 @@ async def get_posture_tool_filter() -> dict[str, Any]:
         "mado_autonomous_browsing": posture.get("mado_autonomous_browsing", False),
         "mado_downloads_enabled": posture.get("mado_downloads_enabled", False),
         "mado_uploads_enabled": posture.get("mado_uploads_enabled", False),
+        # Ronin desktop control
+        "ronin_enabled": posture.get("ronin_enabled", False),
+        "ronin_mouse_enabled": posture.get("ronin_mouse_enabled", False),
+        "ronin_keyboard_enabled": posture.get("ronin_keyboard_enabled", False),
+        "ronin_screenshots_enabled": posture.get("ronin_screenshots_enabled", True),
     }
 
 

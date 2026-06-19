@@ -106,9 +106,15 @@ async def click(action: RoninAction) -> RoninResult:
     try:
         def _do():
             pag = _get_pyautogui()
+            log.info(f"[Ronin Mouse] Smooth glide to ({x}, {y}) — duration=0.8s")
             with ronin_acting(expected_pos=(x, y)):
-                pag.click(x, y, button=button)
+                # Smooth glide to target so the user can follow the cursor
+                pag.moveTo(x, y, duration=0.8)
+                import time
+                time.sleep(0.1)  # brief pause before click for visual clarity
+                pag.click(button=button)
             set_expected_position(x, y)
+            log.info(f"[Ronin Mouse] Clicked at ({x}, {y})")
 
         await asyncio.get_event_loop().run_in_executor(_executor, _do)
         return RoninResult(
@@ -145,8 +151,12 @@ async def double_click(action: RoninAction) -> RoninResult:
     try:
         def _do():
             pag = _get_pyautogui()
+            log.info(f"[Ronin Mouse] Smooth glide to ({x}, {y}) for double-click")
             with ronin_acting(expected_pos=(x, y)):
-                pag.doubleClick(x, y)
+                pag.moveTo(x, y, duration=0.8)
+                import time
+                time.sleep(0.1)
+                pag.doubleClick(button='left')
             set_expected_position(x, y)
 
         await asyncio.get_event_loop().run_in_executor(_executor, _do)
@@ -170,7 +180,8 @@ async def right_click(action: RoninAction) -> RoninResult:
         def _do():
             pag = _get_pyautogui()
             with ronin_acting(expected_pos=(x, y)):
-                pag.rightClick(x, y)
+                pag.moveTo(x, y, duration=0.4)
+                pag.rightClick()
             set_expected_position(x, y)
 
         await asyncio.get_event_loop().run_in_executor(_executor, _do)

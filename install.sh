@@ -105,6 +105,38 @@ echo "       Installing Mado browser engine (Chromium)..."
 $PYTHON_CMD -m playwright install chromium --with-deps 2>/dev/null || true
 echo -e "       ${GREEN}Mado browser engine ready.${NC}"
 
+# ── Step 4c: Ronin desktop control (optional) ──────────────────
+echo ""
+echo -e "${GOLD}  Optional: Enable desktop control (Ronin)?${NC}"
+echo "  This allows the AI to control your mouse, keyboard, and take screenshots."
+echo ""
+read -p "  Install Ronin dependencies? [y/N]: " INSTALL_RONIN
+
+if [[ "$INSTALL_RONIN" =~ ^[Yy]$ ]]; then
+    # OS-specific system packages
+    if [ "$PLATFORM" = "Linux" ]; then
+        echo "       Installing Linux X11 system dependencies for Ronin..."
+        if command -v apt &>/dev/null; then
+            sudo apt install -y xdotool python3-tk python3-dev 2>/dev/null || true
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y xdotool python3-tkinter python3-devel 2>/dev/null || true
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --noconfirm xdotool tk 2>/dev/null || true
+        fi
+    fi
+    pip install ".[ronin]" --quiet --disable-pip-version-check
+    echo -e "       ${GREEN}Ronin desktop dependencies installed.${NC}"
+    if [ "$PLATFORM" = "macOS" ]; then
+        echo ""
+        echo -e "       ${GOLD}⚠ macOS: You must grant Accessibility permissions to your terminal app.${NC}"
+        echo "         Go to: System Preferences → Privacy & Security → Accessibility"
+        echo "         Add your terminal app (Terminal.app, iTerm2, VS Code, etc.)"
+        echo ""
+    fi
+else
+    echo "       Skipping Ronin. You can enable it later in the Setup Wizard or Shogun Profile."
+fi
+
 # ── Step 5: Bootstrap database ─────────────────────────────────
 echo -e "${GOLD}[5/8]${NC} Bootstrapping database..."
 $PYTHON_CMD -c "import asyncio; from shogun.bootstrap import bootstrap; asyncio.run(bootstrap())" 2>/dev/null || true

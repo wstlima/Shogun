@@ -341,6 +341,10 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         "connect", "api", "webhook", "database",
         # Shogun internals
         "tool", "permission",
+        # Ronin desktop control
+        "desktop", "take control", "click on", "click the",
+        "mouse", "keyboard", "type in", "move the cursor",
+        "press ", "hotkey", "screen capture",
     ]
 
     # Governed/context triggers → memory/RAG/CAG needed, no external actions
@@ -918,11 +922,13 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService,
 
         # ── Provider-type heuristic for tool support ──────────────────
         # If not resolved from a ModelDefinition, infer from provider type.
+        # Note: Ollama supports native tool calling (OpenAI-compatible format)
+        # for modern models (Gemma 4, Llama 3+, Qwen2+, Mistral, etc.)
         if _model_supports_tools is None and provider:
             _PROVIDER_TOOL_SUPPORT = {
                 "openai": True, "openrouter": True, "anthropic": True,
                 "google": True, "custom": True,
-                "ollama": False, "lmstudio": False, "local": False,
+                "ollama": True, "lmstudio": True, "local": False,
             }
             _model_supports_tools = _PROVIDER_TOOL_SUPPORT.get(provider.provider_type, False)
         _model_supports_tools = _model_supports_tools or False
@@ -1126,6 +1132,8 @@ ACTIVE SECURITY POSTURE (from the Torii — you MUST operate within these guardr
 - Shell Execution: {'ALLOWED' if _posture_filter.get('shell_enabled') else 'DENIED'}
 - Auto-Install Skills: {'ALLOWED' if _posture_filter.get('skill_auto_install') else 'DENIED'}
 - Max Active Samurai: {_max_subagents} (currently {ctx['samurai_count']} deployed)
+- Mado Browser: {'ENABLED' if _posture_filter.get('mado_enabled') else 'DISABLED'}
+- Ronin Desktop Control: {'ENABLED — You can see the screen, move the mouse, and type on the keyboard' if _posture_filter.get('ronin_enabled') else 'DISABLED'}
 You must respect these constraints. If the user asks you to do something outside your current
 security posture, inform them of the restriction and suggest changing the tier in the Torii.
 
@@ -1154,18 +1162,30 @@ YOUR CAPABILITIES:
 - **Calendar**: View upcoming events and create new calendar events using the calendar tools (list_calendar_events, create_calendar_event)
 - **Cron Jobs**: List, create, and delete Bushido schedules (cron jobs) using the schedule tools (list_cron_jobs, create_cron_job, delete_cron_job)
 - **Web Browsing (Mado)**: Browse any web page, extract content, and take screenshots using the browse_web and take_screenshot tools. You have a REAL browser.
+- **Desktop Control (Ronin)**: {'ENABLED — You can take desktop screenshots, click anywhere on screen, and type on the keyboard using desktop_screenshot, desktop_click, and desktop_type tools. Use desktop_screenshot FIRST to see the screen, then act on what you see.' if _posture_filter.get('ronin_enabled') else 'DISABLED — Desktop control is ONLY available at the Ronin security posture. The user must switch to Ronin tier in the Torii to enable this.'}
 - **Agent Flow**: Create visual AI workflows using the create_agent_flow tool
 
-IMPORTANT — TOOL USAGE DIRECTIVES:
-You have DIRECT access to all of the above capabilities through your native tools.
-When the user asks you to do something that a tool can handle — USE THE TOOL. Do NOT describe how a tool works. CALL IT.
+CRITICAL — TOOL USAGE RULES (MANDATORY):
+You have DIRECT access to all of the above capabilities through your native tool functions.
+When the user asks you to perform an action — CALL THE TOOL FUNCTION IMMEDIATELY.
 
-- **Web browsing**: When the user asks you to look up, search, browse, visit, or check a website — call browse_web(url="...") IMMEDIATELY.
-  Do NOT say you cannot browse the web. You CAN. You have the Mado browser engine. USE IT.
-  When extracting specific content, use the extract_preset parameter instead of raw CSS selectors:
-  headlines, links, article, news_cards, tables, images, lists, prices, full_page.
-  Only use the 'selector' parameter if the user explicitly provides a CSS selector.
-  After browsing, summarize the extracted content for the user.
+**NEVER narrate what you "will do" or "would do". NEVER say "I will now take a screenshot" or "Let me click on..."
+without actually calling the tool function in the same response. If you need to use a tool, CALL IT — do not describe it.**
+
+**For multi-step tasks**: Call the FIRST tool immediately. After receiving the result, call the NEXT tool. Continue until done.
+Do NOT plan out all steps in text first — just start executing.
+
+- **Web browsing**: call browse_web(url="...") IMMEDIATELY. Do NOT say you cannot browse.
+  Use extract_preset for content: headlines, links, article, news_cards, tables, images, lists, prices, full_page.
+  Only use 'selector' if the user explicitly provides a CSS selector.
+- **Desktop control**: Follow this EXACT cycle for every interaction:
+  1. Call desktop_screenshot() FIRST — you will receive the image and can SEE the screen
+  2. ANALYZE the screenshot carefully — identify exact pixel coordinates of the UI element you want to interact with
+  3. Call desktop_click(x, y) or desktop_type(text) based on what you SEE in the image
+  4. Call desktop_screenshot() AGAIN to VERIFY your action succeeded
+  5. If it didn't work, analyze the new screenshot and try again
+  CRITICAL: You can SEE screenshots as images. Look at the actual pixels to find buttons, icons, and text fields.
+  NEVER guess coordinates. ALWAYS screenshot first, find the element visually, then click its center.
 - **Email**: Use fetch_inbox, read_email, send_email. Confirm before sending.
 - **Calendar**: Use list_calendar_events, create_calendar_event.
 - **Cron Jobs**: Use list_cron_jobs, create_cron_job, delete_cron_job.
@@ -1399,6 +1419,16 @@ BEHAVIOUR:
             if active_tools:
                 req_json["tools"] = active_tools
 
+            # ── Diagnostic: log tool injection status ──
+            _tool_names_sent = [t["function"]["name"] for t in active_tools] if active_tools else []
+            logger.info(
+                f"[MISSION] LLM Request — model={model_name}, "
+                f"tools_count={len(active_tools)}, "
+                f"tools_sent={_tool_names_sent}, "
+                f"supports_tools={_model_supports_tools}, "
+                f"messages_count={len(messages)}"
+            )
+
             try:
                 async with httpx.AsyncClient(timeout=120.0) as client:
                     async with client.stream(
@@ -1594,6 +1624,13 @@ BEHAVIOUR:
                 _append_chat_log("assistant", full_text)
                 messages.append({"role": "assistant", "content": full_text})
 
+            # ── Diagnostic: post-stream state ──
+            logger.info(
+                f"[MISSION] Post-stream — tool_calls_buffer={dict(tool_calls_buffer)}, "
+                f"assistant_tokens_len={len(assistant_tokens)}, "
+                f"preview={''.join(assistant_tokens)[:200] if assistant_tokens else '(empty)'}"
+            )
+
             # ── Structured tool calls (OpenAI format) ──
             if tool_calls_buffer:
                 tool_calls_array = list(tool_calls_buffer.values())
@@ -1614,9 +1651,67 @@ BEHAVIOUR:
                             args = {}
                             
                         # Execute
+                        yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                         res_str = await execute_native_tool(func_name, args, db)
                         _any_tool_executed = True
                         messages.append({"role": "tool", "tool_call_id": tcall["id"], "name": func_name, "content": res_str})
+
+                        # ── Ronin: inject screenshot as vision image for multimodal models ──
+                        if func_name == "desktop_screenshot":
+                            try:
+                                _ronin_result = json.loads(res_str)
+                                _ss_path = _ronin_result.get("path", "")
+                                if _ronin_result.get("status") == "success" and _ss_path:
+                                    import base64 as _b64
+                                    from pathlib import Path as _P
+                                    _ss_filename = _P(_ss_path).name
+                                    # Resize screenshot for vision (max 1280px wide to save context)
+                                    from PIL import Image as _PIL_Image
+                                    import io as _io
+                                    _img = _PIL_Image.open(_ss_path)
+                                    _max_w = 1280
+                                    if _img.width > _max_w:
+                                        _ratio = _max_w / _img.width
+                                        _img = _img.resize((int(_img.width * _ratio), int(_img.height * _ratio)), _PIL_Image.LANCZOS)
+                                    _buf = _io.BytesIO()
+                                    _img.save(_buf, format="PNG", optimize=True)
+                                    _img_bytes = _buf.getvalue()
+                                    _img_b64 = _b64.b64encode(_img_bytes).decode("utf-8")
+                                    # Inject as a user message with image content (OpenAI/Ollama multimodal format)
+                                    messages.append({
+                                        "role": "user",
+                                        "content": [
+                                            {"type": "text", "text": f"[SYSTEM] Here is the desktop screenshot you just captured ({_ss_filename}). Analyze it to find UI elements you need to interact with. Describe what you see and proceed with the next action."},
+                                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{_img_b64}"}}
+                                        ]
+                                    })
+                                    # Stream visual event to frontend
+                                    yield f"data: {json.dumps({'type': 'ronin_screenshot', 'url': f'/ronin/screenshots/{_ss_filename}', 'description': 'Desktop screenshot captured'})}\n\n"
+                            except Exception as _vis_exc:
+                                logger.warning(f"[Ronin] Vision injection failed: {_vis_exc}")
+
+                        # ── Ronin Visual Events — stream action results to the frontend ──
+                        elif func_name == "desktop_click":
+                            try:
+                                _ronin_result = json.loads(res_str)
+                                if _ronin_result.get("status") == "success":
+                                    _click_msg = _ronin_result.get("message", f"Clicked at ({args.get('x')}, {args.get('y')})")
+                                    yield f"data: {json.dumps({'type': 'ronin_action', 'action': 'click', 'detail': _click_msg})}\n\n"
+                                else:
+                                    yield f"data: {json.dumps({'type': 'ronin_action', 'action': 'error', 'detail': _ronin_result.get('message', 'Click failed')})}\n\n"
+                            except Exception:
+                                pass
+                        elif func_name == "desktop_type":
+                            try:
+                                _ronin_result = json.loads(res_str)
+                                _typed = args.get("text", "")
+                                _type_detail = f"Typed: {_typed[:80]}{'...' if len(_typed) > 80 else ''}"
+                                if _ronin_result.get("status") == "success":
+                                    yield f"data: {json.dumps({'type': 'ronin_action', 'action': 'type', 'detail': _type_detail})}\n\n"
+                                else:
+                                    yield f"data: {json.dumps({'type': 'ronin_action', 'action': 'error', 'detail': _ronin_result.get('message', 'Type failed')})}\n\n"
+                            except Exception:
+                                pass
 
                         # ── EVENT: Tool Executed ──────────────
                         try:
@@ -1779,6 +1874,45 @@ BEHAVIOUR:
                             _text_tool_results.append((func_name, args, res_str))
                             _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
 
+                            # ── Ronin Visual Events (text-mode path) ──
+                            if func_name.startswith("desktop_"):
+                                try:
+                                    _ronin_res = json.loads(res_str)
+                                    if func_name == "desktop_screenshot" and _ronin_res.get("status") == "success":
+                                        _ss_p = _ronin_res.get("path", "")
+                                        if _ss_p:
+                                            from pathlib import Path as _PP
+                                            import base64 as _b64t
+                                            from PIL import Image as _PILt
+                                            import io as _iot
+                                            _ss_fn = _PP(_ss_p).name
+                                            # Resize for vision
+                                            _imgt = _PILt.open(_ss_p)
+                                            if _imgt.width > 1280:
+                                                _rt = 1280 / _imgt.width
+                                                _imgt = _imgt.resize((int(_imgt.width * _rt), int(_imgt.height * _rt)), _PILt.LANCZOS)
+                                            _buft = _iot.BytesIO()
+                                            _imgt.save(_buft, format="PNG", optimize=True)
+                                            _b64t_str = _b64t.b64encode(_buft.getvalue()).decode("utf-8")
+                                            # Inject vision image into results
+                                            _text_tool_results.append(("_vision_inject", {}, json.dumps({
+                                                "role": "user",
+                                                "content": [
+                                                    {"type": "text", "text": f"[SYSTEM] Here is the desktop screenshot ({_ss_fn}). Analyze it to find UI elements. Proceed with the next action."},
+                                                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{_b64t_str}"}}
+                                                ]
+                                            })))
+                                            yield f'data: {json.dumps({"type": "ronin_screenshot", "url": f"/ronin/screenshots/{_ss_fn}", "description": "Desktop screenshot captured"})}\n\n'
+                                    elif func_name == "desktop_click" and _ronin_res.get("status") == "success":
+                                        yield f'data: {json.dumps({"type": "ronin_action", "action": "click", "detail": _ronin_res.get("message", "Clicked")})}\n\n'
+                                    elif func_name == "desktop_type" and _ronin_res.get("status") == "success":
+                                        _t = args.get("text", "")
+                                        yield f'data: {json.dumps({"type": "ronin_action", "action": "type", "detail": f"Typed: {_t[:80]}"})}\n\n'
+                                    elif _ronin_res.get("status") == "error":
+                                        yield f'data: {json.dumps({"type": "ronin_action", "action": "error", "detail": _ronin_res.get("message", "Failed")})}\n\n'
+                                except Exception:
+                                    pass
+
                             try:
                                 _tool_result = json.loads(res_str)
                                 _tool_status = _tool_result.get("status", "unknown")
@@ -1800,18 +1934,47 @@ BEHAVIOUR:
                 # Feed results back as a user message with tool outputs
                 # (IMPORTANT: this must be OUTSIDE the `async for db` block
                 #  so that `continue` targets the outer `while True` loop)
+                _normal_results = [(fn, a, r) for fn, a, r in _text_tool_results if fn != "_vision_inject"]
+                _vision_results = [(fn, a, r) for fn, a, r in _text_tool_results if fn == "_vision_inject"]
                 _results_text = "\n\n".join(
-                    f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _text_tool_results
+                    f"Tool result for {fn}({json.dumps(a)}):\n{r}" for fn, a, r in _normal_results
                 )
-                messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
+                if _results_text:
+                    messages.append({"role": "user", "content": f"[TOOL RESULTS — execute next steps based on these results]\n\n{_results_text}"})
+                # Inject vision screenshots as multimodal messages
+                for _, _, _vis_json in _vision_results:
+                    try:
+                        _vis_msg = json.loads(_vis_json)
+                        messages.append(_vis_msg)
+                    except Exception:
+                        pass
                 
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Tool completed. Drafting answer...'})}\n\n"
                 continue  # ← NOW correctly continues the `while True` loop
             
+            # ── Nudge retry: model narrated about tools but didn't call them ──
+            if not _any_tool_executed and not tool_calls_buffer and not _deduped_tc_matches and _active_tool_names:
+                _full_resp = "".join(assistant_tokens) if assistant_tokens else ""
+                _resp_lower = _full_resp.lower()
+                _mentioned = [tn for tn in _active_tool_names if tn.replace("_", " ") in _resp_lower or tn in _resp_lower]
+                if _mentioned and len(_full_resp) > 20 and not _tool_retry_used:
+                    _tool_retry_used = True
+                    logger.info(f"[Shogun] Nudge retry — model mentioned tools {_mentioned} but didn't call them.")
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "[SYSTEM] You described what you would do but did NOT call any tool functions. "
+                            "You MUST call the tool function directly — do not narrate or explain. "
+                            f"Call {_mentioned[0]}() NOW."
+                        )
+                    })
+                    yield f'data: {json.dumps({"type": "status", "content": "Nudging model to execute tool..."})}\n\n'
+                    continue
+
             # If no tool calls occurred or we are done, terminate loop
             _tool_required = bool(_active_tool_names) and classification and classification.get("task_type") in ("search", "skill", "agent")
             if _tool_required and not _deduped_tc_matches and not tool_calls_buffer and not _any_tool_executed:
-                _log.warning(f"[Shogun] Mission failed gracefully. Expected tool call but none detected.")
+                logger.warning(f"[Shogun] Mission failed gracefully. Expected tool call but none detected.")
                 yield f"data: {json.dumps({'type': 'error', 'content': '⚠️ No valid tool call detected.'})}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Mission completed.'})}\n\n"

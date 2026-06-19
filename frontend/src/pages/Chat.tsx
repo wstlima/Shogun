@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare, Zap, Shield, Target, Sparkles } from 'lucide-react';
+import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare, Zap, Shield, Target, Sparkles, Monitor, MousePointer2, Keyboard, AlertCircle, Camera, Square } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { MailView } from './MailView';
 import { CalendarView } from './CalendarView';
 
 type ChatMode = 'auto' | 'fast' | 'governed' | 'mission';
+
+type RoninAttachment =
+  | { type: 'screenshot'; url: string; description: string }
+  | { type: 'action'; action: string; detail: string };
 
 interface Message {
   role: 'user' | 'shogun';
@@ -15,6 +19,7 @@ interface Message {
   provider?: string;
   search?: boolean;
   mode?: ChatMode;
+  attachments?: RoninAttachment[];
 }
 
 interface Session {
@@ -86,6 +91,7 @@ export const ChatConsole = () => {
   const [history, setHistory] = useState<Session[]>(loadHistory);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Persist messages to localStorage on every change
   useEffect(() => {
@@ -127,10 +133,13 @@ export const ChatConsole = () => {
     setMessages(prev => [...prev, placeholder]);
 
     try {
+      const controller = new AbortController();
+      abortRef.current = controller;
       const resp = await fetch('/api/v1/agents/shogun/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input, history: hist.slice(0, -1), mode: chatMode }),
+        signal: controller.signal,
       });
 
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
@@ -188,20 +197,68 @@ export const ChatConsole = () => {
                 copy[copy.length - 1] = { ...copy[copy.length - 1], content: evt.content };
                 return copy;
               });
+            } else if (evt.type === 'ronin_screenshot') {
+              setMessages(prev => {
+                const copy = [...prev];
+                const last = copy[copy.length - 1];
+                const existing = last.attachments || [];
+                copy[copy.length - 1] = {
+                  ...last,
+                  attachments: [...existing, { type: 'screenshot', url: evt.url, description: evt.description || 'Desktop screenshot' }],
+                };
+                return copy;
+              });
+            } else if (evt.type === 'ronin_action') {
+              setMessages(prev => {
+                const copy = [...prev];
+                const last = copy[copy.length - 1];
+                const existing = last.attachments || [];
+                copy[copy.length - 1] = {
+                  ...last,
+                  attachments: [...existing, { type: 'action', action: evt.action, detail: evt.detail || '' }],
+                };
+                return copy;
+              });
+            } else if (evt.type === 'action') {
+              setStatusText(evt.content);
             }
           } catch { /* malformed event */ }
         }
       }
-    } catch (err) {
-      console.error('Streaming failed:', err);
-      setMessages(prev => {
-        const copy = [...prev];
-        copy[copy.length - 1] = {
-          ...copy[copy.length - 1],
-          content: '⚠️ ' + t('chat.bridge_interrupted', 'Neural bridge interrupted. Check logs.'),
-        };
-        return copy;
-      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // User cancelled — mark the message as cancelled
+        setMessages(prev => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last.content === '') {
+            copy[copy.length - 1] = { ...last, content: '⛔ Cancelled by operator.' };
+          } else {
+            copy[copy.length - 1] = { ...last, content: last.content + '\n\n⛔ *Cancelled by operator.*' };
+          }
+          return copy;
+        });
+      } else {
+        console.error('Streaming failed:', err);
+        setMessages(prev => {
+          const copy = [...prev];
+          copy[copy.length - 1] = {
+            ...copy[copy.length - 1],
+            content: '⚠️ ' + t('chat.bridge_interrupted', 'Neural bridge interrupted. Check logs.'),
+          };
+          return copy;
+        });
+      }
+    } finally {
+      abortRef.current = null;
+      setIsThinking(false);
+      setStatusText(null);
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
     }
   };
 
@@ -290,7 +347,7 @@ export const ChatConsole = () => {
                       : 'bg-[#050508] border border-shogun-border text-shogun-gold rounded-tl-none font-mono'
                   )}
                 >
-                  {msg.role === 'shogun' && msg.content === '' ? (
+                  {msg.role === 'shogun' && msg.content === '' && (!msg.attachments || msg.attachments.length === 0) ? (
                     <div className="flex items-center gap-2 py-1">
                       {statusText ? (
                         <>
@@ -305,7 +362,68 @@ export const ChatConsole = () => {
                         </>
                       )}
                     </div>
-                  ) : msg.content}
+                  ) : (
+                    <>
+                      {msg.content}
+                      {/* ── Ronin Visual Feed ── */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className={cn("space-y-2", msg.content ? "mt-3 border-t border-shogun-border/30 pt-3" : "")}>
+                          {msg.attachments.map((att, idx) => {
+                            if (att.type === 'screenshot') {
+                              return (
+                                <div key={idx} className="rounded-lg overflow-hidden border border-cyan-500/30 bg-black/40">
+                                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 border-b border-cyan-500/20">
+                                    <Camera className="w-3 h-3 text-cyan-400" />
+                                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Desktop Screenshot</span>
+                                  </div>
+                                  <img
+                                    src={att.url}
+                                    alt={att.description}
+                                    className="w-full max-h-[400px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(att.url, '_blank')}
+                                  />
+                                </div>
+                              );
+                            }
+                            if (att.type === 'action') {
+                              const isClick = att.action === 'click';
+                              const isType = att.action === 'type';
+                              const isError = att.action === 'error';
+                              return (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono border',
+                                    isError
+                                      ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                                      : isClick
+                                        ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+                                        : isType
+                                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                          : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+                                  )}
+                                >
+                                  {isClick && <MousePointer2 className="w-3.5 h-3.5 shrink-0" />}
+                                  {isType && <Keyboard className="w-3.5 h-3.5 shrink-0" />}
+                                  {isError && <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
+                                  {!isClick && !isType && !isError && <Monitor className="w-3.5 h-3.5 shrink-0" />}
+                                  <span>{att.detail}</span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })}
+                          {/* Progress indicator while tools are still executing */}
+                          {isThinking && statusText && (
+                            <div className="flex items-center gap-2 px-3 py-2 text-xs text-cyan-400/70 font-mono">
+                              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                              <span className="animate-pulse">{statusText}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 px-1 mt-1">
                   <span className="text-[10px] text-shogun-subdued font-bold tracking-wider">{msg.role === 'user' ? operatorName : t('chat.agent_label', 'SHOGUN')}</span>
@@ -386,13 +504,23 @@ export const ChatConsole = () => {
               placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : chatMode === 'auto' ? 'Ask anything — Shogun routes automatically...' : chatMode === 'fast' ? 'Ask anything...' : chatMode === 'mission' ? 'Enter mission directive...' : 'Ask with context...'}
               className="w-full bg-shogun-card border border-shogun-border rounded-xl py-4 pl-6 pr-14 text-shogun-text placeholder:text-shogun-subdued focus:outline-none focus:border-shogun-blue focus:ring-1 focus:ring-shogun-blue/20 transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <button
-              onClick={handleSend}
-              disabled={isThinking || !input.trim()}
-              className="absolute right-2 p-2 bg-shogun-blue text-white rounded-lg hover:bg-shogun-blue/80 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+            {isThinking ? (
+              <button
+                onClick={handleCancel}
+                className="absolute right-2 p-2 bg-red-600 text-white rounded-lg hover:bg-red-500 transition-all active:scale-95 animate-pulse"
+                title="Cancel operation"
+              >
+                <Square className="w-5 h-5 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="absolute right-2 p-2 bg-shogun-blue text-white rounded-lg hover:bg-shogun-blue/80 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            )}
           </div>
           <div className="flex justify-between mt-3 px-2">
             <div className="flex gap-4">

@@ -86,6 +86,21 @@ echo        Installing Mado browser engine (Chromium)...
 playwright install chromium --with-deps 2>nul || python -m playwright install chromium --with-deps 2>nul
 echo        Mado browser engine ready.
 
+:: -- Step 4c: Install Ronin desktop control (optional) ----------
+echo.
+set /p INSTALL_RONIN="  Enable desktop control (Ronin)? Allows AI to control mouse/keyboard. [y/N]: "
+if /i "%INSTALL_RONIN%"=="y" (
+    echo        Installing Ronin desktop dependencies...
+    pip install ".[ronin]" --quiet --disable-pip-version-check
+    if %ERRORLEVEL% neq 0 (
+        echo        Warning: Ronin dependencies failed to install. You can try again later in the Setup Wizard.
+    ) else (
+        echo        Ronin desktop dependencies installed.
+    )
+) else (
+    echo        Skipping Ronin. You can enable it later in the Setup Wizard or Shogun Profile.
+)
+
 :: -- Step 5: Bootstrap database ---------------------------------
 echo [5/8] Bootstrapping database...
 python -c "import asyncio; from shogun.bootstrap import bootstrap; asyncio.run(bootstrap())" 2>nul
