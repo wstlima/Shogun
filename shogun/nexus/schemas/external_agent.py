@@ -1,0 +1,28 @@
+"""Pydantic schemas for ExternalAgent."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ExternalAgentBase(BaseModel):
+    name: str = Field(..., description="Name of the external agent, e.g. Microsoft 365 Sales Agent")
+    platform: str = Field(..., description="Platform type (microsoft_365, salesforce, google, servicenow, custom)")
+    is_active: bool = Field(True, description="True if the agent is allowed to connect")
+
+
+class ExternalAgentRegister(BaseModel):
+    """Schema used to register an external agent."""
+    name: str = Field(..., description="Name of the external agent")
+    platform: str = Field(..., description="Platform type")
+    token: str | None = Field(None, description="Optional custom authentication token. If not provided, one will be generated.")
+
+
+class ExternalAgentResponse(ExternalAgentBase):
+    id: uuid.UUID
+    token: str = Field(..., description="Authentication API token for the agent")
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -37,7 +37,7 @@ Most AI tools give you a chat box. Shogun gives you an **entire operating system
 | 🌐 **Browser Automation (Mado)** | Your AI can browse the web, extract content, and take screenshots — all controlled through a secure Playwright layer. |
 | 📧 **Email & Calendar** | Connect your IMAP/SMTP inbox and CalDAV calendar. Your Shogun can read, compose, and send emails — and manage your schedule. |
 | 💬 **Telegram Integration** | Talk to your AI from your phone. Full streaming responses with live typing indicators. |
-| 🔗 **Agent-to-Agent (Nexus)** | Connect multiple Shogun instances across machines. Shared workspaces, typed messaging, and collaborative whiteboards via the A2A protocol. |
+| 🔗 **Agent-to-Agent (Nexus)** | Connect multiple Shogun instances via peer-to-peer Nexus, **and** accept tasks from external enterprise agents (Microsoft 365, Salesforce, Google, ServiceNow) through the Nexus External Gateway with governed A2A interoperability. |
 | 🔄 **Visual Workflow Builder** | Design multi-step AI pipelines with a drag-and-drop canvas. Chain agents, approvals, logic gates, and browser actions into executable flows. |
 | 📜 **Constitutional Governance** | Write YAML rules your AI can never break. Version-controlled, auditable, with enforcement modes (Block / Warn / Audit). |
 | 🛡️ **5-Tier Security** | From SHRINE (zero-trust) to RONIN (unrestricted). Fine-grained control over filesystem, network, shell, and tool access. Emergency kill switch (Harakiri) freezes everything instantly. |
@@ -179,6 +179,149 @@ Each Shogun instance sends periodic heartbeats to Gensui with status, metrics, a
 
 ---
 
+## 🔗 Nexus External Gateway — Enterprise Agent Interoperability
+
+Shogun isn't limited to its own agent ecosystem. The **Nexus External Gateway** lets enterprise agents from other platforms — Microsoft 365 Copilot agents, Salesforce Einstein agents, Google Vertex agents, ServiceNow virtual agents — send tasks directly into Shogun for execution, all governed by the same security policies as internal operations.
+
+This is **not** about replacing enterprise agents. It's about letting Shogun serve as an independent execution and orchestration layer that works *alongside* them.
+
+### Three Operating Modes
+
+| Mode | Description |
+|------|-------------|
+| 🏯 **Standalone** | Shogun runs independently with local agents, models, browser control, and memory. No external connectivity needed. |
+| 🔗 **Enterprise-Connected** | External enterprise agents submit tasks via A2A, webhooks, or MCP. Shogun executes and returns results. |
+| 🛡️ **Governed Hybrid** | Both modes combined, with Gensui enforcing security postures, platform allowlists, and real-time policy checks on every inbound task. |
+
+### How It Works
+
+```
+                     ┌─────────────────────────────────────┐
+                     │    External Enterprise Agents        │
+                     │  (M365 · Salesforce · Google · SNow) │
+                     └────────────────┬────────────────────┘
+                                      │ A2A / Webhook / MCP
+                                      ▼
+                     ┌────────────────────────────────────┐
+                     │     Nexus External Gateway          │
+                     │  auth_handler → request_handler     │
+                     └────────────────┬───────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              ▼                       ▼                       ▼
+    ┌──────────────────┐  ┌───────────────────────┐  ┌──────────────┐
+    │   Policy Hooks   │  │   Capability Router   │  │ Audit Logger │
+    │ Gensui posture + │  │  Match capability     │  │ L1 + L2      │
+    │ platform rules   │  │  → best agent         │  │ dual write   │
+    └────────┬─────────┘  └──────────┬────────────┘  └──────────────┘
+             │                       │
+             │ allowed?              ▼
+             │              ┌──────────────────┐
+             │              │  Internal Shogun │
+             │              │    Adapter        │
+             │              │  (LLM execution) │
+             │              └────────┬─────────┘
+             │                       │
+             ▼                       ▼
+    ┌──────────────┐      ┌──────────────────┐
+    │   BLOCKED    │      │    COMPLETED     │
+    │  (response)  │      │   (result sent   │
+    │              │      │    via callback)  │
+    └──────────────┘      └──────────────────┘
+```
+
+### Task Lifecycle
+
+Every external task follows a strict 7-step execution pipeline:
+
+1. **Authenticate** — Bearer token verified against the registered agent database
+2. **Normalize** — Protocol adapter (A2A/Webhook/MCP) maps the payload to a standard `NexusTask`
+3. **Persist** — Task saved to database with status `pending`
+4. **Policy Check** — Platform allowlists, Gensui posture, and hardcoded blocks evaluated
+5. **Route** — Capability registry matches the task to the best internal Shogun/Samurai agent
+6. **Execute** — Internal adapter runs the task against the matched agent's LLM
+7. **Respond** — Result packaged and returned; optional callback URL notified
+
+### Security Model
+
+Security is non-negotiable for external connectivity. Every task passes through **four enforcement layers** before execution:
+
+| Layer | What It Checks |
+|-------|-----------------|
+| 🔐 **Bearer Authentication** | Each registered agent receives a unique API token. Invalid tokens get a `401` immediately. |
+| 🚫 **Hardcoded Blocks** | `desktop.execute`, `ronin.stop`, `ronin.harakiri`, and `unrestricted_browser_control` are **permanently blocked** for all external agents — no override possible. |
+| 📋 **Platform Allowlists** | Per-platform rules define exactly which capabilities each platform can access. Microsoft 365 agents can summarize documents but cannot touch local files. Salesforce agents can prepare CRM updates but cannot browse freely. |
+| 🎖️ **Gensui Posture** | If Gensui is active, its real-time security posture can disable all Nexus communication, block Mado browser sessions, block Ronin desktop automation, or restrict file writes — fleet-wide. |
+
+### Default Capabilities
+
+Shogun exposes 9 capabilities through the gateway. Custom capabilities can be registered at runtime.
+
+| Capability | Category | Description |
+|------------|----------|-------------|
+| `document.summarize` | document | Summarize text or PDF files |
+| `spreadsheet.analyze` | spreadsheet | Analyze Excel or CSV spreadsheets locally |
+| `email.draft` | email | Draft client or internal emails |
+| `file.analyze` | file | Inspect and extract data from local files |
+| `browser.research` | browser | Browse the web to gather research on a topic |
+| `crm.prepare_update` | crm | Draft customer relationship update instructions |
+| `local_model.reasoning` | local_model | Run reasoning tasks against local models |
+| `workflow.execute` | workflow | Execute sequential workflows / agent flows |
+| `desktop.execute` | desktop | Execute local desktop tasks (**blocked by default**) |
+
+### API Endpoints
+
+All endpoints live under `/api/v1/nexus`:
+
+| Method | Endpoint | Auth | Purpose |
+|--------|----------|------|---------|
+| `POST` | `/external/register-agent` | — | Register a trusted external agent, returns API token |
+| `GET` | `/external/agents` | — | List all registered external agents |
+| `GET` | `/capabilities` | — | Discover available Shogun capabilities |
+| `POST` | `/external/a2a/task` | Bearer | Submit a task via A2A protocol |
+| `GET` | `/external/task/{id}` | Bearer | Poll task status and result |
+| `POST` | `/external/task/{id}/callback` | Bearer | Receive async callback updates |
+
+### Example: A2A Task from Microsoft 365
+
+```json
+POST /api/v1/nexus/external/a2a/task
+Authorization: Bearer <agent-token>
+
+{
+  "task_id": "m365-task-001",
+  "action": "document.summarize",
+  "input": {
+    "content": "<document text or reference>"
+  },
+  "source_agent_id": "copilot-agent-42",
+  "source_platform": "microsoft_365",
+  "callback_url": "https://m365.example.com/callbacks/shogun"
+}
+```
+
+Shogun processes the task, returns a result, and optionally `POST`s the result back to the `callback_url`.
+
+### Supported Protocols
+
+| Protocol | Status | Adapter |
+|----------|--------|---------|
+| **A2A** (Agent-to-Agent) | ✅ Implemented | `a2a_adapter.py` |
+| **Internal Shogun** | ✅ Implemented | `internal_shogun_adapter.py` |
+| **Webhook** | 🔧 Base structure | `webhook_adapter.py` |
+| **MCP** (Model Context Protocol) | 🔧 Base structure | `mcp_adapter.py` |
+
+### Audit Trail
+
+Every gateway operation produces dual-logged audit events:
+
+- **Layer 1 (Operational)** — Stored in the main SQLite database with 90-day retention for dashboards and debugging
+- **Layer 2 (Immutable)** — Written to the HMAC-chained append-only audit database for NIS2/SOC2/EU AI Act compliance with 7-year retention
+
+All events include: task ID, source agent, source platform, requested action, policy decision, execution result, latency, and timestamp.
+
+---
+
 ## 🚀 Install Shogun (One Click)
 
 **Prerequisites:** [Python 3.10+](https://www.python.org/downloads/) and [Node.js v18+](https://nodejs.org/en/download) must be installed.
@@ -250,7 +393,7 @@ Shogun is built around a clear hierarchy of interconnected systems:
 | ⛩️ **The Torii** | 5-tier security gateway with fine-grained permissions and kill switch |
 | 🥋 **The Dojo** | Skills system — 4,000+ certifiable capabilities from [OpenClaw College](https://www.openclawcollege.com) |
 | 🪟 **Mado** | Browser automation layer — web browsing, screenshots, content extraction via Playwright |
-| 🔗 **Nexus** | Agent-to-Agent collaboration — shared workspaces across Shogun instances |
+| 🔗 **Nexus** | Agent-to-Agent collaboration — peer-to-peer shared workspaces **and** external enterprise agent gateway (A2A, Webhook, MCP) |
 | 🔄 **Agent Flow** | Visual workflow builder — drag-and-drop multi-agent pipelines |
 | 🎖️ **Gensui** | Agent Fleet Management — central command for monitoring and securing fleets of Shogun agents |
 
@@ -333,6 +476,7 @@ No Docker, no external services. SQLite + Qdrant embedded handles everything loc
 | Scheduling | APScheduler |
 | Embeddings | sentence-transformers |
 | Fleet Management | Gensui (independent SQLite + React UI) |
+| External Gateway | Nexus A2A/Webhook/MCP protocol adapters |
 | Containerization | Docker, Docker Compose, Nginx |
 
 ---
