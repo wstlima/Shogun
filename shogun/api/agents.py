@@ -1650,7 +1650,61 @@ BEHAVIOUR:
                         except json.JSONDecodeError:
                             args = {}
                             
-                        # Execute
+                        # ── ToolGate enforcement ──────────────────────
+                        from shogun.services.tool_gate import check_tool_access, GateAction
+                        _tg_mode = "ronin_desktop" if _posture_filter.get("ronin_enabled") else "standard"
+                        _tg_campaign = None
+                        _tg_preset_key = _posture_filter.get("active_campaign_preset")
+                        if _tg_preset_key:
+                            from shogun.services.campaign_presets import get_preset as _get_preset
+                            _tg_campaign = _get_preset(_tg_preset_key)
+
+                        _tg_decision = await check_tool_access(
+                            mode=_tg_mode,
+                            tool_name=func_name,
+                            args=args,
+                            campaign_preset=_tg_campaign,
+                        )
+
+                        if _tg_decision.action == GateAction.BLOCK:
+                            res_str = json.dumps({
+                                "status": "blocked",
+                                "message": f"ToolGate blocked '{func_name}': {_tg_decision.reason}",
+                            })
+                            yield f"data: {json.dumps({'type': 'action', 'content': f'BLOCKED: {func_name}'})}\\n\\n"
+                            try:
+                                import asyncio as _aio_tg
+                                _aio_tg.ensure_future(EL.emit_risk_event(
+                                    "risk.toolgate_blocked",
+                                    f"ToolGate blocked {func_name}: {_tg_decision.reason}",
+                                    severity="warn", risk_score=_tg_decision.risk_level.value,
+                                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                    detail={"tool": func_name, "decision": _tg_decision.reason, "flags": _tg_decision.parameter_flags},
+                                ))
+                            except Exception:
+                                pass
+                            _any_tool_executed = True
+                            messages.append({"role": "tool", "tool_call_id": tcall["id"], "name": func_name, "content": res_str})
+                            continue
+
+                        if _tg_decision.action == GateAction.CONFIRM:
+                            # v1: allow with prominent log (confirmation modal is Phase 2)
+                            yield f"data: {json.dumps({'type': 'action', 'content': f'CONFIRM: {func_name} (auto-approved v1)'})}\\n\\n"
+                            try:
+                                import asyncio as _aio_tg2
+                                _aio_tg2.ensure_future(EL.emit_policy_event(
+                                    "policy.toolgate_confirmed",
+                                    f"ToolGate confirm (auto-approved v1) {func_name}: {_tg_decision.reason}",
+                                    trace_id=_trace_id, agent_id=_agent_id_str, user_id=operator_name,
+                                    policy_ref=f"toolgate:{_tg_mode}",
+                                    policy_decision="confirmed",
+                                    policy_reason=_tg_decision.reason,
+                                    detail={"tool": func_name, "risk": _tg_decision.risk_level.value, "flags": _tg_decision.parameter_flags},
+                                ))
+                            except Exception:
+                                pass
+
+                        # Execute (allow or auto-approved confirm)
                         yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                         res_str = await execute_native_tool(func_name, args, db)
                         _any_tool_executed = True
@@ -1868,11 +1922,42 @@ BEHAVIOUR:
                                     args[k] = v_parsed
                                 _log.info(f"[Shogun] Text-mode tool '{func_name}' parsed args: {args}")
 
-                            yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
-                            res_str = await execute_native_tool(func_name, args, db)
-                            _any_tool_executed = True
-                            _text_tool_results.append((func_name, args, res_str))
-                            _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
+                            # ── ToolGate enforcement (text-mode path) ──
+                            from shogun.services.tool_gate import check_tool_access, GateAction
+                            _tg_mode = "ronin_desktop" if _posture_filter.get("ronin_enabled") else "standard"
+                            _tg_campaign = None
+                            _tg_preset_key = _posture_filter.get("active_campaign_preset")
+                            if _tg_preset_key:
+                                from shogun.services.campaign_presets import get_preset as _get_preset
+                                _tg_campaign = _get_preset(_tg_preset_key)
+
+                            _tg_decision = await check_tool_access(
+                                mode=_tg_mode,
+                                tool_name=func_name,
+                                args=args,
+                                campaign_preset=_tg_campaign,
+                            )
+
+                            if _tg_decision.action == GateAction.BLOCK:
+                                res_str = json.dumps({
+                                    "status": "blocked",
+                                    "message": f"ToolGate blocked '{func_name}': {_tg_decision.reason}",
+                                })
+                                yield f"data: {json.dumps({'type': 'action', 'content': f'BLOCKED: {func_name}'})}\\n\\n"
+                                _any_tool_executed = True
+                                _text_tool_results.append((func_name, args, res_str))
+                                _log.info(f"[Shogun] Text-mode tool '{func_name}' BLOCKED by ToolGate: {_tg_decision.reason}")
+                            else:
+                                if _tg_decision.action == GateAction.CONFIRM:
+                                    yield f"data: {json.dumps({'type': 'action', 'content': f'CONFIRM: {func_name} (auto-approved v1)'})}\\n\\n"
+                                    _log.info(f"[Shogun] Text-mode tool '{func_name}' CONFIRMED (auto-approved v1): {_tg_decision.reason}")
+
+                                # Execute (allow or auto-approved confirm)
+                                yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\\n\\n"
+                                res_str = await execute_native_tool(func_name, args, db)
+                                _any_tool_executed = True
+                                _text_tool_results.append((func_name, args, res_str))
+                                _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
 
                             # ── Ronin Visual Events (text-mode path) ──
                             if func_name.startswith("desktop_"):

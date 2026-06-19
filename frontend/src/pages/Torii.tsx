@@ -177,6 +177,7 @@ export function Torii() {
       ]);
       setPosture(postureRes.data.data);
       setPolicies(policiesRes.data.data || []);
+
     } catch (err) {
       console.error('Error fetching security data:', err);
     } finally {
@@ -418,6 +419,8 @@ export function Torii() {
               ))}
             </div>
           )}
+
+
 
           <div className="shogun-card bg-red-500/5 border-red-500/20">
             <h4 className="text-xs font-bold text-red-500 flex items-center gap-2 mb-2">

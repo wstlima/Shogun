@@ -181,3 +181,24 @@ async def list_tokens(
         }
         for t in tokens
     ]
+
+
+@router.post("/tokens/{token_id}/revoke")
+async def revoke_token(
+    token_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_role("owner", "admin")),
+):
+    """Revoke an enrollment token."""
+    svc = MemberService(db)
+    token = await svc.revoke_token(token_id)
+    if token is None:
+        raise HTTPException(status_code=404, detail="Token not found")
+
+    audit = AuditService(db)
+    await audit.append(
+        actor_type="admin", action="enrollment.token_revoked",
+        actor_id=admin["id"], target_type="enrollment_token", target_id=str(token_id),
+        metadata_json={"label": token.label},
+    )
+    return {"id": str(token.id), "is_revoked": True, "label": token.label}

@@ -40,7 +40,7 @@ Most AI tools give you a chat box. Shogun gives you an **entire operating system
 | 🔗 **Agent-to-Agent (Nexus)** | Connect multiple Shogun instances via peer-to-peer Nexus, **and** send/receive tasks with external enterprise agents (Microsoft 365, Salesforce, Google, ServiceNow) through the bidirectional Nexus External Gateway. Inbound A2A + outbound dispatch with governed security. |
 | 🔄 **Visual Workflow Builder** | Design multi-step AI pipelines with a drag-and-drop canvas. Chain agents, approvals, logic gates, and browser actions into executable flows. |
 | 📜 **Constitutional Governance** | Write YAML rules your AI can never break. Version-controlled, auditable, with enforcement modes (Block / Warn / Audit). |
-| 🛡️ **5-Tier Security** | From SHRINE (zero-trust) to RONIN (unrestricted). Fine-grained control over filesystem, network, shell, and tool access. Emergency kill switch (Harakiri) freezes everything instantly. |
+| 🛡️ **5-Tier Security + ToolGate** | From SHRINE (zero-trust) to RONIN (unrestricted). Fine-grained control over filesystem, network, shell, and tool access. **ToolGate** runtime enforcement inspects every tool call before execution — risk-scoring parameters and blocking dangerous operations based on the active tier. Emergency kill switch (Harakiri) freezes everything instantly. |
 | 📊 **Compliance Dashboard** | NIS2, SOC2, and EU AI Act-ready logging. Tamper-proof HMAC audit chain, trace reconstruction, and compliance exports. |
 | 🎓 **4,000+ Skills (Dojo)** | Browse and certify your agents on specialized skills from [OpenClaw College](https://www.openclawcollege.com). Training literature, exams, and achievement tracking. |
 | 🔄 **Self-Improvement (Bushido)** | Automated reflection cycles where the AI analyzes its own performance and generates optimization insights. |
@@ -73,9 +73,9 @@ When you move beyond a single Shogun instance, **Gensui** becomes your command-a
 | 🗺️ **Interactive Network Topology** | Visual SVG map of your entire agent fleet with pan/zoom, hub-and-spoke layout, nexus peer connections, and **external enterprise agents** shown as diamond-shaped nodes with platform-specific colors. |
 | 🔍 **LAN Network Scanner** | One-click scan of your local network to discover Shogun instances. Detects enrolled agents, unenrolled (rogue) agents, and unknown services on port 8000. |
 | ⚠️ **Rogue Agent Detection** | Instantly spot unauthorized Shogun instances running on your network — critical for security compliance and preventing shadow AI. |
-| 🎟️ **Enrollment Token System** | Generate secure enrollment tokens for new Shogun instances. Approve/reject enrollment requests with optional labels. |
+| 🎟️ **Enrollment Token System** | Generate secure enrollment tokens for new Shogun instances. Approve/reject enrollment requests with optional labels. **Revoke tokens** instantly to prevent unauthorized enrollments. |
 | 🏷️ **Group Management** | Organize agents into logical groups (by team, environment, region). Apply policies and postures at the group level. |
-| 🛡️ **Security Posture Control** | Define and enforce security postures across your fleet. Standard, Elevated, and Lockdown modes with granular permission control. |
+| 🛡️ **Security Posture Management** | Full CRUD for security postures — create custom postures, edit built-in ones, delete custom postures. 14 permission flags + per-tool overrides (allow/confirm/block). Pushed to fleet members automatically. |
 | 💀 **Remote Harakiri** | Emergency kill switch — instantly freeze any agent (soft freeze, hard stop, network isolate, or full terminate) from the Gensui dashboard. |
 | 📋 **Centralized Audit Log** | Tamper-proof HMAC-chained audit trail across all managed agents. NIS2/SOC2/EU AI Act compliant. |
 | 🔒 **Admin Authentication** | JWT-based admin portal with role-based access control (Owner, Admin, Viewer). |

@@ -45,3 +45,6 @@ class SecurityPosture(Base, UUIDMixin, AuditMixin):
     allow_external_web: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_file_write: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_external_api: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Per-tool overrides — Campaign Preset style ({"send_email": "block", "desktop_click": "confirm"})
+    tool_overrides_json: Mapped[dict | None] = mapped_column(JSONType(), nullable=True, default=dict)

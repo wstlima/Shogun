@@ -30,6 +30,17 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # ── Schema migrations (add missing columns to existing tables) ──
+    from sqlalchemy import text as sa_text
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(sa_text(
+                "ALTER TABLE security_postures ADD COLUMN tool_overrides_json TEXT"
+            ))
+            log.info("Migration: added tool_overrides_json column to security_postures")
+        except Exception:
+            pass  # Column already exists
+
     # Seed built-in postures and initial admin
     from gensui.db.engine import async_session_factory
     from gensui.services.seed import seed_database

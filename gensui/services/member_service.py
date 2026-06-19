@@ -63,6 +63,18 @@ class MemberService:
         result = await self.session.execute(select(EnrollmentToken))
         return list(result.scalars().all())
 
+    async def revoke_token(self, token_id: uuid.UUID) -> EnrollmentToken | None:
+        """Revoke an enrollment token so it can no longer be used."""
+        result = await self.session.execute(
+            select(EnrollmentToken).where(EnrollmentToken.id == token_id)
+        )
+        token = result.scalars().first()
+        if token is None:
+            return None
+        token.is_revoked = True
+        await self.session.flush()
+        return token
+
     # ── Enrollment ───────────────────────────────────────────
 
     async def enroll(

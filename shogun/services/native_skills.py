@@ -12,6 +12,8 @@ logger = logging.getLogger("shogun.native_skills")
 NATIVE_TOOLS = [
     {
         "type": "function",
+        "risk": "low",
+        "category": "debug",
         "function": {
             "name": "echo_tool",
             "description": "A debug tool that echoes back exactly what you send it. Use this to verify that the tool execution pipeline is working.",
@@ -29,6 +31,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "debug",
         "function": {
             "name": "tool_list_debug",
             "description": "A debug tool that returns a list of all tools available to the current mission context.",
@@ -40,6 +44,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "medium",
+        "category": "agents",
         "function": {
             "name": "spawn_samurai",
             "description": "Spawn a new Samurai agent in the Dojo.",
@@ -70,6 +76,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "system",
         "function": {
             "name": "list_available_models",
             "description": "List all active model providers and the models they have available.",
@@ -81,6 +89,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "medium",
+        "category": "system",
         "function": {
             "name": "update_model_settings",
             "description": "Update Shogun's primary and fallback models. Use when the user requests to switch the core model.",
@@ -103,6 +113,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "medium",
+        "category": "memory",
         "function": {
             "name": "store_memory",
             "description": "Store important information in your persistent Archives memory system. Use this when the user shares personal details (e.g. their name), preferences, facts, or anything worth remembering across sessions.",
@@ -133,6 +145,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "comms",
         "function": {
             "name": "fetch_inbox",
             "description": "Fetch a list of emails from a mail folder. Returns message summaries with UID, sender, subject, date, and a short body preview. Use this to check the inbox or any folder.",
@@ -157,6 +171,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "comms",
         "function": {
             "name": "read_email",
             "description": "Read the full contents of a specific email by its UID. Returns the complete body text, HTML, sender, subject, date, and attachments list. Use this after fetch_inbox to read a specific message.",
@@ -178,6 +194,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "high",
+        "category": "comms",
         "function": {
             "name": "send_email",
             "description": "Send an email via the configured SMTP account. Use this to compose new emails or reply to messages. For replies, include the original context in the body.",
@@ -211,6 +229,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "comms",
         "function": {
             "name": "list_calendar_events",
             "description": "List calendar events within a date range. Returns event titles, times, locations, and descriptions.",
@@ -231,6 +251,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "medium",
+        "category": "comms",
         "function": {
             "name": "create_calendar_event",
             "description": "Create a new calendar event.",
@@ -268,6 +290,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "comms",
         "function": {
             "name": "list_cron_jobs",
             "description": "List all Bushido schedules (cron jobs). Returns each job's name, type, frequency, schedule time, enabled status, and next run time.",
@@ -279,6 +303,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "high",
+        "category": "comms",
         "function": {
             "name": "create_cron_job",
             "description": "Create a new custom Bushido schedule (cron job). Specify the job type, frequency, schedule time, and optional task instruction.",
@@ -318,6 +344,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "high",
+        "category": "comms",
         "function": {
             "name": "delete_cron_job",
             "description": "Delete a custom Bushido schedule (cron job) by its ID. Preset schedules cannot be deleted, only disabled.",
@@ -335,6 +363,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "medium",
+        "category": "workflow",
         "function": {
             "name": "create_agent_flow",
             "description": "Create a new Agent Flow workflow with nodes and edges. Use this when the user asks you to build, design, or create a workflow or pipeline for orchestrating AI agents.",
@@ -385,6 +415,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "browser",
         "function": {
             "name": "browse_web",
             "description": "Browse a web page using Mado browser automation. Navigate to a URL and extract content. Requires Mado to be enabled in the Torii security settings. You can use 'extract_preset' to target specific types of content without knowing CSS.",
@@ -416,6 +448,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "low",
+        "category": "browser",
         "function": {
             "name": "take_screenshot",
             "description": "Take a screenshot of the current browser page. Must have navigated to a URL first using browse_web.",
@@ -433,6 +467,8 @@ NATIVE_TOOLS = [
     # ── Ronin Desktop Control ──────────────────────────────────────
     {
         "type": "function",
+        "risk": "low",
+        "category": "desktop",
         "function": {
             "name": "desktop_screenshot",
             "description": "Take a screenshot of the entire desktop screen (not just a browser — the full OS desktop). Requires Ronin desktop control to be enabled in Torii security settings (TACTICAL tier or higher). Use this when you need to see what is on screen.",
@@ -449,6 +485,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "high",
+        "category": "desktop",
         "function": {
             "name": "desktop_click",
             "description": "Click a position on the desktop screen. Requires Ronin desktop control with mouse enabled (TACTICAL tier or higher). Use desktop_screenshot first to see the screen and identify coordinates.",
@@ -479,6 +517,8 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
+        "risk": "high",
+        "category": "desktop",
         "function": {
             "name": "desktop_type",
             "description": "Type text using the keyboard on the desktop. Requires Ronin desktop control with keyboard enabled (TACTICAL tier or higher). Can also send hotkeys like 'ctrl+c', 'alt+tab', 'enter'.",

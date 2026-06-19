@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { UserPlus, Check, X, Copy, AlertCircle, Loader2, Plus, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Check, X, Copy, AlertCircle, Loader2, Plus, CheckCircle2, Ban } from 'lucide-react';
 import api from '../lib/api';
 
 export default function Enrollment() {
@@ -67,6 +67,17 @@ export default function Enrollment() {
       console.error('Token creation error:', err.response || err);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleRevokeToken = async (tokenId: string) => {
+    if (!confirm('Revoke this token? It will no longer be usable for enrollment.')) return;
+    try {
+      await api.post(`/enrollment/tokens/${tokenId}/revoke`);
+      setSuccess('Token revoked successfully');
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to revoke token');
     }
   };
 
@@ -148,6 +159,15 @@ export default function Enrollment() {
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gensui-400">{t.use_count}/{t.max_uses} uses</span>
                 {t.is_revoked && <span className="text-[10px] text-red-400 font-bold uppercase">Revoked</span>}
+                {!t.is_revoked && (
+                  <button
+                    onClick={() => handleRevokeToken(t.id)}
+                    className="p-1.5 text-gensui-400 hover:text-red-400 transition-colors"
+                    title="Revoke token"
+                  >
+                    <Ban size={14} />
+                  </button>
+                )}
                 <button
                   onClick={() => { navigator.clipboard.writeText(t.token); setSuccess('Token copied to clipboard'); }}
                   className="p-1.5 text-gensui-400 hover:text-cyan-400 transition-colors"

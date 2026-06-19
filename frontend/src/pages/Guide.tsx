@@ -1810,14 +1810,74 @@ export function Guide() {
                       <div className="font-bold text-shogun-text flex items-center gap-2"><RefreshCw className="w-4 h-4 text-shogun-gold" /> Revision History</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Every time you publish the Constitution, a new revision is saved. You can review all past versions in the Kaizen sidebar. This creates an immutable audit trail — you can always see who changed what and when. Useful for compliance and debugging unexpected behavior.</p>
                    </div>
-                   <div className="shogun-card space-y-2">
+                <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-shogun-gold" /> The Mandate</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">In addition to the Constitution (hard rules), the Mandate (Kaizen → Mandate tab) injects soft directives into every AI conversation. While the Constitution blocks actions, the Mandate shapes behavior — tone, language, priorities, and focus areas. Both work together to align the AI with your intentions.</p>
                    </div>
                 </div>
+              </section>
+
+             {/* 4. ToolGate — Runtime Enforcement */}
+             <section className="space-y-6">
+                <div className="flex items-center gap-3 border-b-2 border-orange-400/40 pb-3">
+                   <Shield className="w-6 h-6 text-orange-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">ToolGate — Runtime Tool Enforcement</h4>
+                      <p className="text-xs text-shogun-subdued">A real-time enforcement engine that inspects every tool call before execution and blocks dangerous operations based on risk analysis and the active security tier.</p>
+                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-orange-400" /> How It Works</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every time the AI attempts to execute a native tool (send email, create calendar event, browse the web, click the desktop, etc.), the ToolGate engine intercepts the call <strong>before it runs</strong>. It evaluates the tool's risk level against the current security tier's thresholds and either <strong>allows</strong>, <strong>requires confirmation</strong>, or <strong>blocks</strong> the call.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">This is separate from PostureGuard (which controls tool <em>visibility</em>). ToolGate adds a second enforcement layer that checks even visible tools for dangerous parameters — for example, allowing the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">send_email</code> tool to be available but blocking it if the recipient is an external domain.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><AlertCircle className="w-4 h-4 text-red-400" /> Risk Classification</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every native tool is classified with a <strong>risk score</strong> from 0.0 (harmless) to 1.0 (critical). The classification is based on four risk dimensions:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Data exfiltration:</strong> Can this tool send data outside the system? (send_email, external API calls)</li>
+                         <li><strong>Destructive mutation:</strong> Can this tool permanently alter or delete data? (file write, database operations)</li>
+                         <li><strong>Autonomy escalation:</strong> Can this tool spawn new processes or grant itself more power? (spawn_samurai, create_cron_job)</li>
+                         <li><strong>Physical world impact:</strong> Can this tool affect the real world? (desktop_click, desktop_type, send_email)</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-shogun-gold" /> Tier-Based Thresholds</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Each security tier defines two thresholds that control ToolGate's behavior:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Confirm threshold:</strong> Tools with risk scores above this require human confirmation before executing.</li>
+                         <li><strong>Block threshold:</strong> Tools with risk scores above this are blocked entirely — no amount of confirmation can override.</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Example: At TACTICAL tier, the confirm threshold is 0.5 and block threshold is 0.8. A tool with risk 0.6 (like send_email) will prompt for confirmation. A tool with risk 0.9 would be blocked outright.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Zap className="w-4 h-4 text-shogun-gold" /> Parameter-Aware Analysis</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">ToolGate doesn't just check the tool name — it inspects the actual parameters. The <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">check_tool_access</code> function analyzes:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Target paths:</strong> File operations targeting system directories get elevated risk.</li>
+                         <li><strong>Email recipients:</strong> External domains may trigger higher scrutiny than internal ones.</li>
+                         <li><strong>Cron schedules:</strong> Very frequent schedules (every minute) are flagged as higher risk.</li>
+                         <li><strong>Shell commands:</strong> Commands containing <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">rm</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">sudo</code>, or pipe chains get elevated risk.</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2 md:col-span-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-shogun-blue" /> Dual-Path Enforcement</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">ToolGate enforces on <strong>both</strong> tool execution paths in the system:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Structured mode:</strong> When the AI uses JSON-formatted tool calls (standard mode), ToolGate intercepts in the structured execution pipeline before <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">execute_native_tool</code> is called.</li>
+                         <li><strong>Text mode:</strong> When the AI uses text-based tool invocation (fallback mode), ToolGate intercepts in the text-mode extraction pipeline before the tool function is dispatched.</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">This ensures no tool call can bypass ToolGate regardless of the AI model's response format.</p>
+                   </div>
+                   <div className="shogun-card space-y-2 md:col-span-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-shogun-blue" /> Audit Trail</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every ToolGate decision is logged to the compliance dashboard with full provenance: tool name, parameters, computed risk score, the active tier, the decision (allow/confirm/block), and the threshold that triggered the decision. Blocked and confirmed events appear in the <strong>Risk</strong> tab of the Logs page. These entries are dual-written to both Layer 1 (operational, 90-day retention) and Layer 2 (immutable HMAC chain, 7-year retention).</p>
+                   </div>
+                </div>
              </section>
 
-             {/* 4. Harakiri Emergency Protocol */}
+             {/* 5. Harakiri Emergency Protocol */}
              <section className="space-y-6">
                 <div className="flex items-center gap-3 border-b-2 border-red-500/40 pb-3">
                    <AlertCircle className="w-6 h-6 text-red-500" />

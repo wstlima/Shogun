@@ -25,6 +25,7 @@ router = APIRouter(prefix="/security", tags=["Security"])
 _POSTURE_KEY = "security_posture"
 _DEFAULT_POSTURE = {
     "active_tier": "tactical",
+    "active_campaign_preset": None,
     "filesystem_mode": "scoped",
     "network_mode": "allowlist",
     "shell_enabled": False,
@@ -404,3 +405,85 @@ async def reset_kill_switch():
     except Exception:
         pass
     return ApiResponse(data={**posture, "message": "Kill switch reset. Posture restored to TACTICAL."})
+
+
+# ── Campaign Preset endpoints ────────────────────────────────────────
+
+@router.get("/campaign-presets", response_model=ApiResponse)
+async def list_campaign_presets():
+    """List all available campaign presets (built-in + custom)."""
+    from shogun.services.campaign_presets import list_presets
+    presets = list_presets()
+    return ApiResponse(data=presets)
+
+
+@router.get("/campaign-presets/{preset_key}", response_model=ApiResponse)
+async def get_campaign_preset(preset_key: str):
+    """Get a specific campaign preset by key."""
+    from shogun.services.campaign_presets import get_preset
+    preset = get_preset(preset_key)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"Campaign preset '{preset_key}' not found")
+    return ApiResponse(data=preset)
+
+
+@router.post("/campaign-presets", response_model=ApiResponse, status_code=201)
+async def create_campaign_preset(body: dict):
+    """Create a new custom campaign preset."""
+    from shogun.services.campaign_presets import create_custom_preset
+    key = body.get("key", "").strip()
+    name = body.get("name", "").strip()
+    if not key or not name:
+        raise HTTPException(status_code=400, detail="'key' and 'name' are required")
+    try:
+        preset = create_custom_preset(
+            key=key,
+            name=name,
+            description=body.get("description", ""),
+            timeout_minutes=body.get("timeout_minutes", 0),
+            tool_overrides=body.get("tool_overrides"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # ── Audit ──
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_policy_event(
+            "policy.campaign_preset_created",
+            f"Custom campaign preset created: {name} ({key})",
+            policy_ref=key,
+            policy_decision="created",
+            detail={"preset": preset},
+        )
+    except Exception:
+        pass
+    return ApiResponse(data=preset)
+
+
+@router.delete("/campaign-presets/{preset_key}", response_model=ApiResponse)
+async def delete_campaign_preset(preset_key: str):
+    """Delete a custom campaign preset."""
+    from shogun.services.campaign_presets import delete_custom_preset
+    try:
+        deleted = delete_custom_preset(preset_key)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Custom preset '{preset_key}' not found")
+    # If this preset was active, clear it from posture
+    posture = await _get_agent_posture()
+    if posture.get("active_campaign_preset") == preset_key:
+        posture["active_campaign_preset"] = None
+        await _save_agent_posture(posture)
+    # ── Audit ──
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_policy_event(
+            "policy.campaign_preset_deleted",
+            f"Custom campaign preset deleted: {preset_key}",
+            policy_ref=preset_key,
+            policy_decision="deleted",
+        )
+    except Exception:
+        pass
+    return ApiResponse(data={"deleted": preset_key})

@@ -293,17 +293,34 @@ export default function Guide() {
               <Shield size={20} className="text-amber-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">Security Postures</h2>
-                <p className="text-xs text-gensui-400">Define what Shogun instances are allowed to do. Each posture is a permission template.</p>
+                <p className="text-xs text-gensui-400">Define what Shogun instances are allowed to do. Each posture is a permission template. Create, edit, and delete postures to control your fleet.</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="glass-card p-4 space-y-2 md:col-span-2">
                 <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-amber-400" /> Posture Cards</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Each posture card shows the <strong>name</strong>, <strong>level number</strong>, and <strong>description</strong>. A "Built-in" tag appears on system-defined postures. Below the description, every permission is shown as a colored badge:</p>
+                <p className="text-xs text-gensui-400 leading-relaxed">Each posture card shows the <strong>name</strong>, <strong>level number</strong> (0–100, higher = more restrictive), and <strong>description</strong>. A "Built-in" tag appears on system-defined postures. Below the description, every permission is shown as a colored badge:</p>
                 <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
                   <li><strong className="text-emerald-400">Green (✓):</strong> Permission is <em>allowed</em> in this posture.</li>
                   <li><strong className="text-red-400">Red (✕):</strong> Permission is <em>denied</em> in this posture.</li>
                 </ul>
+                <p className="text-xs text-gensui-400 leading-relaxed mt-2">A stats row at the bottom shows the count of allowed, blocked, and tool override rules.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Zap size={14} className="text-emerald-400" /> Create Posture</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Click <strong>"Create Posture"</strong> in the top right to open the creation modal. Fill in a name, description, level (0–100), and toggle each of the 14 permission flags. You can also add <strong>tool overrides</strong> — per-tool rules that override the posture's general tool execution flag for specific tools (e.g., block <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">send_email</code> while allowing other tools). Click <strong>"Create"</strong> to save.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Eye size={14} className="text-cyan-400" /> Edit Posture</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Hover over any posture card and click the <strong>pencil icon</strong> to open the edit modal. You can change the description, level, all 14 permission flags, and tool overrides. <strong>Built-in postures</strong> (like OPEN, STANDARD, LOCKDOWN) can be edited — flags and description are modifiable — but their names cannot be changed. Edits persist across server restarts.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Trash2 size={14} className="text-red-400" /> Delete Posture</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Custom postures can be deleted by clicking the <strong>trash icon</strong> on the card. A confirmation dialog appears. Deleting a posture automatically <strong>unassigns</strong> it from any members or groups that were using it. <strong>Built-in postures cannot be deleted</strong> — the trash icon is hidden for them.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Settings size={14} className="text-purple-400" /> Tool Overrides</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">In the create/edit modal, expand the <strong>"Tool Overrides"</strong> section to define per-tool rules. Select a tool from the dropdown, then set it to <strong>Allow</strong>, <strong>Confirm</strong> (requires human approval before execution), or <strong>Block</strong> (tool call is rejected). Add multiple overrides for fine-grained control. These overrides are pushed to fleet members as part of their effective posture.</p>
               </div>
               <div className="glass-card p-4 space-y-2 md:col-span-2">
                 <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Lock size={14} className="text-amber-400" /> Permission Categories (14 Total)</div>
@@ -454,6 +471,10 @@ export default function Guide() {
               <div className="glass-card p-4 space-y-2">
                 <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Copy size={14} className="text-cyan-400" /> Copy Token</div>
                 <p className="text-xs text-gensui-400 leading-relaxed">Click the <strong>copy icon</strong> next to any token to copy it to your clipboard. Send this token to the Shogun operator &mdash; they paste it into their Gensui connection form on the Shogun side (Gensui page &rarr; Connect). The token is single-use by default.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><X size={14} className="text-red-400" /> Revoke Token</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Click the <strong>ban icon</strong> (✘) next to any active token to revoke it. A confirmation dialog appears. Once revoked, the token can <strong>never be used again</strong> for enrollment &mdash; any Shogun instance attempting to enroll with a revoked token will be rejected. The token remains visible in the list with a red <strong>"Revoked"</strong> badge for audit purposes. This action is logged in the HMAC-chained audit trail.</p>
               </div>
             </div>
           </section>
