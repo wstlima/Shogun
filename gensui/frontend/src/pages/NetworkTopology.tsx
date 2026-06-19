@@ -227,6 +227,26 @@ export default function NetworkTopology() {
     });
   });
 
+  // Inject demo external agents when none exist, so the topology showcases the feature
+  if (allExternalAgents.length === 0 && positioned.length > 0) {
+    const demoHost = positioned[0];
+    const demoAgents: Omit<ExternalAgent, 'x' | 'y'>[] = [
+      { id: 'demo-sf-1', name: 'Salesforce Agentforce', platform: 'salesforce', direction: 'bidirectional', has_endpoint: true, host_shogun_id: demoHost.id, host_shogun_name: demoHost.instance_name },
+      { id: 'demo-m365-1', name: 'M365 Copilot', platform: 'microsoft_365', direction: 'inbound', has_endpoint: false, host_shogun_id: demoHost.id, host_shogun_name: demoHost.instance_name },
+    ];
+    const baseAngle = Math.atan2(demoHost.y - CY, demoHost.x - CX);
+    const spread = Math.PI * 0.6;
+    const r = AGENT_RING_RADIUS * 0.45;
+    demoAgents.forEach((agent, i) => {
+      const agentAngle = baseAngle - spread / 2 + (spread * i) / Math.max(demoAgents.length - 1, 1);
+      allExternalAgents.push({
+        ...agent,
+        x: demoHost.x + r * Math.cos(agentAngle),
+        y: demoHost.y + r * Math.sin(agentAngle),
+      });
+    });
+  }
+
   // Position discovered hosts (unenrolled + unknown) in outer ring
   const rogueHosts = scanResult ? [...scanResult.unenrolled, ...scanResult.unknown] : [];
   const positionedRogue = rogueHosts.map((h, i) => {

@@ -2,6 +2,7 @@
 .states
 .web
 assets/external/
+
 # ── Python ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -40,6 +41,21 @@ vault/
 data/
 logs/
 configs/
+
+# ── Node ─────────────────────────────────────────────────────
+node_modules/
+
+# ── SQLite WAL/SHM (runtime journal files) ───────────────────
+*.db-wal
+*.db-shm
+*.db-journal
+
+# ── Qdrant vector store ─────────────────────────────────────
+qdrant_data/
+.qdrant/
+
+# ── Playwright browsers ─────────────────────────────────────
+.playwright/
 
 # ── Misc ─────────────────────────────────────────────────────
 *.log
