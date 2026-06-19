@@ -67,14 +67,14 @@ const ROGUE_COLOR = { fill: '#1e1025', stroke: '#ef4444', glow: 'rgba(239, 68, 6
 const UNKNOWN_COLOR = { fill: '#1a1a2e', stroke: '#6b7280', glow: 'rgba(107, 114, 128, 0.2)' };
 
 const PLATFORM_COLORS: Record<string, { fill: string; stroke: string; glow: string }> = {
-  microsoft_365: { fill: '#0e1a2d', stroke: '#0078d4', glow: 'rgba(0, 120, 212, 0.3)' },
-  salesforce:    { fill: '#0e1a2d', stroke: '#00a1e0', glow: 'rgba(0, 161, 224, 0.25)' },
-  google:        { fill: '#1a1e0e', stroke: '#34a853', glow: 'rgba(52, 168, 83, 0.25)' },
-  servicenow:    { fill: '#1a1a0e', stroke: '#81b532', glow: 'rgba(129, 181, 50, 0.25)' },
-  custom:        { fill: '#1a0e1e', stroke: '#a855f7', glow: 'rgba(168, 85, 247, 0.25)' },
+  microsoft_365: { fill: '#0c1e3a', stroke: '#2b88d8', glow: 'rgba(0, 120, 212, 0.5)' },
+  salesforce:    { fill: '#0c1e30', stroke: '#00bcd4', glow: 'rgba(0, 188, 212, 0.45)' },
+  google:        { fill: '#142210', stroke: '#4caf50', glow: 'rgba(76, 175, 80, 0.4)' },
+  servicenow:    { fill: '#1e1e0a', stroke: '#9ccc65', glow: 'rgba(156, 204, 101, 0.4)' },
+  custom:        { fill: '#1e0c28', stroke: '#ba68c8', glow: 'rgba(186, 104, 200, 0.4)' },
 };
 const getAgentColor = (platform: string) => PLATFORM_COLORS[platform] || PLATFORM_COLORS.custom;
-const AGENT_R = 18;
+const AGENT_R = 22;
 
 export default function NetworkTopology() {
   const [members, setMembers] = useState<MemberNode[]>([]);
@@ -216,9 +216,9 @@ export default function NetworkTopology() {
     host.external_agents.forEach((agent, i) => {
       const count = host.external_agents.length;
       const baseAngle = Math.atan2(host.y - CY, host.x - CX);
-      const spread = Math.PI * 0.6;
+      const spread = Math.PI * 0.8;
       const agentAngle = baseAngle - spread / 2 + (spread * i) / Math.max(count - 1, 1);
-      const r = AGENT_RING_RADIUS * 0.45;
+      const r = AGENT_RING_RADIUS * 0.75;
       allExternalAgents.push({
         ...agent,
         x: host.x + r * Math.cos(count === 1 ? baseAngle + Math.PI : agentAngle),
@@ -235,8 +235,8 @@ export default function NetworkTopology() {
       { id: 'demo-m365-1', name: 'M365 Copilot', platform: 'microsoft_365', direction: 'inbound', has_endpoint: false, host_shogun_id: demoHost.id, host_shogun_name: demoHost.instance_name },
     ];
     const baseAngle = Math.atan2(demoHost.y - CY, demoHost.x - CX);
-    const spread = Math.PI * 0.6;
-    const r = AGENT_RING_RADIUS * 0.45;
+    const spread = Math.PI * 0.8;
+    const r = AGENT_RING_RADIUS * 0.75;
     demoAgents.forEach((agent, i) => {
       const agentAngle = baseAngle - spread / 2 + (spread * i) / Math.max(demoAgents.length - 1, 1);
       allExternalAgents.push({
@@ -469,9 +469,9 @@ export default function NetworkTopology() {
                   x1={host.x} y1={host.y}
                   x2={agent.x} y2={agent.y}
                   stroke={ac.stroke}
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  opacity={0.5}
+                  strokeWidth="2"
+                  strokeDasharray="6 4"
+                  opacity={0.7}
                 />
               );
             })}
@@ -489,20 +489,21 @@ export default function NetworkTopology() {
                   onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, agent })}
                   onMouseLeave={() => setTooltip(null)}
                 >
-                  {/* Glow pulse */}
-                  <path d={d} fill="none" stroke={ac.glow} strokeWidth="1">
-                    <animate attributeName="opacity" from="0.6" to="0" dur="3s" repeatCount="indefinite" />
+                  {/* Outer glow pulse */}
+                  <path d={`M ${agent.x} ${agent.y - sz - 4} L ${agent.x + sz + 4} ${agent.y} L ${agent.x} ${agent.y + sz + 4} L ${agent.x - sz - 4} ${agent.y} Z`} fill="none" stroke={ac.glow} strokeWidth="2">
+                    <animate attributeName="opacity" from="0.8" to="0" dur="2.5s" repeatCount="indefinite" />
                   </path>
-                  <path d={d} fill={ac.fill} stroke={ac.stroke} strokeWidth="1.5" />
+                  {/* Main diamond */}
+                  <path d={d} fill={ac.fill} stroke={ac.stroke} strokeWidth="2.5" />
                   {/* Direction arrows */}
-                  <text x={agent.x} y={agent.y + 1} textAnchor="middle" dominantBaseline="central" fill={ac.stroke} fontSize="10" fontWeight="800">
+                  <text x={agent.x} y={agent.y + 1} textAnchor="middle" dominantBaseline="central" fill={ac.stroke} fontSize="13" fontWeight="800">
                     {agent.direction === 'bidirectional' ? '⇄' : agent.direction === 'outbound' ? '→' : '←'}
                   </text>
                   {/* Name below */}
-                  <text x={agent.x} y={agent.y + sz + 12} textAnchor="middle" fill={ac.stroke} fontSize="7" fontWeight="600">
-                    {agent.name.length > 18 ? agent.name.slice(0, 16) + '…' : agent.name}
+                  <text x={agent.x} y={agent.y + sz + 14} textAnchor="middle" fill={ac.stroke} fontSize="9" fontWeight="700">
+                    {agent.name.length > 20 ? agent.name.slice(0, 18) + '…' : agent.name}
                   </text>
-                  <text x={agent.x} y={agent.y + sz + 21} textAnchor="middle" fill="#555" fontSize="6" fontWeight="500">
+                  <text x={agent.x} y={agent.y + sz + 25} textAnchor="middle" fill="#6b7280" fontSize="7" fontWeight="600" letterSpacing="1">
                     {agent.platform.replace('_', ' ').toUpperCase()}
                   </text>
                 </g>
