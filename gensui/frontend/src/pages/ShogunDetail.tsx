@@ -40,6 +40,29 @@ interface TelemetryEvent {
   timestamp: string | null;
 }
 
+function PostureSelector({ memberId, onAssigned }: { memberId: string; onAssigned: () => void }) {
+  const [postures, setPostures] = useState<{ id: string; name: string; level: number }[]>([]);
+  useEffect(() => {
+    api.get('/postures').then(r => setPostures(r.data || [])).catch(() => {});
+  }, []);
+  const assign = async (postureId: string | null) => {
+    try {
+      await api.post(`/members/${memberId}/posture`, { posture_id: postureId });
+      onAssigned();
+    } catch {}
+  };
+  return (
+    <select
+      onChange={e => assign(e.target.value || null)}
+      className="gensui-input text-xs w-full"
+      defaultValue=""
+    >
+      <option value="">— Unassign —</option>
+      {postures.map(p => <option key={p.id} value={p.id}>{p.name} (L{p.level})</option>)}
+    </select>
+  );
+}
+
 export default function ShogunDetail() {
   const { id } = useParams<{ id: string }>();
   const [member, setMember] = useState<MemberDetail | null>(null);
@@ -216,6 +239,13 @@ export default function ShogunDetail() {
             ) : (
               <p className="text-xs text-gensui-500">No posture assigned</p>
             )}
+            {/* Assign Posture */}
+            <div className="pt-2 border-t border-gensui-700/30">
+              <label className="text-[10px] text-gensui-500 uppercase tracking-wider mb-1 block">Assign Posture</label>
+              <PostureSelector memberId={id!} onAssigned={() => {
+                api.get(`/members/${id}`).then(r => setMember(r.data));
+              }} />
+            </div>
           </div>
 
           {/* Groups */}

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { I18nProvider } from './i18n';
 import { isAuthenticated } from './lib/auth';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
@@ -24,6 +25,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <I18nProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -53,5 +55,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </I18nProvider>
   );
 }

@@ -112,3 +112,126 @@ async def update_profile(
         "role": user.role,
         "display_name": user.display_name,
     }
+
+
+# ── Admin Management ────────────────────────────────────────
+
+class CreateAdminRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str = "Admin"
+    role: str = "admin"
+
+
+class UpdateAdminRoleRequest(BaseModel):
+    role: str
+
+
+@router.get("/admins")
+async def list_admins(
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """List all admin users."""
+    auth = AuthService(db)
+    admins = await auth.list_admins()
+    return {
+        "admins": [
+            {
+                "id": str(a.id),
+                "email": a.email,
+                "role": a.role,
+                "display_name": a.display_name,
+                "is_active": a.is_active,
+                "last_login_at": a.last_login_at,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in admins
+        ]
+    }
+
+
+@router.post("/admins")
+async def create_admin(
+    req: CreateAdminRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """Create a new admin user. Only owners and admins can create new admins."""
+    # Check that current admin has sufficient privilege
+    if admin.get("role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owners/admins can create admins")
+
+    if req.role not in ("owner", "admin", "auditor", "operator", "viewer"):
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    auth = AuthService(db)
+
+    # Check if email already exists
+    existing = await auth.get_by_email(req.email)
+    if existing:
+        raise HTTPException(status_code=409, detail="An admin with this email already exists")
+
+    new_admin = await auth.create_admin(
+        email=req.email,
+        password=req.password,
+        display_name=req.display_name,
+        role=req.role,
+    )
+    await db.commit()
+    return {
+        "id": str(new_admin.id),
+        "email": new_admin.email,
+        "role": new_admin.role,
+        "display_name": new_admin.display_name,
+    }
+
+
+@router.patch("/admins/{admin_id}/role")
+async def update_admin_role(
+    admin_id: str,
+    req: UpdateAdminRoleRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """Update an admin's role. Only owners can change roles."""
+    if admin.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only owners can change admin roles")
+
+    if req.role not in ("owner", "admin", "auditor", "operator", "viewer"):
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    auth = AuthService(db)
+    user = await auth.get_by_id(uuid.UUID(admin_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    user.role = req.role
+    await db.commit()
+    return {"id": str(user.id), "email": user.email, "role": user.role}
+
+
+@router.delete("/admins/{admin_id}")
+async def deactivate_admin(
+    admin_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """Deactivate an admin user."""
+    if admin.get("role") not in ("owner",):
+        raise HTTPException(status_code=403, detail="Only owners can deactivate admins")
+
+    if admin["id"] == admin_id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
+
+    auth = AuthService(db)
+    user = await auth.get_by_id(uuid.UUID(admin_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    user.is_active = False
+    await db.commit()
+    return {"status": "deactivated", "id": admin_id}

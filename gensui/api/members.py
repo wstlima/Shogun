@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gensui.api.deps import get_db, get_current_admin, require_role
@@ -115,3 +116,40 @@ async def disable_member(
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"status": "disabled", "shogun_id": str(member.id)}
+
+
+class AssignPostureRequest(BaseModel):
+    posture_id: str | None = None  # None = unassign
+
+
+@router.post("/{member_id}/posture")
+async def assign_posture(
+    member_id: uuid.UUID,
+    req: AssignPostureRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_role("owner", "admin")),
+):
+    """Assign a security posture to an individual Shogun member."""
+    svc = MemberService(db)
+    member = await svc.get_by_id(member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    posture_uuid = uuid.UUID(req.posture_id) if req.posture_id else None
+
+    # Validate posture exists
+    if posture_uuid:
+        from gensui.services.posture_service import PostureService
+        psvc = PostureService(db)
+        posture = await psvc.get_by_id(posture_uuid)
+        if posture is None:
+            raise HTTPException(status_code=404, detail="Posture not found")
+
+    member.individual_posture_id = posture_uuid
+    member.effective_posture_id = posture_uuid
+    await db.commit()
+    return {
+        "status": "ok",
+        "member_id": str(member.id),
+        "posture_id": str(posture_uuid) if posture_uuid else None,
+    }

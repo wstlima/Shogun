@@ -186,3 +186,39 @@ async def delete_group(
     if not deleted:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"status": "deleted"}
+
+
+class AssignGroupPostureRequest(BaseModel):
+    posture_id: str | None = None  # None = unassign
+
+
+@router.post("/groups/{group_id}/posture")
+async def assign_group_posture(
+    group_id: uuid.UUID,
+    req: AssignGroupPostureRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(require_role("owner", "admin")),
+):
+    """Assign a security posture to a group."""
+    svc = GroupService(db)
+    group = await svc.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    posture_uuid = uuid.UUID(req.posture_id) if req.posture_id else None
+
+    # Validate posture exists
+    if posture_uuid:
+        from gensui.services.posture_service import PostureService
+        psvc = PostureService(db)
+        posture = await psvc.get_by_id(posture_uuid)
+        if posture is None:
+            raise HTTPException(status_code=404, detail="Posture not found")
+
+    group.posture_id = posture_uuid
+    await db.commit()
+    return {
+        "status": "ok",
+        "group_id": str(group.id),
+        "posture_id": str(posture_uuid) if posture_uuid else None,
+    }

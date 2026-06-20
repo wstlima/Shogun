@@ -181,6 +181,60 @@ Each Shogun instance sends periodic heartbeats to Gensui with status, metrics, a
 
 ---
 
+## 🛡️ Safety & Security Architecture
+
+Shogun implements a **6-phase security architecture** designed for NIS2, SOC 2, and EU AI Act compliance. Security decisions flow from Gensui (fleet-wide policy) down to each Shogun instance (runtime enforcement).
+
+### Phase 1: ToolGate — Runtime Tool Enforcement
+
+Every tool call passes through **ToolGate** before execution. It evaluates each call against the active security posture and returns one of three verdicts:
+
+| Verdict | Behavior |
+|---------|----------|
+| ✅ `allow` | Tool executes immediately |
+| ⚠️ `confirm` | **Human-in-the-loop** — shows a confirmation modal. User must approve/deny within 60s (auto-deny on timeout) |
+| 🚫 `block` | Tool call is rejected. Reason logged to immutable audit chain |
+
+**Evaluation order:** Tool-specific override → Permission flag check → Default allow.
+
+**14 Permission Flags:** `allow_external_models`, `allow_local_models`, `allow_tool_execution`, `allow_mado`, `allow_memory_write`, `allow_memory_read`, `allow_agent_flow`, `allow_nexus`, `allow_samurai_delegation`, `allow_scheduled_triggers`, `allow_autonomous_loops`, `allow_external_web`, `allow_file_write`, `allow_external_api`.
+
+### Phase 2: Quarantine — Soft-Delete Recovery
+
+File deletions go to `.shogun_trash/` instead of permanent delete. Each entry stores: original path, timestamp, actor, size, and reason. Files can be restored or auto-purged after configurable retention (default: 30 days).
+
+### Phase 3: Prompt Injection Containment
+
+External content (web scrapes, emails, API responses) is automatically wrapped with `⚠ UNTRUSTED EXTERNAL DATA` boundary markers before entering the system prompt context. This prevents adversarial instructions embedded in external content from hijacking the AI agent.
+
+### Phase 4: Gensui → Shogun Posture Push
+
+When Gensui administrators modify security postures, updates are pushed to connected Shogun instances via the heartbeat protocol. **Scope hierarchy:** Individual posture > Group posture > Default fleet posture.
+
+### Phase 5: Fleet Audit Dashboard
+
+Multi-instance audit analytics with 5 tabs: Overview (fleet statistics, HMAC chain verification), Per-Member (audit/telemetry per instance), Telemetry (severity/category/event type breakdown), Compliance (NIS2/SOC2/EU AI Act report), and Raw Log (full audit trail with CSV export up to 50K entries).
+
+### Phase 6: Enterprise Identity
+
+SPIFFE/SPIRE trust domains, OIDC SSO (Keycloak, Auth0, Okta, Azure AD), and service accounts with API key management (create/rotate/revoke). Machine auth via `X-API-Key` header with rate limiting.
+
+### Immutable Audit Chain
+
+All security events are dual-written: **Layer 1** (operational SQLite, 90-day retention) for fast queries, and **Layer 2** (append-only HMAC-SHA256 chain, 7-year retention) for compliance. No updates, no deletes — tamper-evident by design.
+
+### Built-in Security Postures
+
+| Posture | Level | Description |
+|---------|-------|-------------|
+| PERMISSIVE | L5 | All flags enabled, no restrictions |
+| STANDARD | L10 | Default — production-ready |
+| RESTRICTED | L50 | External access disabled |
+| LOCKDOWN | L90 | Most flags disabled |
+| PARANOID | L100 | Maximum restriction |
+
+---
+
 ## 🔗 Nexus External Gateway — Enterprise Agent Interoperability
 
 Shogun isn't limited to its own agent ecosystem. The **Nexus External Gateway** lets enterprise agents from other platforms — Microsoft 365 Copilot agents, Salesforce Einstein agents, Google Vertex agents, ServiceNow virtual agents — send tasks directly into Shogun for execution, all governed by the same security policies as internal operations.

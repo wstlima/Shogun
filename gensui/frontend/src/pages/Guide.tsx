@@ -689,6 +689,171 @@ export default function Guide() {
             </div>
           </section>
 
+          {/* ═══════════════════════════════════════════════════════════════
+              SAFETY & SECURITY PROTOCOLS
+              ═══════════════════════════════════════════════════════════════ */}
+          <section id="ref-security" className="space-y-6">
+            <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
+              <ShieldAlert size={28} className="text-red-400" />
+              <div>
+                <h2 className="text-2xl font-bold text-gensui-50">Safety & Security Protocols</h2>
+                <p className="text-xs text-gensui-400">Comprehensive runtime security architecture protecting every Shogun instance in the fleet.</p>
+              </div>
+            </div>
+
+            {/* Architecture Overview */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Shield size={18} className="text-amber-400" /> Architecture Overview</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">Shogun&apos;s security architecture is built in <strong className="text-gensui-200">6 layered phases</strong>, each independently enforceable. Security decisions flow from Gensui (fleet-wide policy) down to each Shogun instance (runtime enforcement). The system is designed for <strong>NIS2, SOC 2, and EU AI Act</strong> compliance.</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { phase: '1', title: 'ToolGate', desc: 'Runtime tool enforcement engine', color: 'text-red-400' },
+                  { phase: '2', title: 'Quarantine', desc: 'Soft-delete trash recovery', color: 'text-amber-400' },
+                  { phase: '3', title: 'Prompt Injection', desc: 'Untrusted content wrapping', color: 'text-purple-400' },
+                  { phase: '4', title: 'Posture Push', desc: 'Fleet-wide policy sync', color: 'text-cyan-400' },
+                  { phase: '5', title: 'Fleet Audit', desc: 'Multi-instance dashboards', color: 'text-emerald-400' },
+                  { phase: '6', title: 'Enterprise Identity', desc: 'SPIFFE/OIDC/service accounts', color: 'text-blue-400' },
+                ].map(p => (
+                  <div key={p.phase} className="bg-gensui-800/60 border border-gensui-700/30 rounded-lg p-3">
+                    <div className={`text-xs font-bold ${p.color}`}>Phase {p.phase}: {p.title}</div>
+                    <p className="text-[10px] text-gensui-500 mt-1">{p.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Phase 1: ToolGate */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Lock size={18} className="text-red-400" /> Phase 1: ToolGate — Runtime Tool Enforcement</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">ToolGate is the core security enforcement engine in Shogun. Every tool call passes through ToolGate <strong>before execution</strong>. It evaluates the call against the active security posture and returns one of three verdicts: <code className="text-gensui-300 bg-gensui-900 px-1 rounded">allow</code>, <code className="text-gensui-300 bg-gensui-900 px-1 rounded">confirm</code> (human-in-the-loop), or <code className="text-gensui-300 bg-gensui-900 px-1 rounded">block</code>.</p>
+
+              <div className="space-y-3">
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
+                  <div className="text-xs font-bold text-gensui-200 mb-1">How ToolGate Evaluates a Call</div>
+                  <ol className="text-[11px] text-gensui-400 leading-relaxed list-decimal pl-4 space-y-1">
+                    <li><strong>Tool Override Check</strong> — If the posture has a specific tool override (e.g., <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">send_email → block</code>), that verdict is returned immediately.</li>
+                    <li><strong>Permission Flag Check</strong> — The tool is mapped to a permission category (e.g., <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">browse_web → allow_external_web</code>). If that flag is false, the call is blocked.</li>
+                    <li><strong>Default Allow</strong> — If no override or flag matches, the tool call is allowed.</li>
+                  </ol>
+                </div>
+
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
+                  <div className="text-xs font-bold text-gensui-200 mb-1">Permission Categories (14 Flags)</div>
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-gensui-400">
+                    <span>• <code className="text-cyan-400">allow_external_models</code> — Cloud AI providers</span>
+                    <span>• <code className="text-cyan-400">allow_local_models</code> — Local models (Ollama)</span>
+                    <span>• <code className="text-cyan-400">allow_tool_execution</code> — Native tools</span>
+                    <span>• <code className="text-cyan-400">allow_mado</code> — Browser automation</span>
+                    <span>• <code className="text-cyan-400">allow_memory_write</code> — Archive writes</span>
+                    <span>• <code className="text-cyan-400">allow_memory_read</code> — Archive reads</span>
+                    <span>• <code className="text-cyan-400">allow_agent_flow</code> — Multi-agent workflows</span>
+                    <span>• <code className="text-cyan-400">allow_nexus</code> — Nexus collaboration</span>
+                    <span>• <code className="text-cyan-400">allow_samurai_delegation</code> — Sub-agent spawning</span>
+                    <span>• <code className="text-cyan-400">allow_scheduled_triggers</code> — Cron/scheduled tasks</span>
+                    <span>• <code className="text-cyan-400">allow_autonomous_loops</code> — Self-directed loops</span>
+                    <span>• <code className="text-cyan-400">allow_external_web</code> — External websites</span>
+                    <span>• <code className="text-cyan-400">allow_file_write</code> — Filesystem writes</span>
+                    <span>• <code className="text-cyan-400">allow_external_api</code> — Outbound API calls</span>
+                  </div>
+                </div>
+
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
+                  <div className="text-xs font-bold text-gensui-200 mb-1">Confirmation Modal (Human-in-the-Loop)</div>
+                  <p className="text-[11px] text-gensui-400 leading-relaxed">When a tool override is set to <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">confirm</code>, Shogun pauses execution and presents a confirmation modal in the chat interface. The modal shows the tool name, arguments, and a reason. The user must explicitly <strong>Approve</strong> or <strong>Deny</strong> before the tool executes. Denials are logged to the immutable audit chain.</p>
+                </div>
+
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
+                  <div className="text-xs font-bold text-gensui-200 mb-1">Audit Logging</div>
+                  <p className="text-[11px] text-gensui-400 leading-relaxed">Every ToolGate evaluation is logged with: tool name, arguments, verdict (allow/confirm/block), matched rule/flag, posture name, and timestamp. Blocked calls include the specific reason. All logs are written to the HMAC-chained immutable audit chain (Layer 2).</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Phase 2: Quarantine */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Trash2 size={18} className="text-amber-400" /> Phase 2: Quarantine — Soft-Delete Recovery</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">The Quarantine system replaces hard deletes with recoverable soft deletes. When a file deletion is requested, the file is moved to <code className="text-gensui-300 bg-gensui-900 px-1 rounded">.shogun_trash/</code> instead of being permanently removed. Files are stored with metadata (original path, deletion timestamp, reason) and can be restored or permanently purged.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Trash Storage</div>
+                  <p className="text-[11px] text-gensui-400">Files in <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">.shogun_trash/</code> retain their original path structure. Each entry stores: original_path, deleted_at, deleted_by, size_bytes, and reason.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Recovery & Purge</div>
+                  <p className="text-[11px] text-gensui-400">Administrators can restore files to their original location or permanently purge them. Auto-purge policies can be configured by age (e.g., 30 days).</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Phase 3: Prompt Injection */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><AlertTriangle size={18} className="text-purple-400" /> Phase 3: Prompt Injection Containment</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">External content (web scrapes, emails, API responses) can contain adversarial instructions designed to hijack the AI agent. Shogun&apos;s prompt injection containment automatically wraps all untrusted external content with boundary markers before it enters the system prompt context.</p>
+              <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-2">
+                <div className="text-xs font-bold text-gensui-200">Wrapping Format</div>
+                <pre className="text-[10px] text-gensui-400 bg-gensui-900 rounded p-2 overflow-x-auto">
+{`─── ⚠ UNTRUSTED EXTERNAL DATA ─────────────────
+Source: web_scrape | email | api_response
+URL: https://example.com
+─────────────────────────────────────────────────
+[external content here]
+─── END UNTRUSTED DATA ─────────────────────────`}
+                </pre>
+                <p className="text-[11px] text-gensui-400">This containment applies to: <strong>browse_web</strong> results, <strong>email content</strong> (read_email), <strong>external API</strong> responses, and any data flagged as untrusted. The markers instruct the model to treat the enclosed content as data, not instructions.</p>
+              </div>
+            </div>
+
+            {/* Phase 4: Posture Push */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Zap size={18} className="text-cyan-400" /> Phase 4: Gensui → Shogun Posture Push</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">When a Gensui administrator modifies a security posture, the updated configuration is pushed to all connected Shogun instances via the heartbeat protocol. This ensures fleet-wide policy consistency without requiring manual configuration on each instance.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Push Mechanism</div>
+                  <p className="text-[11px] text-gensui-400">Posture changes are delivered via the existing heartbeat response. Each Shogun instance checks the heartbeat response for posture updates and applies them immediately. No additional ports or protocols required.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Scope Hierarchy</div>
+                  <p className="text-[11px] text-gensui-400"><strong>Individual</strong> posture overrides take priority over <strong>Group</strong> posture, which overrides the <strong>Default</strong> fleet posture. This hierarchy allows fine-grained control while maintaining a sensible default.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Phase 5: Fleet Audit */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><BarChart3 size={18} className="text-emerald-400" /> Phase 5: Fleet Audit Views</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">Multi-instance audit dashboard providing fleet-wide visibility into security events, compliance status, and HMAC chain integrity. See the <strong>Fleet Audit</strong> section above for full details on tabs, metrics, and CSV export.</p>
+            </div>
+
+            {/* Phase 6: Enterprise Identity */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Key size={18} className="text-blue-400" /> Phase 6: Enterprise Identity</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">SPIFFE/SPIRE trust domains, Keycloak/OIDC SSO, and service accounts for M2M authentication. See the <strong>Enterprise Identity</strong> section above for full details on API keys, SSO providers, and role mapping.</p>
+            </div>
+
+            {/* Immutable Audit Chain */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><FileSearch size={18} className="text-gensui-400" /> Immutable Audit Chain (HMAC-SHA256)</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">All security events are dual-written: Layer 1 (operational SQLite, 90-day retention) for fast queries, and Layer 2 (immutable HMAC-chained SQLite, 7-year retention) for compliance. Layer 2 is append-only — no updates, no deletes. Each record&apos;s HMAC is derived from its content + the previous record&apos;s HMAC, creating a tamper-evident chain. Chain integrity can be verified at any time from the Fleet Audit dashboard.</p>
+            </div>
+
+            {/* Security Postures Detail */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Shield size={18} className="text-amber-400" /> Security Postures</h3>
+              <p className="text-xs text-gensui-400 leading-relaxed">Security postures define the complete permission profile for a Shogun instance. Each posture contains 14 boolean permission flags, a severity level (0–100), and optional per-tool overrides. Built-in postures (PERMISSIVE, STANDARD, RESTRICTED, LOCKDOWN, PARANOID) provide sensible defaults.</p>
+              <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
+                <div className="text-xs font-bold text-gensui-200 mb-2">Built-in Posture Levels</div>
+                <div className="space-y-1 text-[11px] text-gensui-400">
+                  <div className="flex justify-between"><span className="text-emerald-400 font-bold">PERMISSIVE (L5)</span><span>All flags enabled, no tool overrides</span></div>
+                  <div className="flex justify-between"><span className="text-cyan-400 font-bold">STANDARD (L10)</span><span>Default — all enabled, production-ready</span></div>
+                  <div className="flex justify-between"><span className="text-amber-400 font-bold">RESTRICTED (L50)</span><span>External access disabled, controlled tools</span></div>
+                  <div className="flex justify-between"><span className="text-red-400 font-bold">LOCKDOWN (L90)</span><span>Most flags disabled, minimal operations</span></div>
+                  <div className="flex justify-between"><span className="text-red-500 font-bold">PARANOID (L100)</span><span>Maximum restriction, audit everything</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </div>
       </div>
     </div>

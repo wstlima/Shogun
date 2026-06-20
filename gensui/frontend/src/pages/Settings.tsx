@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Settings as SettingsIcon, User, Lock, Server, Info, Check, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, User, Lock, Server, Info, Check, AlertTriangle, Users, Plus, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 
 interface Profile {
@@ -7,6 +7,129 @@ interface Profile {
   email: string;
   role: string;
   display_name: string;
+}
+
+const ROLES = ['owner', 'admin', 'auditor', 'operator', 'viewer'];
+
+function AdminManagement() {
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [role, setRole] = useState('admin');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const load = async () => {
+    try {
+      const { data } = await api.get('/auth/admins');
+      setAdmins(data.admins || []);
+    } catch {}
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(''); setSuccess('');
+    try {
+      await api.post('/auth/admins', { email, password, display_name: displayName || 'Admin', role });
+      setSuccess('Admin created successfully');
+      setShowCreate(false);
+      setEmail(''); setPassword(''); setDisplayName(''); setRole('admin');
+      load();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to create admin');
+    }
+  };
+
+  const handleDeactivate = async (id: string) => {
+    if (!confirm('Deactivate this admin? They will no longer be able to login.')) return;
+    try {
+      await api.delete(`/auth/admins/${id}`);
+      load();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to deactivate admin');
+    }
+  };
+
+  return (
+    <div className="glass-card p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-gensui-300 uppercase tracking-widest flex items-center gap-2">
+          <Users size={14} className="text-purple-400" /> Admin Users
+        </h2>
+        <button onClick={() => setShowCreate(!showCreate)} className="gensui-btn-primary flex items-center gap-1.5 text-xs">
+          <Plus size={14} /> Add Admin
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-red-400">
+          <AlertTriangle size={12} /> {error}
+        </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-2 text-xs text-emerald-400">
+          <Check size={12} /> {success}
+        </div>
+      )}
+
+      {showCreate && (
+        <form onSubmit={handleCreate} className="p-4 bg-gensui-800/50 border border-gensui-700/30 rounded-lg space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gensui-400 mb-1">Email</label>
+              <input className="gensui-input w-full" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="admin@company.com" />
+            </div>
+            <div>
+              <label className="block text-xs text-gensui-400 mb-1">Password</label>
+              <input className="gensui-input w-full" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} placeholder="Min 6 characters" />
+            </div>
+            <div>
+              <label className="block text-xs text-gensui-400 mb-1">Display Name</label>
+              <input className="gensui-input w-full" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Display name" />
+            </div>
+            <div>
+              <label className="block text-xs text-gensui-400 mb-1">Role</label>
+              <select className="gensui-input w-full" value={role} onChange={e => setRole(e.target.value)}>
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="gensui-btn-primary text-xs">Create Admin</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="gensui-btn-secondary text-xs">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      <div className="space-y-2">
+        {admins.map(a => (
+          <div key={a.id} className="flex items-center justify-between py-2 border-b border-gensui-800/50 last:border-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gensui-700 flex items-center justify-center text-xs font-bold text-gensui-300">
+                {(a.display_name || a.email)?.[0]?.toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm text-gensui-200">{a.display_name || a.email}</p>
+                <p className="text-[10px] text-gensui-500">{a.email}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs px-2 py-0.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">{a.role}</span>
+              <button onClick={() => handleDeactivate(a.id)} className="p-1.5 text-gensui-500 hover:text-red-400 transition-colors" title="Deactivate">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {admins.length === 0 && <p className="text-xs text-gensui-500 text-center py-4">No admins found</p>}
+      </div>
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -208,6 +331,9 @@ export default function Settings() {
           </button>
         </form>
       </div>
+
+      {/* Admin Management Section */}
+      <AdminManagement />
 
       {/* Server Info Section */}
       <div className="glass-card p-6 space-y-5">
