@@ -58,6 +58,15 @@ export default function Guide() {
 
   const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
+  /* ── Helpers for translated card blocks ─────────────────── */
+  const Card = ({ icon: Icon, iconColor, title, children, span2 }: { icon: any; iconColor: string; title: string; children: React.ReactNode; span2?: boolean }) => (
+    <div className={`glass-card p-4 space-y-2 ${span2 ? 'md:col-span-2' : ''}`}>
+      <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Icon size={14} className={iconColor} /> {title}</div>
+      {children}
+    </div>
+  );
+  const P = ({ children }: { children: React.ReactNode }) => <p className="text-xs text-gensui-400 leading-relaxed">{children}</p>;
+
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
@@ -112,33 +121,29 @@ export default function Guide() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Users size={14} className="text-emerald-400" /> Fleet Stats Grid (Top Row)</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Four metric cards at the top. Each shows a count and optional total:</p>
+              <Card icon={Users} iconColor="text-emerald-400" title={t('guide.card_fleet_stats', 'Fleet Stats Grid (Top Row)')}>
+                <P>{t('guide.card_fleet_stats_desc', 'Four metric cards at the top. Each shows a count and optional total:')}</P>
                 <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-gensui-200">Members Online:</strong> Shows how many Shogun instances are currently connected vs. total enrolled.</li>
-                  <li><strong className="text-gensui-200">Active Samurai:</strong> Total sub-agents running across all fleet members.</li>
-                  <li><strong className="text-gensui-200">Active Workflows:</strong> Running Agent Flow pipelines fleet-wide.</li>
-                  <li><strong className="text-gensui-200">Mado Sessions:</strong> Active browser automation sessions across all Shoguns.</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_members_online', 'Members Online:')}</strong> {t('guide.card_members_online_desc', 'Shows how many Shogun instances are currently connected vs. total enrolled.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_active_samurai', 'Active Samurai:')}</strong> {t('guide.card_active_samurai_desc', 'Total sub-agents running across all fleet members.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_active_workflows', 'Active Workflows:')}</strong> {t('guide.card_active_workflows_desc', 'Running Agent Flow pipelines fleet-wide.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_mado_sessions', 'Mado Sessions:')}</strong> {t('guide.card_mado_sessions_desc', 'Active browser automation sessions across all Shoguns.')}</li>
                 </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><AlertTriangle size={14} className="text-red-400" /> Alert &amp; Status Row</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Three clickable cards below the stats grid:</p>
+              </Card>
+              <Card icon={AlertTriangle} iconColor="text-red-400" title={t('guide.card_alert_row', 'Alert & Status Row')}>
+                <P>{t('guide.card_alert_row_desc', 'Three clickable cards below the stats grid:')}</P>
                 <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-gensui-200">Active Alerts:</strong> Number of unresolved alerts. Turns red when critical alerts exist. Click to navigate to the Alerts page.</li>
-                  <li><strong className="text-gensui-200">Harakiri Active:</strong> Shows "None" (green) or the count of active Harakiri events (red pulsing). Click to go to Harakiri Control.</li>
-                  <li><strong className="text-gensui-200">Pending Enrollment:</strong> Number of Shogun instances awaiting approval. Click to go to Enrollment Management.</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_active_alerts', 'Active Alerts:')}</strong> {t('guide.card_active_alerts_desc', 'Number of unresolved alerts. Turns red when critical alerts exist. Click to navigate to the Alerts page.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_harakiri_active', 'Harakiri Active:')}</strong> {t('guide.card_harakiri_active_desc', 'Shows "None" (green) or the count of active Harakiri events (red pulsing). Click to go to Harakiri Control.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_pending_enrollment', 'Pending Enrollment:')}</strong> {t('guide.card_pending_enrollment_desc', 'Number of Shogun instances awaiting approval. Click to go to Enrollment Management.')}</li>
                 </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-red-400" /> Global Posture Override Banner</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">When a Global Posture Override is active (see Postures), a red danger-glowing banner appears showing the posture name, who activated it, and the reason. This means <strong>all fleet members are currently locked to a specific security posture</strong> regardless of their individual settings.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-cyan-400" /> Auto-Refresh</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">All dashboard data auto-refreshes every <strong>10 seconds</strong>. No manual reload needed. The data is fetched from <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">GET /api/v1/dashboard</code>.</p>
-              </div>
+              </Card>
+              <Card icon={Shield} iconColor="text-red-400" title={t('guide.card_posture_banner', 'Global Posture Override Banner')} span2>
+                <P>{t('guide.card_posture_banner_desc', 'When a Global Posture Override is active (see Postures), a red danger-glowing banner appears showing the posture name, who activated it, and the reason. This means all fleet members are currently locked to a specific security posture regardless of their individual settings.')}</P>
+              </Card>
+              <Card icon={Activity} iconColor="text-cyan-400" title={t('guide.card_auto_refresh', 'Auto-Refresh')} span2>
+                <P>{t('guide.card_auto_refresh_desc', 'All dashboard data auto-refreshes every 10 seconds. No manual reload needed.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -150,22 +155,19 @@ export default function Guide() {
               <Users size={20} className="text-emerald-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_fleet_title', 'Fleet Management')}</h2>
-                <p className="text-xs text-gensui-400">View, search, and filter all enrolled Shogun instances.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_fleet_desc', 'View, search, and filter all enrolled Shogun instances.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Search size={14} className="text-cyan-400" /> Search &amp; Filter Bar</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">A text search field and a status dropdown at the top. Search by <strong>instance name</strong> or <strong>hostname</strong>. Filter by status: All, Online, or Offline.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Eye size={14} className="text-cyan-400" /> Fleet Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">A sortable table with columns: <strong>Instance</strong> (name + hostname, clickable to detail), <strong>Status</strong> (online/offline badge with pulse), <strong>Environment</strong>, <strong>Harakiri</strong> (active state or "—"), <strong>Samurai</strong> count, <strong>Workflows</strong> count, <strong>Last Seen</strong> timestamp. Data auto-refreshes every 10 seconds.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Server size={14} className="text-cyan-400" /> Clicking an Instance</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Click any instance name in the table to navigate to its <strong>Shogun Detail</strong> page (see next section). This is the deep-dive view for a single fleet member.</p>
-              </div>
+              <Card icon={Search} iconColor="text-cyan-400" title={t('guide.card_search_bar', 'Search & Filter Bar')}>
+                <P>{t('guide.card_search_bar_desc', 'A text search field and a status dropdown at the top. Search by instance name or hostname. Filter by status: All, Online, or Offline.')}</P>
+              </Card>
+              <Card icon={Eye} iconColor="text-cyan-400" title={t('guide.card_fleet_table', 'Fleet Table')}>
+                <P>{t('guide.card_fleet_table_desc', 'A sortable table with columns: Instance (name + hostname, clickable to detail), Status (online/offline badge with pulse), Environment, Harakiri (active state or "—"), Samurai count, Workflows count, Last Seen timestamp. Data auto-refreshes every 10 seconds.')}</P>
+              </Card>
+              <Card icon={Server} iconColor="text-cyan-400" title={t('guide.card_click_instance', 'Clicking an Instance')} span2>
+                <P>{t('guide.card_click_instance_desc', 'Click any instance name in the table to navigate to its Shogun Detail page (see next section). This is the deep-dive view for a single fleet member.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -177,43 +179,36 @@ export default function Guide() {
               <Server size={20} className="text-cyan-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_detail_title', 'Shogun Detail &mdash; Instance Deep Dive')}</h2>
-                <p className="text-xs text-gensui-400">Full operational profile for a single Shogun instance.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_detail_desc', 'Full operational profile for a single Shogun instance.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Tag size={14} className="text-cyan-400" /> Header &amp; Status Badges</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Shows the instance name, online/offline badge, and a pulsing red Harakiri badge if active. Below: hostname, environment, and enrollment date. A back arrow returns to the Fleet page.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-cyan-400" /> Stats Row</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Five metric cards: <strong>Samurai</strong> count, <strong>Workflows</strong> running, <strong>Mado Sessions</strong>, <strong>Last Seen</strong> time, and <strong>Enrollment</strong> status. Each has a colored icon.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Info size={14} className="text-cyan-400" /> Identity Card (Left Column)</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Displays: Version, Build hash (first 12 chars), OS, Deploy Type, Organization, Owner, and Disconnect Behavior. All read from the Shogun's heartbeat telemetry.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-amber-400" /> Security Posture Card</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Shows the <strong>effective posture</strong> currently applied to this Shogun: posture name, source (individual, group, or global), and level number. If no posture is assigned, shows "No posture assigned."</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Layers size={14} className="text-purple-400" /> Groups Card</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Lists all groups this Shogun belongs to as purple tag badges. Groups are managed from the Groups page and allow collective posture/policy application.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><AlertTriangle size={14} className="text-red-400" /> Actions Card</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Three action buttons for this specific instance:</p>
+              <Card icon={Tag} iconColor="text-cyan-400" title={t('guide.card_header_badges', 'Header & Status Badges')}>
+                <P>{t('guide.card_header_badges_desc', 'Shows the instance name, online/offline badge, and a pulsing red Harakiri badge if active. Below: hostname, environment, and enrollment date. A back arrow returns to the Fleet page.')}</P>
+              </Card>
+              <Card icon={Activity} iconColor="text-cyan-400" title={t('guide.card_stats_row', 'Stats Row')}>
+                <P>{t('guide.card_stats_row_desc', 'Five metric cards: Samurai count, Workflows running, Mado Sessions, Last Seen time, and Enrollment status. Each has a colored icon.')}</P>
+              </Card>
+              <Card icon={Info} iconColor="text-cyan-400" title={t('guide.card_identity_card', 'Identity Card (Left Column)')}>
+                <P>{t('guide.card_identity_card_desc', 'Displays: Version, Build hash (first 12 chars), OS, Deploy Type, Organization, Owner, and Disconnect Behavior. All read from the Shogun\'s heartbeat telemetry.')}</P>
+              </Card>
+              <Card icon={Shield} iconColor="text-amber-400" title={t('guide.card_security_posture', 'Security Posture Card')}>
+                <P>{t('guide.card_security_posture_desc', 'Shows the effective posture currently applied to this Shogun: posture name, source (individual, group, or global), and level number. If no posture is assigned, shows "No posture assigned."')}</P>
+              </Card>
+              <Card icon={Layers} iconColor="text-purple-400" title={t('guide.card_groups_card', 'Groups Card')}>
+                <P>{t('guide.card_groups_card_desc', 'Lists all groups this Shogun belongs to as purple tag badges. Groups are managed from the Groups page and allow collective posture/policy application.')}</P>
+              </Card>
+              <Card icon={AlertTriangle} iconColor="text-red-400" title={t('guide.card_actions', 'Actions Card')}>
+                <P>{t('guide.card_actions_desc', 'Three action buttons for this specific instance:')}</P>
                 <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-amber-400">Soft Freeze:</strong> Triggers a soft Harakiri &mdash; suspends all active operations gracefully.</li>
-                  <li><strong className="text-red-400">Hard Stop:</strong> Triggers a hard Harakiri &mdash; immediately kills all processes.</li>
-                  <li><strong className="text-red-400">Disable Instance:</strong> Revokes enrollment. The Shogun is disconnected from the fleet permanently until re-enrolled.</li>
+                  <li><strong className="text-amber-400">{t('guide.card_soft_freeze', 'Soft Freeze:')}</strong> {t('guide.card_soft_freeze_desc', 'Triggers a soft Harakiri — suspends all active operations gracefully.')}</li>
+                  <li><strong className="text-red-400">{t('guide.card_hard_stop', 'Hard Stop:')}</strong> {t('guide.card_hard_stop_desc', 'Triggers a hard Harakiri — immediately kills all processes.')}</li>
+                  <li><strong className="text-red-400">{t('guide.card_disable_instance', 'Disable Instance:')}</strong> {t('guide.card_disable_instance_desc', 'Revokes enrollment. The Shogun is disconnected from the fleet permanently until re-enrolled.')}</li>
                 </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-cyan-400" /> Activity Timeline (Right Column)</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">A scrollable timeline of telemetry events from this specific Shogun. Each event shows: severity dot (red/amber/cyan/gray), event type, category, payload message, and timestamp. Limited to the 50 most recent events. Auto-refreshes every 15 seconds.</p>
-              </div>
+              </Card>
+              <Card icon={Activity} iconColor="text-cyan-400" title={t('guide.card_activity_timeline', 'Activity Timeline (Right Column)')} span2>
+                <P>{t('guide.card_activity_timeline_desc', 'A scrollable timeline of telemetry events from this specific Shogun. Each event shows: severity dot (red/amber/cyan/gray), event type, category, payload message, and timestamp. Limited to the 50 most recent events. Auto-refreshes every 15 seconds.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -225,45 +220,33 @@ export default function Guide() {
               <Network size={20} className="text-cyan-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_network_title', 'Network Topology &mdash; Visual Map')}</h2>
-                <p className="text-xs text-gensui-400">Interactive SVG graph showing all fleet members, their connections, and discovered hosts.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_network_desc', 'Interactive SVG graph showing all fleet members, their connections, and discovered hosts.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Globe size={14} className="text-cyan-400" /> Topology Graph</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">A full-width interactive SVG canvas. At the center: the <strong>Gensui Hub</strong> (gold border, logo). Around it in a circle: all enrolled Shogun instances as colored nodes. Lines connect each node to the hub (cyan). Dashed amber lines show Nexus peer-to-peer connections between Shoguns.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Eye size={14} className="text-emerald-400" /> Node Colors &amp; Status</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Each node has a color indicating status:</p>
+              <Card icon={Globe} iconColor="text-cyan-400" title={t('guide.card_topology_graph', 'Topology Graph')}>
+                <P>{t('guide.card_topology_graph_desc', 'A full-width interactive SVG canvas. At the center: the Gensui Hub (gold border, logo). Around it in a circle: all enrolled Shogun instances as colored nodes. Lines connect each node to the hub (cyan). Dashed amber lines show Nexus peer-to-peer connections between Shoguns.')}</P>
+              </Card>
+              <Card icon={Eye} iconColor="text-emerald-400" title={t('guide.card_node_colors', 'Node Colors & Status')}>
+                <P>{t('guide.card_node_colors_desc', 'Each node has a color indicating status:')}</P>
                 <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-emerald-400">Green (Online):</strong> Connected and reporting heartbeats. Has a pulsing animation ring.</li>
-                  <li><strong className="text-gensui-400">Gray (Offline):</strong> Not responding. No pulse.</li>
-                  <li><strong className="text-red-400">Red (Harakiri):</strong> Emergency shutdown is active on this instance.</li>
+                  <li><strong className="text-emerald-400">{t('guide.card_green_online', 'Green (Online):')}</strong> {t('guide.card_green_online_desc', 'Connected and reporting heartbeats. Has a pulsing animation ring.')}</li>
+                  <li><strong className="text-gensui-400">{t('guide.card_gray_offline', 'Gray (Offline):')}</strong> {t('guide.card_gray_offline_desc', 'Not responding. No pulse.')}</li>
+                  <li><strong className="text-red-400">{t('guide.card_red_harakiri', 'Red (Harakiri):')}</strong> {t('guide.card_red_harakiri_desc', 'Emergency shutdown is active on this instance.')}</li>
                 </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Search size={14} className="text-cyan-400" /> Network Scan</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Click <strong>"Scan Network"</strong> to probe your local subnet for other Shogun instances. The scan probes all IPs on port 8000, identifies Shogun instances (by checking <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">/health</code>), and classifies them as <strong>enrolled</strong>, <strong>unenrolled (rogue)</strong>, or <strong>unknown</strong>. Results appear as dashed-border nodes in an outer ring.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Monitor size={14} className="text-cyan-400" /> Pan &amp; Zoom Controls</div>
-                <p className="text-xs text-gensui-400 leading-relaxed"><strong>Scroll wheel</strong> to zoom in/out. <strong>Click and drag</strong> to pan. Use the zoom controls in the bottom-left: zoom in (+), zoom out (−), reset view. Hover over any node to see a detailed tooltip with hostname, status, samurai count, and enrollment info. Click an enrolled node to navigate to its detail page.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><AlertTriangle size={14} className="text-red-400" /> Rogue Detection</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">After a network scan, <strong>unenrolled Shogun instances</strong> appear as red dashed-border nodes with a warning icon. These are Shogun instances on your network that are <em>not</em> enrolled in Gensui &mdash; potential security risks. <strong>Unknown hosts</strong> (port 8000 open but not Shogun) appear as gray dotted nodes. A red trust boundary ring separates enrolled nodes from external ones.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Globe size={14} className="text-purple-400" /> External Enterprise Agents</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">When Shogun instances have external agents registered via the <strong>Nexus External Gateway</strong>, they appear on the topology as <strong>diamond-shaped nodes</strong> connected to their host Shogun with dashed purple lines. Each agent node shows:</p>
-                <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-gensui-200">Platform-specific colors:</strong> Microsoft 365 (blue), Salesforce (cyan), Google (green), ServiceNow (lime), Custom (purple).</li>
-                  <li><strong className="text-gensui-200">Direction arrows:</strong> &larr; = inbound (agent sends tasks to Shogun), &rarr; = outbound (Shogun sends tasks to agent), &#x21c4; = bidirectional (both directions).</li>
-                  <li><strong className="text-gensui-200">Tooltip on hover:</strong> Shows agent name, platform, communication direction, whether an outbound endpoint is configured, and which Shogun hosts the connection.</li>
-                </ul>
-                <p className="text-xs text-gensui-400 leading-relaxed">The legend shows an "External Agents" section when agents are present, and a "Nexus Gateway" connection type in the Connections list.</p>
-              </div>
+              </Card>
+              <Card icon={Search} iconColor="text-cyan-400" title={t('guide.card_network_scan', 'Network Scan')}>
+                <P>{t('guide.card_network_scan_desc', 'Click "Scan Network" to probe your local subnet for other Shogun instances. The scan probes all IPs on port 8000, identifies Shogun instances (by checking /health), and classifies them as enrolled, unenrolled (rogue), or unknown. Results appear as dashed-border nodes in an outer ring.')}</P>
+              </Card>
+              <Card icon={Monitor} iconColor="text-cyan-400" title={t('guide.card_pan_zoom', 'Pan & Zoom Controls')}>
+                <P>{t('guide.card_pan_zoom_desc', 'Scroll wheel to zoom in/out. Click and drag to pan. Use the zoom controls in the bottom-left: zoom in (+), zoom out (−), reset view. Hover over any node to see a detailed tooltip with hostname, status, samurai count, and enrollment info. Click an enrolled node to navigate to its detail page.')}</P>
+              </Card>
+              <Card icon={AlertTriangle} iconColor="text-red-400" title={t('guide.card_rogue_detection', 'Rogue Detection')} span2>
+                <P>{t('guide.card_rogue_detection_desc', 'After a network scan, unenrolled Shogun instances appear as red dashed-border nodes with a warning icon. These are Shogun instances on your network that are not enrolled in Gensui — potential security risks. Unknown hosts (port 8000 open but not Shogun) appear as gray dotted nodes. A red trust boundary ring separates enrolled nodes from external ones.')}</P>
+              </Card>
+              <Card icon={Globe} iconColor="text-purple-400" title={t('guide.card_external_agents', 'External Enterprise Agents')} span2>
+                <P>{t('guide.card_external_agents_desc', 'When Shogun instances have external agents registered via the Nexus External Gateway, they appear on the topology as diamond-shaped nodes connected to their host Shogun with dashed purple lines.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -275,18 +258,16 @@ export default function Guide() {
               <Layers size={20} className="text-purple-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_groups_title', 'Groups &mdash; Collective Management')}</h2>
-                <p className="text-xs text-gensui-400">Organize Shogun instances into groups for collective policy management.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_groups_desc', 'Organize Shogun instances into groups for collective policy management.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Zap size={14} className="text-purple-400" /> Create Group</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Enter a group name in the text field and click <strong>"Create Group"</strong>. Groups let you apply postures, trigger Harakiri, and manage policies for multiple Shoguns at once instead of one by one.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Trash2 size={14} className="text-red-400" /> Group Cards</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Each group appears as a card showing the <strong>group name</strong>, <strong>member count</strong>, and optional description. Click the <strong>trash icon</strong> on a card to delete the group (with confirmation). Deleting a group does not delete its member Shoguns &mdash; they simply become ungrouped.</p>
-              </div>
+              <Card icon={Zap} iconColor="text-purple-400" title={t('guide.card_create_group', 'Create Group')}>
+                <P>{t('guide.card_create_group_desc', 'Enter a group name in the text field and click "Create Group". Groups let you apply postures, trigger Harakiri, and manage policies for multiple Shoguns at once instead of one by one.')}</P>
+              </Card>
+              <Card icon={Trash2} iconColor="text-red-400" title={t('guide.card_group_cards', 'Group Cards')}>
+                <P>{t('guide.card_group_cards_desc', 'Each group appears as a card showing the group name, member count, and optional description. Click the trash icon on a card to delete the group (with confirmation). Deleting a group does not delete its member Shoguns — they simply become ungrouped.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -298,38 +279,27 @@ export default function Guide() {
               <Shield size={20} className="text-amber-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_postures_title', 'Security Postures')}</h2>
-                <p className="text-xs text-gensui-400">Define what Shogun instances are allowed to do. Each posture is a permission template. Create, edit, and delete postures to control your fleet.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_postures_desc', 'Define what Shogun instances are allowed to do. Each posture is a permission template.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-amber-400" /> Posture Cards</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Each posture card shows the <strong>name</strong>, <strong>level number</strong> (0–100, higher = more restrictive), and <strong>description</strong>. A "Built-in" tag appears on system-defined postures. Below the description, every permission is shown as a colored badge:</p>
-                <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-emerald-400">Green (✓):</strong> Permission is <em>allowed</em> in this posture.</li>
-                  <li><strong className="text-red-400">Red (✕):</strong> Permission is <em>denied</em> in this posture.</li>
-                </ul>
-                <p className="text-xs text-gensui-400 leading-relaxed mt-2">A stats row at the bottom shows the count of allowed, blocked, and tool override rules.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Zap size={14} className="text-emerald-400" /> Create Posture</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Click <strong>"Create Posture"</strong> in the top right to open the creation modal. Fill in a name, description, level (0–100), and toggle each of the 14 permission flags. You can also add <strong>tool overrides</strong> — per-tool rules that override the posture's general tool execution flag for specific tools (e.g., block <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">send_email</code> while allowing other tools). Click <strong>"Create"</strong> to save.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Eye size={14} className="text-cyan-400" /> Edit Posture</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Hover over any posture card and click the <strong>pencil icon</strong> to open the edit modal. You can change the description, level, all 14 permission flags, and tool overrides. <strong>Built-in postures</strong> (like OPEN, STANDARD, LOCKDOWN) can be edited — flags and description are modifiable — but their names cannot be changed. Edits persist across server restarts.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Trash2 size={14} className="text-red-400" /> Delete Posture</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Custom postures can be deleted by clicking the <strong>trash icon</strong> on the card. A confirmation dialog appears. Deleting a posture automatically <strong>unassigns</strong> it from any members or groups that were using it. <strong>Built-in postures cannot be deleted</strong> — the trash icon is hidden for them.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Settings size={14} className="text-purple-400" /> Tool Overrides</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">In the create/edit modal, expand the <strong>"Tool Overrides"</strong> section to define per-tool rules. Select a tool from the dropdown, then set it to <strong>Allow</strong>, <strong>Confirm</strong> (requires human approval before execution), or <strong>Block</strong> (tool call is rejected). Add multiple overrides for fine-grained control. These overrides are pushed to fleet members as part of their effective posture.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Lock size={14} className="text-amber-400" /> Permission Categories (14 Total)</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Each posture controls these 14 permission flags:</p>
+              <Card icon={Shield} iconColor="text-amber-400" title={t('guide.card_posture_cards', 'Posture Cards')} span2>
+                <P>{t('guide.card_posture_cards_desc', 'Each posture card shows the name, level number (0–100, higher = more restrictive), and description. A "Built-in" tag appears on system-defined postures.')}</P>
+              </Card>
+              <Card icon={Zap} iconColor="text-emerald-400" title={t('guide.card_create_posture', 'Create Posture')}>
+                <P>{t('guide.card_create_posture_desc', 'Click "Create Posture" in the top right to open the creation modal. Fill in a name, description, level (0–100), and toggle each of the 14 permission flags.')}</P>
+              </Card>
+              <Card icon={Eye} iconColor="text-cyan-400" title={t('guide.card_edit_posture', 'Edit Posture')}>
+                <P>{t('guide.card_edit_posture_desc', 'Hover over any posture card and click the pencil icon to open the edit modal. You can change the description, level, all 14 permission flags, and tool overrides. Built-in posture names cannot be changed.')}</P>
+              </Card>
+              <Card icon={Trash2} iconColor="text-red-400" title={t('guide.card_delete_posture', 'Delete Posture')}>
+                <P>{t('guide.card_delete_posture_desc', 'Custom postures can be deleted by clicking the trash icon on the card. Deleting a posture automatically unassigns it from any members or groups. Built-in postures cannot be deleted.')}</P>
+              </Card>
+              <Card icon={Settings} iconColor="text-purple-400" title={t('guide.card_tool_overrides', 'Tool Overrides')}>
+                <P>{t('guide.card_tool_overrides_desc', 'In the create/edit modal, expand the "Tool Overrides" section to define per-tool rules. Select a tool from the dropdown, then set it to Allow, Confirm (requires human approval), or Block (tool call is rejected).')}</P>
+              </Card>
+              <Card icon={Lock} iconColor="text-amber-400" title={t('guide.card_permission_cats', 'Permission Categories (14 Total)')} span2>
+                <P>{t('guide.card_permission_cats_desc', 'Each posture controls these 14 permission flags:')}</P>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {[
                     'external models', 'local models', 'tool execution', 'mado (browser)',
@@ -340,7 +310,7 @@ export default function Guide() {
                     <span key={p} className="text-[10px] px-2 py-0.5 rounded-full bg-gensui-700/40 text-gensui-300 border border-gensui-600/30">{p}</span>
                   ))}
                 </div>
-              </div>
+              </Card>
             </div>
           </section>
 
@@ -352,35 +322,25 @@ export default function Guide() {
               <Skull size={20} className="text-red-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_harakiri_title', 'Harakiri Control Center')}</h2>
-                <p className="text-xs text-red-400">Emergency shutdown and containment. Use with extreme caution.</p>
+                <p className="text-xs text-red-400">{t('guide.sec_harakiri_desc', 'Emergency shutdown and containment. Use with extreme caution.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2 md:col-span-2 border border-red-800/30">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Zap size={14} className="text-red-400" /> Initiate Harakiri Panel</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">The main trigger panel. Configure and execute emergency shutdowns:</p>
+              <Card icon={Zap} iconColor="text-red-400" title={t('guide.card_harakiri_panel', 'Initiate Harakiri Panel')} span2>
+                <P>{t('guide.card_harakiri_panel_desc', 'The main trigger panel. Configure and execute emergency shutdowns:')}</P>
                 <ul className="text-xs text-gensui-400 space-y-1.5 ml-4 list-disc">
-                  <li><strong className="text-gensui-200">Scope:</strong> Choose <strong>Individual</strong> (one Shogun) or <strong>Global</strong> (ALL Shoguns in the fleet simultaneously).</li>
-                  <li><strong className="text-gensui-200">Mode:</strong> Four escalation levels:
-                    <ul className="mt-1 ml-4 space-y-0.5 list-disc">
-                      <li><strong>Soft Freeze:</strong> Gracefully suspends all active operations.</li>
-                      <li><strong>Hard Stop:</strong> Immediately kills all running processes.</li>
-                      <li><strong>Network Isolate:</strong> Cuts all external network access while keeping the instance alive.</li>
-                      <li><strong>Full Terminate:</strong> Complete shutdown of the Shogun instance.</li>
-                    </ul>
-                  </li>
-                  <li><strong className="text-gensui-200">Target Shogun:</strong> (Individual mode only) Select which instance to target from a dropdown of active members.</li>
-                  <li><strong className="text-gensui-200">Reason:</strong> A text field for documenting why the Harakiri is being triggered. Logged in the audit trail.</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_scope', 'Scope:')}</strong> {t('guide.card_scope_desc', 'Choose Individual (one Shogun) or Global (ALL Shoguns in the fleet simultaneously).')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_mode', 'Mode:')}</strong> {t('guide.card_mode_desc', 'Four escalation levels: Soft Freeze, Hard Stop, Network Isolate, Full Terminate.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_target', 'Target Shogun:')}</strong> {t('guide.card_target_desc', '(Individual mode only) Select which instance to target from a dropdown.')}</li>
+                  <li><strong className="text-gensui-200">{t('guide.card_reason', 'Reason:')}</strong> {t('guide.card_reason_desc', 'A text field for documenting why the Harakiri is being triggered. Logged in the audit trail.')}</li>
                 </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Lock size={14} className="text-red-400" /> Two-Step Confirmation</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">After clicking "Initiate Harakiri," a red confirmation box appears. You must type <strong>"CONFIRM HARAKIRI"</strong> (or <strong>"CONFIRM GLOBAL HARAKIRI"</strong> for global scope) exactly to enable the Execute button. This prevents accidental activation.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-cyan-400" /> Event History Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Below the trigger panel, a table of all past Harakiri events: Scope (individual/global), Mode, Status (pending/executing/completed/released), Affected count, Acknowledged count, Timestamp, and a <strong>Release</strong> button to lift an active Harakiri and restore the instance to RESTRICTED posture.</p>
-              </div>
+              </Card>
+              <Card icon={Lock} iconColor="text-red-400" title={t('guide.card_two_step', 'Two-Step Confirmation')}>
+                <P>{t('guide.card_two_step_desc', 'After clicking "Initiate Harakiri," a red confirmation box appears. You must type "CONFIRM HARAKIRI" (or "CONFIRM GLOBAL HARAKIRI" for global scope) exactly to enable the Execute button. This prevents accidental activation.')}</P>
+              </Card>
+              <Card icon={Activity} iconColor="text-cyan-400" title={t('guide.card_event_history', 'Event History Table')}>
+                <P>{t('guide.card_event_history_desc', 'Below the trigger panel, a table of all past Harakiri events: Scope, Mode, Status, Affected count, Acknowledged count, Timestamp, and a Release button to lift an active Harakiri.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -392,18 +352,16 @@ export default function Guide() {
               <Activity size={20} className="text-cyan-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_activity_title', 'Activity Monitor')}</h2>
-                <p className="text-xs text-gensui-400">Real-time telemetry event stream from all fleet members.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_activity_desc', 'Real-time telemetry event stream from all fleet members.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Search size={14} className="text-cyan-400" /> Category Filter</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">A dropdown filter in the top-right lets you filter events by category: <strong>System</strong>, <strong>Security</strong>, <strong>Agent</strong>, <strong>Tool</strong>, <strong>Model</strong>, or <strong>All Categories</strong>.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Eye size={14} className="text-cyan-400" /> Event Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Columns: <strong>Time</strong>, <strong>Severity</strong> (colored badge: critical/error = red, warn = amber, info = default), <strong>Type</strong> (monospace event identifier), <strong>Category</strong>, <strong>Shogun</strong> (first 8 chars of ID). Shows the latest 100 events. Auto-refreshes every <strong>5 seconds</strong>.</p>
-              </div>
+              <Card icon={Search} iconColor="text-cyan-400" title={t('guide.card_category_filter', 'Category Filter')}>
+                <P>{t('guide.card_category_filter_desc', 'A dropdown filter in the top-right lets you filter events by category: System, Security, Agent, Tool, Model, or All Categories.')}</P>
+              </Card>
+              <Card icon={Eye} iconColor="text-cyan-400" title={t('guide.card_event_table', 'Event Table')}>
+                <P>{t('guide.card_event_table_desc', 'Columns: Time, Severity (colored badge), Type (monospace event identifier), Category, Shogun (first 8 chars of ID). Shows the latest 100 events. Auto-refreshes every 5 seconds.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -415,14 +373,13 @@ export default function Guide() {
               <FileSearch size={20} className="text-gensui-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_audit_title', 'Audit Log &mdash; HMAC-Chained')}</h2>
-                <p className="text-xs text-gensui-400">Tamper-resistant record of every administrative action.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_audit_desc', 'Tamper-resistant record of every administrative action.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><FileSearch size={14} className="text-gensui-300" /> Audit Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Columns: <strong>Time</strong>, <strong>Actor</strong> (who performed the action &mdash; admin user or system), <strong>Action</strong> (monospace identifier like <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">harakiri.trigger</code>, <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">enrollment.approve</code>, etc.), <strong>Target</strong> (type + first 8 chars of target ID), <strong>Reason</strong>. Filter by action using the text input in the top-right. The subtitle shows "HMAC-chained" confirming these entries are cryptographically linked for tamper detection.</p>
-              </div>
+              <Card icon={FileSearch} iconColor="text-gensui-300" title={t('guide.card_audit_table', 'Audit Table')}>
+                <P>{t('guide.card_audit_table_desc', 'Columns: Time, Actor (who performed the action), Action (monospace identifier), Target (type + first 8 chars of target ID), Reason. Filter by action using the text input. The subtitle shows "HMAC-chained" confirming these entries are cryptographically linked for tamper detection.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -434,18 +391,16 @@ export default function Guide() {
               <Bell size={20} className="text-amber-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_alerts_title', 'Alerts')}</h2>
-                <p className="text-xs text-gensui-400">Security and system alerts from across the fleet.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_alerts_desc', 'Security and system alerts from across the fleet.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Bell size={14} className="text-amber-400" /> Alerts Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Columns: <strong>Time</strong>, <strong>Severity</strong> (CRITICAL = red, HIGH = lighter red, MEDIUM = amber, LOW = gray), <strong>Type</strong> (monospace event identifier), <strong>Description</strong>, <strong>Status</strong> (active = red badge, resolved = green badge), <strong>Actions</strong>.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Check size={14} className="text-emerald-400" /> Resolving Alerts</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Active alerts show a <strong>"Resolve"</strong> button in the Actions column. Clicking it marks the alert as resolved (green badge) and logs the resolution in the audit trail. Resolved alerts remain visible for historical reference.</p>
-              </div>
+              <Card icon={Bell} iconColor="text-amber-400" title={t('guide.card_alerts_table', 'Alerts Table')}>
+                <P>{t('guide.card_alerts_table_desc', 'Columns: Time, Severity (CRITICAL/HIGH/MEDIUM/LOW), Type, Description, Status (active/resolved), Actions.')}</P>
+              </Card>
+              <Card icon={Check} iconColor="text-emerald-400" title={t('guide.card_resolving', 'Resolving Alerts')}>
+                <P>{t('guide.card_resolving_desc', 'Active alerts show a "Resolve" button in the Actions column. Clicking it marks the alert as resolved and logs the resolution in the audit trail.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -457,30 +412,22 @@ export default function Guide() {
               <UserPlus size={20} className="text-amber-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_enrollment_title', 'Enrollment Management')}</h2>
-                <p className="text-xs text-gensui-400">Approve new Shogun instances and manage enrollment tokens.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_enrollment_desc', 'Approve new Shogun instances and manage enrollment tokens.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2 md:col-span-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><UserPlus size={14} className="text-amber-400" /> Pending Enrollments Table</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">When a Shogun instance connects to Gensui for the first time, it appears here as a pending enrollment. The table shows: <strong>Instance</strong> name, <strong>Hostname</strong>, <strong>Environment</strong>, <strong>OS</strong>, <strong>Requested</strong> timestamp, and <strong>Actions</strong>:</p>
-                <ul className="text-xs text-gensui-400 space-y-1 ml-4 list-disc">
-                  <li><strong className="text-emerald-400">✓ Approve:</strong> Accept the instance into the fleet. It becomes an active member and starts receiving posture policies.</li>
-                  <li><strong className="text-red-400">✕ Reject:</strong> Deny the enrollment request. The instance will not be able to participate in the fleet.</li>
-                </ul>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Key size={14} className="text-cyan-400" /> Enrollment Tokens</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Pre-generate tokens that Shogun instances can use to auto-enroll. Enter a <strong>label</strong> (optional) and click <strong>"Generate Token"</strong>. Each token shows: label, first 30 characters (monospace), use count vs. max uses, and a revoked indicator if applicable.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Copy size={14} className="text-cyan-400" /> Copy Token</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Click the <strong>copy icon</strong> next to any token to copy it to your clipboard. Send this token to the Shogun operator &mdash; they paste it into their Gensui connection form on the Shogun side (Gensui page &rarr; Connect). The token is single-use by default.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><X size={14} className="text-red-400" /> Revoke Token</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Click the <strong>ban icon</strong> (✘) next to any active token to revoke it. A confirmation dialog appears. Once revoked, the token can <strong>never be used again</strong> for enrollment &mdash; any Shogun instance attempting to enroll with a revoked token will be rejected. The token remains visible in the list with a red <strong>"Revoked"</strong> badge for audit purposes. This action is logged in the HMAC-chained audit trail.</p>
-              </div>
+              <Card icon={UserPlus} iconColor="text-amber-400" title={t('guide.card_pending_table', 'Pending Enrollments Table')} span2>
+                <P>{t('guide.card_pending_table_desc', 'When a Shogun instance connects to Gensui for the first time, it appears here as a pending enrollment. The table shows: Instance name, Hostname, Environment, OS, Requested timestamp, and Actions (Approve/Reject).')}</P>
+              </Card>
+              <Card icon={Key} iconColor="text-cyan-400" title={t('guide.card_enrollment_tokens', 'Enrollment Tokens')}>
+                <P>{t('guide.card_enrollment_tokens_desc', 'Pre-generate tokens that Shogun instances can use to auto-enroll. Enter a label and click "Generate Token". Each token shows: label, first 30 characters, use count vs. max uses.')}</P>
+              </Card>
+              <Card icon={Copy} iconColor="text-cyan-400" title={t('guide.card_copy_token', 'Copy Token')}>
+                <P>{t('guide.card_copy_token_desc', 'Click the copy icon next to any token to copy it to your clipboard. Send this token to the Shogun operator — they paste it into their Gensui connection form.')}</P>
+              </Card>
+              <Card icon={X} iconColor="text-red-400" title={t('guide.card_revoke_token', 'Revoke Token')} span2>
+                <P>{t('guide.card_revoke_token_desc', 'Click the ban icon next to any active token to revoke it. Once revoked, the token can never be used again for enrollment. The token remains visible with a red "Revoked" badge for audit purposes. This action is logged in the HMAC-chained audit trail.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -492,36 +439,32 @@ export default function Guide() {
               <Settings size={20} className="text-cyan-400" />
               <div>
                 <h2 className="text-lg font-bold text-gensui-100 uppercase tracking-widest">{t('guide.sec_settings_title', 'Settings')}</h2>
-                <p className="text-xs text-gensui-400">Manage your admin profile, password, and view server configuration.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_settings_desc', 'Manage your admin profile, password, and view server configuration.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Users size={14} className="text-cyan-400" /> Profile Section</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">View your <strong>email</strong> (read-only), <strong>role</strong> (read-only), and edit your <strong>display name</strong>. Click <strong>"Save Profile"</strong> to persist changes. A green confirmation message appears on success.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Lock size={14} className="text-amber-400" /> Change Password</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Enter your <strong>current password</strong>, <strong>new password</strong> (minimum 6 characters), and <strong>confirm</strong> the new password. Passwords must match. Click <strong>"Change Password"</strong> to update. Error messages appear for mismatches or incorrect current passwords.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Server size={14} className="text-purple-400" /> Server Configuration</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Read-only display of server settings: <strong>JWT Token Expiry</strong> (24 hours), <strong>Heartbeat Timeout</strong> (60 seconds &mdash; how long before a Shogun is marked offline), <strong>Enrollment Approval</strong> (required/auto), <strong>Default Posture</strong> (STANDARD). These are configured via the <code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">.env</code> file and require a server restart to change.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Info size={14} className="text-gensui-400" /> About</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Displays the Gensui version number and confirms it is part of the <strong>Shogun AFM (Agent Fleet Management)</strong> platform.</p>
-              </div>
+              <Card icon={Users} iconColor="text-cyan-400" title={t('guide.card_profile', 'Profile Section')}>
+                <P>{t('guide.card_profile_desc', 'View your email (read-only), role (read-only), and edit your display name. Click "Save Profile" to persist changes.')}</P>
+              </Card>
+              <Card icon={Lock} iconColor="text-amber-400" title={t('guide.card_change_pw', 'Change Password')}>
+                <P>{t('guide.card_change_pw_desc', 'Enter your current password, new password (minimum 6 characters), and confirm the new password. Passwords must match.')}</P>
+              </Card>
+              <Card icon={Server} iconColor="text-purple-400" title={t('guide.card_server_config', 'Server Configuration')}>
+                <P>{t('guide.card_server_config_desc', 'Read-only display of server settings: JWT Token Expiry, Heartbeat Timeout, Enrollment Approval mode, Default Posture. These are configured via the .env file.')}</P>
+              </Card>
+              <Card icon={Info} iconColor="text-gensui-400" title={t('guide.card_about', 'About')}>
+                <P>{t('guide.card_about_desc', 'Displays the Gensui version number and confirms it is part of the Shogun AFM (Agent Fleet Management) platform.')}</P>
+              </Card>
             </div>
           </section>
 
-          {/* Security Protocols */}
+          {/* Security Protocols — First section (Governance overview) */}
           <section id="ref-security" className="space-y-6">
             <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
               <ShieldAlert size={28} className="text-red-400" />
               <div>
                 <h2 className="text-2xl font-bold text-gensui-50">{t('guide.sec_security_title', 'Safety & Security Protocols')}</h2>
-                <p className="text-xs text-gensui-400">Gensui's defense-in-depth security model for centrally governing Shogun instances.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_security_governance_desc', 'Gensui\'s defense-in-depth security model for centrally governing Shogun instances.')}</p>
               </div>
             </div>
 
@@ -529,25 +472,25 @@ export default function Guide() {
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <ShieldAlert size={18} className="text-amber-400" />
-                <h3 className="text-lg font-bold text-gensui-100">ToolGate — Centralized Tool Enforcement</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_toolgate_governance', 'ToolGate — Centralized Tool Enforcement')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">ToolGate is the runtime safety gate that sits between the AI model and tool execution on every Shogun instance. From Gensui, you can centrally manage <strong>tool-level overrides</strong> that are pushed to all member instances via the policy sync mechanism.</p>
+              <P>{t('guide.card_toolgate_governance_desc', 'ToolGate is the runtime safety gate that sits between the AI model and tool execution on every Shogun instance. From Gensui, you can centrally manage tool-level overrides that are pushed to all member instances via the policy sync mechanism.')}</P>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-1">
                   <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">ALLOW</div>
-                  <p className="text-[11px] text-gensui-400">Tool executes immediately with no interruption. Used for low-risk, read-only operations.</p>
+                  <p className="text-[11px] text-gensui-400">{t('guide.toolgate_allow', 'Tool executes immediately with no interruption. Used for low-risk, read-only operations.')}</p>
                 </div>
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 space-y-1">
                   <div className="text-xs font-bold text-amber-400 uppercase tracking-wider">CONFIRM</div>
-                  <p className="text-[11px] text-gensui-400">Tool pauses and shows a confirmation card to the local operator. They must approve or deny before execution. 60-second auto-deny timeout.</p>
+                  <p className="text-[11px] text-gensui-400">{t('guide.toolgate_confirm', 'Tool pauses and shows a confirmation card to the local operator. They must approve or deny before execution. 60-second auto-deny timeout.')}</p>
                 </div>
                 <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-1">
                   <div className="text-xs font-bold text-red-400 uppercase tracking-wider">BLOCK</div>
-                  <p className="text-[11px] text-gensui-400">Tool is blocked outright. The AI receives a "blocked" response and must find an alternative.</p>
+                  <p className="text-[11px] text-gensui-400">{t('guide.toolgate_block', 'Tool is blocked outright. The AI receives a "blocked" response and must find an alternative.')}</p>
                 </div>
               </div>
               <div className="bg-gensui-800 border border-gensui-700 p-3 rounded-lg">
-                <p className="text-xs text-gensui-400 leading-relaxed"><strong className="text-gensui-200">Governance Override Priority:</strong> Campaign Preset → <strong className="text-amber-400">Gensui Governance Override</strong> → Parameter-Aware Checks → Mode×Risk Threshold. Gensui overrides take priority over local ToolGate defaults but are superseded by active Campaign Presets.</p>
+                <p className="text-xs text-gensui-400 leading-relaxed"><strong className="text-gensui-200">{t('guide.toolgate_priority', 'Governance Override Priority:')}</strong> {t('guide.toolgate_priority_desc', 'Campaign Preset → Gensui Governance Override → Parameter-Aware Checks → Mode×Risk Threshold. Gensui overrides take priority over local ToolGate defaults but are superseded by active Campaign Presets.')}</p>
               </div>
             </div>
 
@@ -555,14 +498,14 @@ export default function Guide() {
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Shield size={18} className="text-cyan-400" />
-                <h3 className="text-lg font-bold text-gensui-100">Posture Push — Policy Sync</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_posture_push_governance', 'Posture Push — Policy Sync')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">Every Shogun instance periodically (every 30 seconds by default) fetches its effective posture from Gensui. This includes:</p>
+              <P>{t('guide.card_posture_push_governance_desc', 'Every Shogun instance periodically (every 30 seconds by default) fetches its effective posture from Gensui. This includes:')}</P>
               <ul className="text-xs text-gensui-400 space-y-2 ml-4 list-disc leading-relaxed">
-                <li><strong className="text-gensui-200">Posture Rules:</strong> allow/deny flags for external models, tool execution, Mado browser, memory access, Nexus, sub-agents, scheduled triggers, autonomous loops, file writes, and external APIs.</li>
-                <li><strong className="text-gensui-200">Tool Overrides:</strong> Per-tool allow/confirm/block overrides configured in the posture's tool_overrides field. These are pushed to ToolGate on the local instance.</li>
-                <li><strong className="text-gensui-200">Global Posture:</strong> If a global posture override is active, it takes precedence over individual or group assignments.</li>
-                <li><strong className="text-gensui-200">Harakiri State:</strong> If Harakiri is triggered from Gensui, the posture is forced to the most restrictive level.</li>
+                <li><strong className="text-gensui-200">{t('guide.posture_rules', 'Posture Rules:')}</strong> {t('guide.posture_rules_desc', 'allow/deny flags for external models, tool execution, Mado browser, memory access, Nexus, sub-agents, scheduled triggers, autonomous loops, file writes, and external APIs.')}</li>
+                <li><strong className="text-gensui-200">{t('guide.tool_overrides_sync', 'Tool Overrides:')}</strong> {t('guide.tool_overrides_sync_desc', 'Per-tool allow/confirm/block overrides configured in the posture\'s tool_overrides field.')}</li>
+                <li><strong className="text-gensui-200">{t('guide.global_posture_sync', 'Global Posture:')}</strong> {t('guide.global_posture_sync_desc', 'If a global posture override is active, it takes precedence over individual or group assignments.')}</li>
+                <li><strong className="text-gensui-200">{t('guide.harakiri_state_sync', 'Harakiri State:')}</strong> {t('guide.harakiri_state_sync_desc', 'If Harakiri is triggered from Gensui, the posture is forced to the most restrictive level.')}</li>
               </ul>
             </div>
 
@@ -570,27 +513,27 @@ export default function Guide() {
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Trash2 size={18} className="text-purple-400" />
-                <h3 className="text-lg font-bold text-gensui-100">Quarantine — Shogun Trash</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_quarantine_governance', 'Quarantine — Shogun Trash')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">Each Shogun instance includes a quarantine system (<code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">.shogun_trash/</code>) that moves deleted files to a recoverable trash folder instead of permanently deleting them. Files can be recovered within 30 days. This protects against accidental or AI-initiated data loss.</p>
+              <P>{t('guide.card_quarantine_governance_desc', 'Each Shogun instance includes a quarantine system (.shogun_trash/) that moves deleted files to a recoverable trash folder instead of permanently deleting them. Files can be recovered within 30 days. This protects against accidental or AI-initiated data loss.')}</P>
             </div>
 
-            {/* Prompt Injection Containment */}
+            {/* Prompt Injection */}
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Lock size={18} className="text-red-400" />
-                <h3 className="text-lg font-bold text-gensui-100">Prompt Injection Containment</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_injection_governance', 'Prompt Injection Containment')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">When Shogun agents fetch external content (web pages, emails, calendar events), the content is wrapped with <strong className="text-amber-400">[UNTRUSTED EXTERNAL DATA]</strong> boundary markers. This prevents the LLM from following instructions embedded in external content (a common prompt injection attack vector). The wrapping is automatic and applies to all tools that return external data.</p>
+              <P>{t('guide.card_injection_governance_desc', 'When Shogun agents fetch external content (web pages, emails, calendar events), the content is wrapped with [UNTRUSTED EXTERNAL DATA] boundary markers. This prevents the LLM from following instructions embedded in external content.')}</P>
             </div>
 
             {/* Audit & Compliance */}
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <FileSearch size={18} className="text-gensui-400" />
-                <h3 className="text-lg font-bold text-gensui-100">Audit & Compliance</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_audit_compliance', 'Audit & Compliance')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">Every security decision — ToolGate allow/confirm/block/deny, posture changes, harakiri activations, token revocations — is logged to the HMAC-chained immutable audit trail. This provides cryptographically tamper-evident evidence for NIS2, SOC2, and EU AI Act compliance. The audit chain can be verified at any time to detect tampering.</p>
+              <P>{t('guide.card_audit_compliance_desc', 'Every security decision — ToolGate allow/confirm/block/deny, posture changes, harakiri activations, token revocations — is logged to the HMAC-chained immutable audit trail. This provides cryptographically tamper-evident evidence for NIS2, SOC2, and EU AI Act compliance.')}</P>
             </div>
           </section>
 
@@ -600,34 +543,28 @@ export default function Guide() {
               <BarChart3 size={28} className="text-cyan-400" />
               <div>
                 <h2 className="text-2xl font-bold text-gensui-50">{t('guide.sec_fleet_audit_title', 'Fleet Audit Dashboard')}</h2>
-                <p className="text-xs text-gensui-400">Multi-instance audit analytics, compliance reporting, and chain verification.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_fleet_audit_desc', 'Multi-instance audit analytics, compliance reporting, and chain verification.')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><BarChart3 size={14} className="text-cyan-400" /> Overview Tab</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Fleet-wide statistics: total audit events, last 24h/7d counts, security-critical events (30d), HMAC chain integrity verification, action breakdown, and actor type distribution. A green or red banner shows chain integrity status.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Users size={14} className="text-emerald-400" /> Per Member Tab</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Audit and telemetry event counts per fleet member. Shows instance name, enrollment status, total audit/telemetry events, critical event count, and last event timestamp. Sorted by telemetry volume.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-amber-400" /> Telemetry Analytics Tab</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Aggregated telemetry breakdown by severity (info/warn/error/critical), category, event type (top 20), and per-member distribution. Filterable by date range and specific member.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-cyan-400" /> Compliance Tab</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">NIS2/SOC2/EU AI Act compliance report. Shows fleet size, harakiri activations, posture changes, enrollment events, token revocations, critical telemetry count, and HMAC chain integrity over the last 30 days.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><FileSearch size={14} className="text-gensui-400" /> Raw Log Tab</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Full audit log with action filtering. Shows timestamp, actor type, action, target, reason, and IP address. Supports up to 200 entries per query.</p>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Copy size={14} className="text-purple-400" /> CSV Export</div>
-                <p className="text-xs text-gensui-400 leading-relaxed">Export the full audit trail as a CSV file for offline analysis, compliance audits, or SIEM integration. Up to 50,000 entries per export.</p>
-              </div>
+              <Card icon={BarChart3} iconColor="text-cyan-400" title={t('guide.card_overview_tab', 'Overview Tab')}>
+                <P>{t('guide.card_overview_tab_desc', 'Fleet-wide statistics: total audit events, last 24h/7d counts, security-critical events, HMAC chain integrity verification, action breakdown, and actor type distribution.')}</P>
+              </Card>
+              <Card icon={Users} iconColor="text-emerald-400" title={t('guide.card_per_member_tab', 'Per Member Tab')}>
+                <P>{t('guide.card_per_member_tab_desc', 'Audit and telemetry event counts per fleet member. Shows instance name, enrollment status, total events, critical event count, and last event timestamp.')}</P>
+              </Card>
+              <Card icon={Activity} iconColor="text-amber-400" title={t('guide.card_telemetry_tab', 'Telemetry Analytics Tab')}>
+                <P>{t('guide.card_telemetry_tab_desc', 'Aggregated telemetry breakdown by severity, category, event type (top 20), and per-member distribution. Filterable by date range.')}</P>
+              </Card>
+              <Card icon={Shield} iconColor="text-cyan-400" title={t('guide.card_compliance_tab', 'Compliance Tab')}>
+                <P>{t('guide.card_compliance_tab_desc', 'NIS2/SOC2/EU AI Act compliance report. Shows fleet size, harakiri activations, posture changes, enrollment events, token revocations, and HMAC chain integrity.')}</P>
+              </Card>
+              <Card icon={FileSearch} iconColor="text-gensui-400" title={t('guide.card_raw_log_tab', 'Raw Log Tab')}>
+                <P>{t('guide.card_raw_log_tab_desc', 'Full audit log with action filtering. Shows timestamp, actor type, action, target, reason, and IP address.')}</P>
+              </Card>
+              <Card icon={Copy} iconColor="text-purple-400" title={t('guide.card_csv_export', 'CSV Export')}>
+                <P>{t('guide.card_csv_export_desc', 'Export the full audit trail as a CSV file for offline analysis, compliance audits, or SIEM integration. Up to 50,000 entries per export.')}</P>
+              </Card>
             </div>
           </section>
 
@@ -637,7 +574,7 @@ export default function Guide() {
               <Key size={28} className="text-purple-400" />
               <div>
                 <h2 className="text-2xl font-bold text-gensui-50">{t('guide.sec_identity_title', 'Enterprise Identity')}</h2>
-                <p className="text-xs text-gensui-400">Service accounts, API keys, and SSO/OIDC configuration for enterprise environments.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_identity_desc', 'Service accounts, API keys, and SSO/OIDC configuration for enterprise environments.')}</p>
               </div>
             </div>
 
@@ -645,21 +582,18 @@ export default function Guide() {
             <div className="glass-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Key size={18} className="text-amber-400" />
-                <h3 className="text-lg font-bold text-gensui-100">Service Accounts &amp; API Keys</h3>
+                <h3 className="text-lg font-bold text-gensui-100">{t('guide.card_service_accounts', 'Service Accounts & API Keys')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">Service accounts provide machine-to-machine API authentication for CI/CD pipelines, SIEM integrations, monitoring systems, and custom automation. Each account has a unique API key (shown once on creation), a role, optional scopes, and rate limiting.</p>
+              <P>{t('guide.card_service_accounts_desc', 'Service accounts provide machine-to-machine API authentication for CI/CD pipelines, SIEM integrations, monitoring systems, and custom automation.')}</P>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">API Key Format</div>
-                  <p className="text-[11px] text-gensui-400"><code className="text-gensui-300 bg-gensui-900 px-1 rounded">gsk_</code> prefix + 48 random characters. HMAC-SHA256 hashed at rest. Key prefix stored for display identification.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.api_key_format', 'API Key Format')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.api_key_format_desc', 'gsk_ prefix + 48 random characters. HMAC-SHA256 hashed at rest. Key prefix stored for display identification.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Key Lifecycle</div>
-                  <p className="text-[11px] text-gensui-400"><strong>Create</strong> &rarr; shown once. <strong>Rotate</strong> &rarr; invalidates old key, generates new. <strong>Revoke</strong> &rarr; permanently deactivates. All actions are audit-logged.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.key_lifecycle', 'Key Lifecycle')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.key_lifecycle_desc', 'Create → shown once. Rotate → invalidates old key, generates new. Revoke → permanently deactivates. All actions are audit-logged.')}</p>
                 </div>
-              </div>
-              <div className="bg-gensui-800 border border-gensui-700 p-3 rounded-lg">
-                <p className="text-xs text-gensui-400 leading-relaxed"><strong className="text-gensui-200">Roles:</strong> <span className="text-cyan-400">readonly</span> (read-only access), <span className="text-emerald-400">auditor</span> (audit + telemetry read), <span className="text-amber-400">operator</span> (fleet management), <span className="text-red-400">admin</span> (full access). Authenticate via <code className="text-gensui-300 bg-gensui-900 px-1 rounded">X-API-Key</code> header.</p>
               </div>
             </div>
 
@@ -669,55 +603,55 @@ export default function Guide() {
                 <Globe size={18} className="text-purple-400" />
                 <h3 className="text-lg font-bold text-gensui-100">{t('guide.sec_sso_oidc', 'SSO / OIDC Providers')}</h3>
               </div>
-              <p className="text-xs text-gensui-400 leading-relaxed">Configure external identity providers for single sign-on. Gensui supports <strong>OpenID Connect</strong> (Keycloak, Auth0, Okta, Azure AD, Google), <strong>SAML 2.0</strong>, and <strong>SPIFFE/SPIRE</strong> trust domains. One provider can be marked as &ldquo;Primary&rdquo; to show an SSO button on the login page.</p>
+              <P>{t('guide.sec_sso_oidc_desc', 'Configure external identity providers for single sign-on. Gensui supports OpenID Connect (Keycloak, Auth0, Okta, Azure AD, Google), SAML 2.0, and SPIFFE/SPIRE trust domains.')}</P>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">OIDC Configuration</div>
-                  <p className="text-[11px] text-gensui-400">Set issuer URL, client ID, client secret (encrypted at rest), scopes, and audience. Discovery URL is auto-derived from the issuer.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.oidc_config', 'OIDC Configuration')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.oidc_config_desc', 'Set issuer URL, client ID, client secret (encrypted at rest), scopes, and audience.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Role Mapping</div>
-                  <p className="text-[11px] text-gensui-400">Map external IdP roles/groups to Gensui roles. Claim mapping extracts email, name, and role from OIDC tokens. Unmapped users receive the default role.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.role_mapping', 'Role Mapping')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.role_mapping_desc', 'Map external IdP roles/groups to Gensui roles. Claim mapping extracts email, name, and role from OIDC tokens.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Auto-Provisioning</div>
-                  <p className="text-[11px] text-gensui-400">Optionally auto-create Gensui admin accounts on first SSO login. Domain allowlisting restricts which email domains can register.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.auto_provisioning', 'Auto-Provisioning')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.auto_provisioning_desc', 'Optionally auto-create Gensui admin accounts on first SSO login. Domain allowlisting restricts which email domains can register.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Security</div>
-                  <p className="text-[11px] text-gensui-400">Client secrets are encrypted at rest. Token validation checks issuer, audience, and expiry. All SSO config changes are logged in the HMAC audit chain.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.sso_security', 'Security')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.sso_security_desc', 'Client secrets are encrypted at rest. Token validation checks issuer, audience, and expiry. All SSO config changes are logged in the HMAC audit chain.')}</p>
                 </div>
               </div>
             </div>
           </section>
 
           {/* ═══════════════════════════════════════════════════════════════
-              SAFETY & SECURITY PROTOCOLS
+              SAFETY & SECURITY PROTOCOLS (Detailed)
               ═══════════════════════════════════════════════════════════════ */}
           <section id="ref-security" className="space-y-6">
             <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
               <ShieldAlert size={28} className="text-red-400" />
               <div>
                 <h2 className="text-2xl font-bold text-gensui-50">{t('guide.sec_security_title', 'Safety & Security Protocols')}</h2>
-                <p className="text-xs text-gensui-400">Comprehensive runtime security architecture protecting every Shogun instance in the fleet.</p>
+                <p className="text-xs text-gensui-400">{t('guide.sec_security_desc', 'Comprehensive runtime security architecture protecting every Shogun instance in the fleet.')}</p>
               </div>
             </div>
 
             {/* Architecture Overview */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Shield size={18} className="text-amber-400" /> {t('guide.security_architecture', 'Architecture Overview')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">Shogun&apos;s security architecture is built in <strong className="text-gensui-200">6 layered phases</strong>, each independently enforceable. Security decisions flow from Gensui (fleet-wide policy) down to each Shogun instance (runtime enforcement). The system is designed for <strong>NIS2, SOC 2, and EU AI Act</strong> compliance.</p>
+              <P>{t('guide.security_architecture_desc', 'Shogun\'s security architecture is built in 6 layered phases, each independently enforceable. Security decisions flow from Gensui (fleet-wide policy) down to each Shogun instance (runtime enforcement). The system is designed for NIS2, SOC 2, and EU AI Act compliance.')}</P>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {[
-                  { phase: '1', title: 'ToolGate', desc: 'Runtime tool enforcement engine', color: 'text-red-400' },
-                  { phase: '2', title: 'Quarantine', desc: 'Soft-delete trash recovery', color: 'text-amber-400' },
-                  { phase: '3', title: 'Prompt Injection', desc: 'Untrusted content wrapping', color: 'text-purple-400' },
-                  { phase: '4', title: 'Posture Push', desc: 'Fleet-wide policy sync', color: 'text-cyan-400' },
-                  { phase: '5', title: 'Fleet Audit', desc: 'Multi-instance dashboards', color: 'text-emerald-400' },
-                  { phase: '6', title: 'Enterprise Identity', desc: 'SPIFFE/OIDC/service accounts', color: 'text-blue-400' },
+                  { phase: '1', title: t('guide.phase1_title', 'ToolGate'), desc: t('guide.phase1_desc', 'Runtime tool enforcement engine'), color: 'text-red-400' },
+                  { phase: '2', title: t('guide.phase2_title', 'Quarantine'), desc: t('guide.phase2_desc', 'Soft-delete trash recovery'), color: 'text-amber-400' },
+                  { phase: '3', title: t('guide.phase3_title', 'Prompt Injection'), desc: t('guide.phase3_desc', 'Untrusted content wrapping'), color: 'text-purple-400' },
+                  { phase: '4', title: t('guide.phase4_title', 'Posture Push'), desc: t('guide.phase4_desc', 'Fleet-wide policy sync'), color: 'text-cyan-400' },
+                  { phase: '5', title: t('guide.phase5_title', 'Fleet Audit'), desc: t('guide.phase5_desc', 'Multi-instance dashboards'), color: 'text-emerald-400' },
+                  { phase: '6', title: t('guide.phase6_title', 'Enterprise Identity'), desc: t('guide.phase6_desc', 'SPIFFE/OIDC/service accounts'), color: 'text-blue-400' },
                 ].map(p => (
                   <div key={p.phase} className="bg-gensui-800/60 border border-gensui-700/30 rounded-lg p-3">
-                    <div className={`text-xs font-bold ${p.color}`}>Phase {p.phase}: {p.title}</div>
+                    <div className={`text-xs font-bold ${p.color}`}>{t('guide.phase_label', 'Phase')} {p.phase}: {p.title}</div>
                     <p className="text-[10px] text-gensui-500 mt-1">{p.desc}</p>
                   </div>
                 ))}
@@ -727,46 +661,23 @@ export default function Guide() {
             {/* Phase 1: ToolGate */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Lock size={18} className="text-red-400" /> {t('guide.security_toolgate', 'Phase 1: ToolGate — Runtime Tool Enforcement')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">ToolGate is the core security enforcement engine in Shogun. Every tool call passes through ToolGate <strong>before execution</strong>. It evaluates the call against the active security posture and returns one of three verdicts: <code className="text-gensui-300 bg-gensui-900 px-1 rounded">allow</code>, <code className="text-gensui-300 bg-gensui-900 px-1 rounded">confirm</code> (human-in-the-loop), or <code className="text-gensui-300 bg-gensui-900 px-1 rounded">block</code>.</p>
-
+              <P>{t('guide.security_toolgate_full_desc', 'ToolGate is the core security enforcement engine in Shogun. Every tool call passes through ToolGate before execution. It evaluates the call against the active security posture and returns one of three verdicts: allow, confirm (human-in-the-loop), or block.')}</P>
               <div className="space-y-3">
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
-                  <div className="text-xs font-bold text-gensui-200 mb-1">How ToolGate Evaluates a Call</div>
+                  <div className="text-xs font-bold text-gensui-200 mb-1">{t('guide.security_toolgate_eval', 'How ToolGate Evaluates a Call')}</div>
                   <ol className="text-[11px] text-gensui-400 leading-relaxed list-decimal pl-4 space-y-1">
-                    <li><strong>Tool Override Check</strong> — If the posture has a specific tool override (e.g., <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">send_email → block</code>), that verdict is returned immediately.</li>
-                    <li><strong>Permission Flag Check</strong> — The tool is mapped to a permission category (e.g., <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">browse_web → allow_external_web</code>). If that flag is false, the call is blocked.</li>
-                    <li><strong>Default Allow</strong> — If no override or flag matches, the tool call is allowed.</li>
+                    <li><strong>{t('guide.eval_step1', 'Tool Override Check')}</strong> — {t('guide.eval_step1_desc', 'If the posture has a specific tool override, that verdict is returned immediately.')}</li>
+                    <li><strong>{t('guide.eval_step2', 'Permission Flag Check')}</strong> — {t('guide.eval_step2_desc', 'The tool is mapped to a permission category. If that flag is false, the call is blocked.')}</li>
+                    <li><strong>{t('guide.eval_step3', 'Default Allow')}</strong> — {t('guide.eval_step3_desc', 'If no override or flag matches, the tool call is allowed.')}</li>
                   </ol>
                 </div>
-
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
-                  <div className="text-xs font-bold text-gensui-200 mb-1">Permission Categories (14 Flags)</div>
-                  <div className="grid grid-cols-2 gap-1 text-[10px] text-gensui-400">
-                    <span>• <code className="text-cyan-400">allow_external_models</code> — Cloud AI providers</span>
-                    <span>• <code className="text-cyan-400">allow_local_models</code> — Local models (Ollama)</span>
-                    <span>• <code className="text-cyan-400">allow_tool_execution</code> — Native tools</span>
-                    <span>• <code className="text-cyan-400">allow_mado</code> — Browser automation</span>
-                    <span>• <code className="text-cyan-400">allow_memory_write</code> — Archive writes</span>
-                    <span>• <code className="text-cyan-400">allow_memory_read</code> — Archive reads</span>
-                    <span>• <code className="text-cyan-400">allow_agent_flow</code> — Multi-agent workflows</span>
-                    <span>• <code className="text-cyan-400">allow_nexus</code> — Nexus collaboration</span>
-                    <span>• <code className="text-cyan-400">allow_samurai_delegation</code> — Sub-agent spawning</span>
-                    <span>• <code className="text-cyan-400">allow_scheduled_triggers</code> — Cron/scheduled tasks</span>
-                    <span>• <code className="text-cyan-400">allow_autonomous_loops</code> — Self-directed loops</span>
-                    <span>• <code className="text-cyan-400">allow_external_web</code> — External websites</span>
-                    <span>• <code className="text-cyan-400">allow_file_write</code> — Filesystem writes</span>
-                    <span>• <code className="text-cyan-400">allow_external_api</code> — Outbound API calls</span>
-                  </div>
+                  <div className="text-xs font-bold text-gensui-200 mb-1">{t('guide.security_toolgate_confirm', 'Confirmation Modal (Human-in-the-Loop)')}</div>
+                  <p className="text-[11px] text-gensui-400 leading-relaxed">{t('guide.security_toolgate_confirm_desc', 'When a tool override is set to confirm, Shogun pauses execution and presents a confirmation modal. The user must explicitly Approve or Deny before the tool executes. Denials are logged to the immutable audit chain.')}</p>
                 </div>
-
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
-                  <div className="text-xs font-bold text-gensui-200 mb-1">Confirmation Modal (Human-in-the-Loop)</div>
-                  <p className="text-[11px] text-gensui-400 leading-relaxed">When a tool override is set to <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">confirm</code>, Shogun pauses execution and presents a confirmation modal in the chat interface. The modal shows the tool name, arguments, and a reason. The user must explicitly <strong>Approve</strong> or <strong>Deny</strong> before the tool executes. Denials are logged to the immutable audit chain.</p>
-                </div>
-
-                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
-                  <div className="text-xs font-bold text-gensui-200 mb-1">Audit Logging</div>
-                  <p className="text-[11px] text-gensui-400 leading-relaxed">Every ToolGate evaluation is logged with: tool name, arguments, verdict (allow/confirm/block), matched rule/flag, posture name, and timestamp. Blocked calls include the specific reason. All logs are written to the HMAC-chained immutable audit chain (Layer 2).</p>
+                  <div className="text-xs font-bold text-gensui-200 mb-1">{t('guide.security_toolgate_audit', 'Audit Logging')}</div>
+                  <p className="text-[11px] text-gensui-400 leading-relaxed">{t('guide.security_toolgate_audit_desc', 'Every ToolGate evaluation is logged with: tool name, arguments, verdict, matched rule/flag, posture name, and timestamp. All logs are written to the HMAC-chained immutable audit chain (Layer 2).')}</p>
                 </div>
               </div>
             </div>
@@ -774,15 +685,15 @@ export default function Guide() {
             {/* Phase 2: Quarantine */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Trash2 size={18} className="text-amber-400" /> {t('guide.security_quarantine', 'Phase 2: Quarantine — Soft-Delete Recovery')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">The Quarantine system replaces hard deletes with recoverable soft deletes. When a file deletion is requested, the file is moved to <code className="text-gensui-300 bg-gensui-900 px-1 rounded">.shogun_trash/</code> instead of being permanently removed. Files are stored with metadata (original path, deletion timestamp, reason) and can be restored or permanently purged.</p>
+              <P>{t('guide.security_quarantine_full_desc', 'The Quarantine system replaces hard deletes with recoverable soft deletes. When a file deletion is requested, the file is moved to .shogun_trash/ instead of being permanently removed.')}</P>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Trash Storage</div>
-                  <p className="text-[11px] text-gensui-400">Files in <code className="text-gensui-300 bg-gensui-900 px-0.5 rounded">.shogun_trash/</code> retain their original path structure. Each entry stores: original_path, deleted_at, deleted_by, size_bytes, and reason.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.security_quarantine_storage', 'Trash Storage')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.security_quarantine_storage_desc', 'Files retain their original path structure. Each entry stores: original_path, deleted_at, deleted_by, size_bytes, and reason.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Recovery & Purge</div>
-                  <p className="text-[11px] text-gensui-400">Administrators can restore files to their original location or permanently purge them. Auto-purge policies can be configured by age (e.g., 30 days).</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.security_quarantine_recovery', 'Recovery & Purge')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.security_quarantine_recovery_desc', 'Administrators can restore files to their original location or permanently purge them. Auto-purge policies can be configured by age (e.g., 30 days).')}</p>
                 </div>
               </div>
             </div>
@@ -790,33 +701,21 @@ export default function Guide() {
             {/* Phase 3: Prompt Injection */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><AlertTriangle size={18} className="text-purple-400" /> {t('guide.security_injection', 'Phase 3: Prompt Injection Containment')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">External content (web scrapes, emails, API responses) can contain adversarial instructions designed to hijack the AI agent. Shogun&apos;s prompt injection containment automatically wraps all untrusted external content with boundary markers before it enters the system prompt context.</p>
-              <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-2">
-                <div className="text-xs font-bold text-gensui-200">Wrapping Format</div>
-                <pre className="text-[10px] text-gensui-400 bg-gensui-900 rounded p-2 overflow-x-auto">
-{`─── ⚠ UNTRUSTED EXTERNAL DATA ─────────────────
-Source: web_scrape | email | api_response
-URL: https://example.com
-─────────────────────────────────────────────────
-[external content here]
-─── END UNTRUSTED DATA ─────────────────────────`}
-                </pre>
-                <p className="text-[11px] text-gensui-400">This containment applies to: <strong>browse_web</strong> results, <strong>email content</strong> (read_email), <strong>external API</strong> responses, and any data flagged as untrusted. The markers instruct the model to treat the enclosed content as data, not instructions.</p>
-              </div>
+              <P>{t('guide.security_injection_full_desc', 'External content (web scrapes, emails, API responses) can contain adversarial instructions designed to hijack the AI agent. Shogun\'s prompt injection containment automatically wraps all untrusted external content with boundary markers.')}</P>
             </div>
 
             {/* Phase 4: Posture Push */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Zap size={18} className="text-cyan-400" /> {t('guide.security_posture_push', 'Phase 4: Gensui → Shogun Posture Push')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">When a Gensui administrator modifies a security posture, the updated configuration is pushed to all connected Shogun instances via the heartbeat protocol. This ensures fleet-wide policy consistency without requiring manual configuration on each instance.</p>
+              <P>{t('guide.security_posture_push_full_desc', 'When a Gensui administrator modifies a security posture, the updated configuration is pushed to all connected Shogun instances via the heartbeat protocol. This ensures fleet-wide policy consistency.')}</P>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Push Mechanism</div>
-                  <p className="text-[11px] text-gensui-400">Posture changes are delivered via the existing heartbeat response. Each Shogun instance checks the heartbeat response for posture updates and applies them immediately. No additional ports or protocols required.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.security_posture_push_mechanism', 'Push Mechanism')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.security_posture_push_mechanism_desc', 'Posture changes are delivered via the existing heartbeat response. No additional ports or protocols required.')}</p>
                 </div>
                 <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
-                  <div className="text-xs font-bold text-gensui-200">Scope Hierarchy</div>
-                  <p className="text-[11px] text-gensui-400"><strong>Individual</strong> posture overrides take priority over <strong>Group</strong> posture, which overrides the <strong>Default</strong> fleet posture. This hierarchy allows fine-grained control while maintaining a sensible default.</p>
+                  <div className="text-xs font-bold text-gensui-200">{t('guide.security_posture_push_scope', 'Scope Hierarchy')}</div>
+                  <p className="text-[11px] text-gensui-400">{t('guide.security_posture_push_scope_desc', 'Individual posture overrides take priority over Group posture, which overrides the Default fleet posture.')}</p>
                 </div>
               </div>
             </div>
@@ -824,33 +723,33 @@ URL: https://example.com
             {/* Phase 5: Fleet Audit */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><BarChart3 size={18} className="text-emerald-400" /> {t('guide.security_fleet_audit', 'Phase 5: Fleet Audit Views')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">Multi-instance audit dashboard providing fleet-wide visibility into security events, compliance status, and HMAC chain integrity. See the <strong>Fleet Audit</strong> section above for full details on tabs, metrics, and CSV export.</p>
+              <P>{t('guide.security_fleet_audit_full_desc', 'Multi-instance audit dashboard providing fleet-wide visibility into security events, compliance status, and HMAC chain integrity.')}</P>
             </div>
 
             {/* Phase 6: Enterprise Identity */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Key size={18} className="text-blue-400" /> {t('guide.security_enterprise_id', 'Phase 6: Enterprise Identity')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">SPIFFE/SPIRE trust domains, Keycloak/OIDC SSO, and service accounts for M2M authentication. See the <strong>Enterprise Identity</strong> section above for full details on API keys, SSO providers, and role mapping.</p>
+              <P>{t('guide.security_enterprise_id_full_desc', 'SPIFFE/SPIRE trust domains, Keycloak/OIDC SSO, and service accounts for M2M authentication.')}</P>
             </div>
 
             {/* Immutable Audit Chain */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><FileSearch size={18} className="text-gensui-400" /> {t('guide.security_immutable_chain', 'Immutable Audit Chain (HMAC-SHA256)')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">All security events are dual-written: Layer 1 (operational SQLite, 90-day retention) for fast queries, and Layer 2 (immutable HMAC-chained SQLite, 7-year retention) for compliance. Layer 2 is append-only — no updates, no deletes. Each record&apos;s HMAC is derived from its content + the previous record&apos;s HMAC, creating a tamper-evident chain. Chain integrity can be verified at any time from the Fleet Audit dashboard.</p>
+              <P>{t('guide.security_immutable_chain_full_desc', 'All security events are dual-written: Layer 1 (operational SQLite, 90-day retention) for fast queries, and Layer 2 (immutable HMAC-chained SQLite, 7-year retention) for compliance. Layer 2 is append-only — no updates, no deletes. Each record\'s HMAC is derived from its content + the previous record\'s HMAC, creating a tamper-evident chain.')}</P>
             </div>
 
             {/* Security Postures Detail */}
             <div className="glass-card p-5 space-y-4">
               <h3 className="text-lg font-bold text-gensui-100 flex items-center gap-2"><Shield size={18} className="text-amber-400" /> {t('guide.security_postures_detail', 'Security Postures')}</h3>
-              <p className="text-xs text-gensui-400 leading-relaxed">Security postures define the complete permission profile for a Shogun instance. Each posture contains 14 boolean permission flags, a severity level (0–100), and optional per-tool overrides. Built-in postures (PERMISSIVE, STANDARD, RESTRICTED, LOCKDOWN, PARANOID) provide sensible defaults.</p>
+              <P>{t('guide.security_postures_detail_full_desc', 'Security postures define the complete permission profile for a Shogun instance. Each posture contains 14 boolean permission flags, a severity level (0–100), and optional per-tool overrides.')}</P>
               <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3">
-                <div className="text-xs font-bold text-gensui-200 mb-2">Built-in Posture Levels</div>
+                <div className="text-xs font-bold text-gensui-200 mb-2">{t('guide.security_posture_levels', 'Built-in Posture Levels')}</div>
                 <div className="space-y-1 text-[11px] text-gensui-400">
-                  <div className="flex justify-between"><span className="text-emerald-400 font-bold">PERMISSIVE (L5)</span><span>All flags enabled, no tool overrides</span></div>
-                  <div className="flex justify-between"><span className="text-cyan-400 font-bold">STANDARD (L10)</span><span>Default — all enabled, production-ready</span></div>
-                  <div className="flex justify-between"><span className="text-amber-400 font-bold">RESTRICTED (L50)</span><span>External access disabled, controlled tools</span></div>
-                  <div className="flex justify-between"><span className="text-red-400 font-bold">LOCKDOWN (L90)</span><span>Most flags disabled, minimal operations</span></div>
-                  <div className="flex justify-between"><span className="text-red-500 font-bold">PARANOID (L100)</span><span>Maximum restriction, audit everything</span></div>
+                  <div className="flex justify-between"><span className="text-emerald-400 font-bold">PERMISSIVE (L5)</span><span>{t('guide.posture_permissive', 'All flags enabled, no tool overrides')}</span></div>
+                  <div className="flex justify-between"><span className="text-cyan-400 font-bold">STANDARD (L10)</span><span>{t('guide.posture_standard', 'Default — all enabled, production-ready')}</span></div>
+                  <div className="flex justify-between"><span className="text-amber-400 font-bold">RESTRICTED (L50)</span><span>{t('guide.posture_restricted', 'External access disabled, controlled tools')}</span></div>
+                  <div className="flex justify-between"><span className="text-red-400 font-bold">LOCKDOWN (L90)</span><span>{t('guide.posture_lockdown', 'Most flags disabled, minimal operations')}</span></div>
+                  <div className="flex justify-between"><span className="text-red-500 font-bold">PARANOID (L100)</span><span>{t('guide.posture_paranoid', 'Maximum restriction, audit everything')}</span></div>
                 </div>
               </div>
             </div>
