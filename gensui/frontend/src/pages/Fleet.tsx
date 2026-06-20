@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function Fleet() {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -39,8 +41,8 @@ export default function Fleet() {
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Fleet Management</h1>
-          <p className="text-sm text-gensui-400 mt-1">{total} registered Shogun instances</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('fleet.title', 'Fleet Management')}</h1>
+          <p className="text-sm text-gensui-400 mt-1">{total} {t('fleet.subtitle', 'registered Shogun instances')}</p>
         </div>
       </div>
 
@@ -50,7 +52,7 @@ export default function Fleet() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gensui-500" />
           <input
             className="gensui-input pl-9"
-            placeholder="Search by name or hostname..."
+            placeholder={t('common.search', 'Search by name or hostname...')}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -60,9 +62,9 @@ export default function Fleet() {
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
         >
-          <option value="">All Status</option>
-          <option value="online">Online</option>
-          <option value="offline">Offline</option>
+          <option value="">{t('common.status', 'All Status')}</option>
+          <option value="online">{t('common.online', 'Online')}</option>
+          <option value="offline">{t('common.offline', 'Offline')}</option>
         </select>
       </div>
 
@@ -76,13 +78,13 @@ export default function Fleet() {
           <table className="gensui-table">
             <thead>
               <tr>
-                <th>Instance</th>
-                <th>Status</th>
-                <th>Environment</th>
-                <th>Harakiri</th>
-                <th>Samurai</th>
-                <th>Workflows</th>
-                <th>Last Seen</th>
+                <th>{t('fleet.instance_name', 'Instance')}</th>
+                <th>{t('common.status', 'Status')}</th>
+                <th>{t('fleet.environment', 'Environment')}</th>
+                <th>{t('nav.harakiri', 'Harakiri')}</th>
+                <th>{t('fleet.samurai_count', 'Samurai')}</th>
+                <th>{t('fleet.workflows', 'Workflows')}</th>
+                <th>{t('fleet.last_seen', 'Last Seen')}</th>
               </tr>
             </thead>
             <tbody>
@@ -116,7 +118,7 @@ export default function Fleet() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-gensui-500">No members found</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-gensui-500">{t('fleet.no_members', 'No members found')}</td></tr>
               )}
             </tbody>
           </table>

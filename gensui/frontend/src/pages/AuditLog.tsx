@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function AuditLog() {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -21,14 +23,14 @@ export default function AuditLog() {
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Audit Log</h1>
-          <p className="text-sm text-gensui-400 mt-1">{total} entries — HMAC-chained</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('audit.title', 'Audit Log')}</h1>
+          <p className="text-sm text-gensui-400 mt-1">{total} {t('audit.subtitle', 'entries — HMAC-chained')}</p>
         </div>
         <input className="gensui-input w-64" placeholder="Filter by action..." value={actionFilter} onChange={e => setActionFilter(e.target.value)} />
       </div>
       <div className="glass-card overflow-hidden">
         <table className="gensui-table">
-          <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Reason</th></tr></thead>
+          <thead><tr><th>{t('audit.timestamp', 'Time')}</th><th>{t('audit.actor', 'Actor')}</th><th>{t('audit.action', 'Action')}</th><th>{t('audit.target', 'Target')}</th><th>{t('audit.reason', 'Reason')}</th></tr></thead>
           <tbody>
             {entries.map(e => (
               <tr key={e.id}>

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Cpu, AlertTriangle, Activity, Skull, Shield, Workflow, Globe } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,27 +41,27 @@ export default function Dashboard() {
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gensui-50">Command Overview</h1>
-        <p className="text-sm text-gensui-400 mt-1">Real-time fleet monitoring and security status</p>
+        <h1 className="text-2xl font-bold text-gensui-50">{t('dashboard.title', 'Command Overview')}</h1>
+        <p className="text-sm text-gensui-400 mt-1">{t('dashboard.subtitle', 'Real-time fleet monitoring and security status')}</p>
       </div>
 
       {/* Fleet Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
-          label="Members Online"
+          label={t('dashboard.online', 'Members Online')}
           value={fleet.online_members ?? 0}
           total={fleet.total_members ?? 0}
           icon={Users}
           color="emerald"
         />
         <MetricCard
-          label="Active Samurai"
+          label={t('dashboard.total_samurai', 'Active Samurai')}
           value={fleet.total_samurai ?? 0}
           icon={Cpu}
           color="cyan"
         />
         <MetricCard
-          label="Active Workflows"
+          label={t('dashboard.total_workflows', 'Active Workflows')}
           value={fleet.total_workflows ?? 0}
           icon={Workflow}
           color="amber"
@@ -80,7 +82,7 @@ export default function Dashboard() {
             <div className={`p-2 rounded-xl ${alerts.total > 0 ? 'bg-crimson-900/40' : 'bg-gensui-700/40'}`}>
               <AlertTriangle size={18} className={alerts.total > 0 ? 'text-crimson-400' : 'text-gensui-400'} />
             </div>
-            <span className="text-sm text-gensui-400">Active Alerts</span>
+            <span className="text-sm text-gensui-400">{t('alerts.title', 'Active Alerts')}</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className={`text-3xl font-bold ${alerts.total > 0 ? 'text-crimson-400' : 'text-gensui-300'}`}>
@@ -98,10 +100,10 @@ export default function Dashboard() {
             <div className={`p-2 rounded-xl ${data?.active_harakiri_count > 0 ? 'bg-crimson-900/40 danger-glow' : 'bg-gensui-700/40'}`}>
               <Skull size={18} className={data?.active_harakiri_count > 0 ? 'text-crimson-400' : 'text-gensui-400'} />
             </div>
-            <span className="text-sm text-gensui-400">Harakiri Active</span>
+            <span className="text-sm text-gensui-400">{t('dashboard.harakiri_active', 'Harakiri Active')}</span>
           </div>
           <span className={`text-3xl font-bold ${data?.active_harakiri_count > 0 ? 'text-crimson-400' : 'text-emerald-400'}`}>
-            {data?.active_harakiri_count > 0 ? data.active_harakiri_count : 'None'}
+            {data?.active_harakiri_count > 0 ? data.active_harakiri_count : t('common.none', 'None')}
           </span>
         </Link>
 
@@ -111,7 +113,7 @@ export default function Dashboard() {
             <div className={`p-2 rounded-xl ${fleet.pending_enrollment > 0 ? 'bg-amber-900/40' : 'bg-gensui-700/40'}`}>
               <Shield size={18} className={fleet.pending_enrollment > 0 ? 'text-amber-400' : 'text-gensui-400'} />
             </div>
-            <span className="text-sm text-gensui-400">Pending Enrollment</span>
+            <span className="text-sm text-gensui-400">{t('dashboard.pending', 'Pending Enrollment')}</span>
           </div>
           <span className={`text-3xl font-bold ${fleet.pending_enrollment > 0 ? 'text-amber-400' : 'text-gensui-300'}`}>
             {fleet.pending_enrollment ?? 0}

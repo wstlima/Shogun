@@ -5,6 +5,7 @@ import {
   Clock, TrendingUp, ShieldCheck, RefreshCw
 } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 type Tab = 'overview' | 'members' | 'telemetry' | 'compliance' | 'log';
 
@@ -60,6 +61,7 @@ const SEV_COLORS: Record<string, string> = {
 };
 
 export default function FleetAudit() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<FleetStats | null>(null);
   const [members, setMembers] = useState<MemberSummary[]>([]);
@@ -128,15 +130,15 @@ export default function FleetAudit() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Fleet Audit Dashboard</h1>
-          <p className="text-sm text-gensui-400 mt-1">Multi-instance audit analytics, compliance reporting, and chain verification</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('fleet_audit.title', 'Fleet Audit Dashboard')}</h1>
+          <p className="text-sm text-gensui-400 mt-1">{t('fleet_audit.subtitle', 'Multi-instance audit analytics, compliance reporting, and chain verification')}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="gensui-btn-secondary flex items-center gap-2 text-xs">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <button onClick={handleExport} disabled={exporting} className="gensui-btn-primary flex items-center gap-2 text-xs">
-            <Download size={14} /> {exporting ? 'Exporting...' : 'Export CSV'}
+            <Download size={14} /> {exporting ? t('fleet_audit.exporting', 'Exporting...') : t('fleet_audit.export_csv', 'Export CSV')}
           </button>
         </div>
       </div>
@@ -171,19 +173,19 @@ export default function FleetAudit() {
               {/* Stat Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="glass-card p-4 space-y-1">
-                  <div className="text-xs text-gensui-500 uppercase tracking-wider">Total Events</div>
+                  <div className="text-xs text-gensui-500 uppercase tracking-wider">{t('fleet_audit.total_events', 'Total Events')}</div>
                   <div className="text-2xl font-bold text-gensui-50">{stats.total_entries.toLocaleString()}</div>
                 </div>
                 <div className="glass-card p-4 space-y-1">
-                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><Clock size={12} /> Last 24h</div>
+                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><Clock size={12} /> {t('fleet_audit.last_24h', 'Last 24h')}</div>
                   <div className="text-2xl font-bold text-cyan-400">{stats.last_24h.toLocaleString()}</div>
                 </div>
                 <div className="glass-card p-4 space-y-1">
-                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><TrendingUp size={12} /> Last 7d</div>
+                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><TrendingUp size={12} /> {t('fleet_audit.last_7d', 'Last 7d')}</div>
                   <div className="text-2xl font-bold text-emerald-400">{stats.last_7d.toLocaleString()}</div>
                 </div>
                 <div className="glass-card p-4 space-y-1">
-                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><AlertTriangle size={12} /> Critical (30d)</div>
+                  <div className="text-xs text-gensui-500 uppercase tracking-wider flex items-center gap-1"><AlertTriangle size={12} /> {t('fleet_audit.critical_30d', 'Critical (30d)')}</div>
                   <div className="text-2xl font-bold text-red-400">{stats.security_critical_30d}</div>
                 </div>
               </div>

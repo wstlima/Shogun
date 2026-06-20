@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Network, Radar, AlertTriangle, HelpCircle, Loader2, Shield, Maximize2, ZoomIn, ZoomOut, Globe } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 interface MemberNode {
   id: string;
@@ -77,6 +78,7 @@ const getAgentColor = (platform: string) => PLATFORM_COLORS[platform] || PLATFOR
 const AGENT_R = 22;
 
 export default function NetworkTopology() {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<MemberNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; member?: MemberNode; host?: DiscoveredHost; agent?: ExternalAgent } | null>(null);
@@ -284,7 +286,7 @@ export default function NetworkTopology() {
         <div>
           <h1 className="text-2xl font-bold text-gensui-50 flex items-center gap-3">
             <Network size={24} className="text-cyan-400" />
-            Network Topology
+            {t('nav.topology', 'Network Topology')}
           </h1>
           <p className="text-sm text-gensui-400 mt-1">
             {members.length} enrolled instance{members.length !== 1 ? 's' : ''}
@@ -301,7 +303,7 @@ export default function NetworkTopology() {
           className="flex items-center gap-2 px-4 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 hover:border-cyan-500/50 text-cyan-300 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 cursor-pointer"
         >
           {scanning ? <Loader2 size={16} className="animate-spin" /> : <Radar size={16} />}
-          {scanning ? 'Scanning...' : 'Scan Network'}
+          {scanning ? t('common.scanning', 'Scanning...') : t('common.scan_network', 'Scan Network')}
         </button>
       </div>
 

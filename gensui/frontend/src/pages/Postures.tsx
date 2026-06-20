@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronUp, Loader2,
 } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 const PERM_KEYS = [
   { key: 'allow_external_models',    label: 'External Models',     desc: 'Use cloud AI providers (OpenAI, Anthropic, etc.)' },
@@ -51,6 +52,7 @@ const EMPTY_FORM = {
 };
 
 export default function Postures() {
+  const { t } = useTranslation();
   const [postures, setPostures] = useState<Posture[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -183,11 +185,11 @@ export default function Postures() {
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Security Postures</h1>
-          <p className="text-sm text-gensui-400 mt-1">Define and manage what Shogun instances are allowed to do</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('postures.title', 'Security Postures')}</h1>
+          <p className="text-sm text-gensui-400 mt-1">{t('postures.subtitle', 'Define and manage what Shogun instances are allowed to do')}</p>
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-1.5">
-          <Plus size={16} /> Create Posture
+          <Plus size={16} /> {t('postures.create_posture', 'Create Posture')}
         </button>
       </div>
 

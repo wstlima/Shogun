@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function ActivityMonitor() {
+  const { t } = useTranslation();
   const [events, setEvents] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -30,8 +32,8 @@ export default function ActivityMonitor() {
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Activity Monitor</h1>
-          <p className="text-sm text-gensui-400 mt-1">{total} telemetry events</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('nav.activity', 'Activity Monitor')}</h1>
+          <p className="text-sm text-gensui-400 mt-1">{total} {t('fleet_audit.total_events', 'telemetry events')}</p>
         </div>
         <select className="gensui-input w-auto" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>

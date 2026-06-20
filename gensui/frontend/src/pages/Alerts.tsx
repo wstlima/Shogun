@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function Alerts() {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,12 +27,12 @@ export default function Alerts() {
   return (
     <div className="space-y-6 max-w-7xl">
       <div>
-        <h1 className="text-2xl font-bold text-gensui-50">Alerts</h1>
-        <p className="text-sm text-gensui-400 mt-1">{total} alerts</p>
+        <h1 className="text-2xl font-bold text-gensui-50">{t('alerts.title', 'Alerts')}</h1>
+        <p className="text-sm text-gensui-400 mt-1">{total} {t('alerts.subtitle', 'alerts')}</p>
       </div>
       <div className="glass-card overflow-hidden">
         <table className="gensui-table">
-          <thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>{t('audit.timestamp', 'Time')}</th><th>{t('alerts.severity', 'Severity')}</th><th>Type</th><th>{t('common.description', 'Description')}</th><th>{t('common.status', 'Status')}</th><th>{t('common.actions', 'Actions')}</th></tr></thead>
           <tbody>
             {alerts.map(a => (
               <tr key={a.id}>
@@ -41,12 +43,12 @@ export default function Alerts() {
                 <td><span className={`status-badge ${a.status === 'active' ? 'harakiri' : 'online'}`}>{a.status}</span></td>
                 <td>
                   {a.status === 'active' && (
-                    <button onClick={() => handleResolve(a.id)} className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">Resolve</button>
+                    <button onClick={() => handleResolve(a.id)} className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">{t('alerts.resolve', 'Resolve')}</button>
                   )}
                 </td>
               </tr>
             ))}
-            {alerts.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gensui-500">No alerts</td></tr>}
+            {alerts.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gensui-500">{t('alerts.no_alerts', 'No alerts')}</td></tr>}
           </tbody>
         </table>
       </div>

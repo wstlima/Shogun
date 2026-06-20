@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Settings as SettingsIcon, User, Lock, Server, Info, Check, AlertTriangle, Users, Plus, Trash2 } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 interface Profile {
   id: string;
@@ -133,6 +134,7 @@ function AdminManagement() {
 }
 
 export default function Settings() {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -217,9 +219,9 @@ export default function Settings() {
       <div>
         <h1 className="text-2xl font-bold text-gensui-50 flex items-center gap-3">
           <SettingsIcon size={24} className="text-cyan-400" />
-          Settings
+          {t('settings.title', 'Settings')}
         </h1>
-        <p className="text-sm text-gensui-400 mt-1">Manage your profile, password, and server configuration</p>
+        <p className="text-sm text-gensui-400 mt-1">{t('settings.subtitle', 'Manage your profile, password, and server configuration')}</p>
       </div>
 
       {/* Profile Section */}

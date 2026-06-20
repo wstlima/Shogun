@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff } from 'lucide-react';
 import api from '../lib/api';
 import { setAuth } from '../lib/auth';
+import { useTranslation } from '../i18n';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,7 +56,7 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">Email</label>
+            <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">{t('auth.email_label', 'Email')}</label>
             <input
               id="login-email"
               type="email"
@@ -66,7 +68,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">Password</label>
+            <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">{t('auth.password_label', 'Password')}</label>
             <div className="relative">
               <input
                 id="login-password"
@@ -92,7 +94,7 @@ export default function Login() {
             disabled={loading}
             className="btn-primary w-full py-3 text-sm"
           >
-            {loading ? 'Authenticating...' : 'Access Command Center'}
+            {loading ? t('auth.signing_in', 'Authenticating...') : t('auth.sign_in', 'Access Command Center')}
           </button>
         </form>
 

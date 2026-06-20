@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { UserPlus, Check, X, Copy, AlertCircle, Loader2, Plus, CheckCircle2, Ban } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function Enrollment() {
+  const { t } = useTranslation();
   const [pending, setPending] = useState<any[]>([]);
   const [tokens, setTokens] = useState<any[]>([]);
   const [newLabel, setNewLabel] = useState('');
@@ -84,8 +86,8 @@ export default function Enrollment() {
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-gensui-50">Enrollment Management</h1>
-        <p className="text-sm text-gensui-400 mt-1">Approve new Shogun instances and manage tokens</p>
+        <h1 className="text-2xl font-bold text-gensui-50">{t('enrollment.title', 'Enrollment Management')}</h1>
+        <p className="text-sm text-gensui-400 mt-1">{t('enrollment.subtitle', 'Approve new Shogun instances and manage tokens')}</p>
       </div>
 
       {/* Error/Success Banner */}
@@ -106,7 +108,7 @@ export default function Enrollment() {
       <div className="glass-card overflow-hidden">
         <div className="px-5 py-4 border-b border-gensui-700/30 flex items-center gap-2">
           <UserPlus size={16} className="text-amber-400" />
-          <h3 className="text-sm font-semibold text-gensui-200">Pending Enrollments ({pending.length})</h3>
+          <h3 className="text-sm font-semibold text-gensui-200">{t('enrollment.pending_enrollments', 'Pending Enrollments')} ({pending.length})</h3>
         </div>
         <table className="gensui-table">
           <thead><tr><th>Instance</th><th>Hostname</th><th>Environment</th><th>OS</th><th>Requested</th><th>Actions</th></tr></thead>
@@ -146,7 +148,7 @@ export default function Enrollment() {
             className="btn-primary flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            Generate Token
+            {t('enrollment.generate_token', 'Generate Token')}
           </button>
         </div>
         <div className="space-y-2">

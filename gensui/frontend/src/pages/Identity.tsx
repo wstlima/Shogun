@@ -4,6 +4,7 @@ import {
   CheckCircle, XCircle, RotateCw, Globe, Lock, Users
 } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 type Tab = 'service-accounts' | 'sso-providers';
 
@@ -34,6 +35,7 @@ const PROVIDER_TYPES = [
 ];
 
 export default function Identity() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('service-accounts');
   const [accounts, setAccounts] = useState<ServiceAccount[]>([]);
   const [providers, setProviders] = useState<SSOProvider[]>([]);
@@ -136,8 +138,8 @@ export default function Identity() {
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gensui-50">Enterprise Identity</h1>
-        <p className="text-sm text-gensui-400 mt-1">Service accounts, API keys, and SSO/OIDC configuration</p>
+        <h1 className="text-2xl font-bold text-gensui-50">{t('identity.title', 'Enterprise Identity')}</h1>
+        <p className="text-sm text-gensui-400 mt-1">{t('identity.subtitle', 'Service accounts, API keys, and SSO/OIDC configuration')}</p>
       </div>
 
       {/* Tabs */}
@@ -148,7 +150,7 @@ export default function Identity() {
             tab === 'service-accounts' ? 'bg-gensui-600/40 text-gensui-50 border border-gensui-500/30' : 'text-gensui-400 hover:text-gensui-200'
           }`}
         >
-          <Key size={14} /> Service Accounts
+          <Key size={14} /> {t('identity.service_accounts', 'Service Accounts')}
         </button>
         <button
           onClick={() => setTab('sso-providers')}
@@ -156,7 +158,7 @@ export default function Identity() {
             tab === 'sso-providers' ? 'bg-gensui-600/40 text-gensui-50 border border-gensui-500/30' : 'text-gensui-400 hover:text-gensui-200'
           }`}
         >
-          <Globe size={14} /> SSO / OIDC Providers
+          <Globe size={14} /> {t('identity.sso_providers', 'SSO / OIDC Providers')}
         </button>
       </div>
 

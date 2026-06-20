@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Skull, AlertTriangle, Shield, Users } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 export default function HarakiriControl() {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [mode, setMode] = useState('soft_freeze');
@@ -59,8 +61,8 @@ export default function HarakiriControl() {
           <Skull size={24} className="text-crimson-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gensui-50">Harakiri Control Center</h1>
-          <p className="text-sm text-crimson-400">Emergency shutdown and containment</p>
+          <h1 className="text-2xl font-bold text-gensui-50">{t('harakiri.title', 'Harakiri Control Center')}</h1>
+          <p className="text-sm text-crimson-400">{t('harakiri.subtitle', 'Emergency shutdown and containment')}</p>
         </div>
       </div>
 
@@ -72,17 +74,17 @@ export default function HarakiriControl() {
           <div>
             <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">Scope</label>
             <select className="gensui-input" value={scope} onChange={e => setScope(e.target.value as any)}>
-              <option value="individual">Individual Shogun</option>
-              <option value="global">Global (ALL Shoguns)</option>
+              <option value="individual">{t('harakiri.individual', 'Individual Shogun')}</option>
+              <option value="global">{t('harakiri.global', 'Global (ALL Shoguns)')}</option>
             </select>
           </div>
           <div>
             <label className="block text-xs text-gensui-400 uppercase tracking-wider mb-1.5">Mode</label>
             <select className="gensui-input" value={mode} onChange={e => setMode(e.target.value)}>
-              <option value="soft_freeze">Soft Freeze</option>
-              <option value="hard_stop">Hard Stop</option>
-              <option value="network_isolate">Network Isolate</option>
-              <option value="full_terminate">Full Terminate</option>
+              <option value="soft_freeze">{t('harakiri.soft_freeze', 'Soft Freeze')}</option>
+              <option value="hard_stop">{t('harakiri.hard_stop', 'Hard Stop')}</option>
+              <option value="network_isolate">{t('harakiri.network_isolate', 'Network Isolate')}</option>
+              <option value="full_terminate">{t('harakiri.full_terminate', 'Full Terminate')}</option>
             </select>
           </div>
         </div>
@@ -135,7 +137,7 @@ export default function HarakiriControl() {
                 {loading ? 'Executing...' : '⚡ Execute Harakiri'}
               </button>
               <button onClick={() => { setShowConfirm(false); setConfirmation(''); }} className="btn-ghost">
-                Cancel
+                {t('common.cancel', 'Cancel')}
               </button>
             </div>
           </div>

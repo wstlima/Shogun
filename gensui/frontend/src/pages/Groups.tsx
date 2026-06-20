@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Users, Shield, X, UserPlus, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
+import { useTranslation } from '../i18n';
 
 interface Group {
   id: string; name: string; description: string | null;
@@ -17,6 +18,7 @@ interface FleetMember {
 }
 
 export default function Groups() {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<Group[]>([]);
   const [postures, setPostures] = useState<Posture[]>([]);
   const [fleetMembers, setFleetMembers] = useState<FleetMember[]>([]);
@@ -101,7 +103,7 @@ export default function Groups() {
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-gensui-50">Groups</h1>
+        <h1 className="text-2xl font-bold text-gensui-50">{t('groups.title', 'Groups')}</h1>
         <p className="text-sm text-gensui-400 mt-1">Organize Shogun instances for collective policy management</p>
       </div>
 
