@@ -92,6 +92,8 @@ def create_app() -> FastAPI:
     from gensui.api.alerts import router as alerts_router
     from gensui.api.dashboard import router as dashboard_router
     from gensui.api.monitoring import router as monitoring_router
+    from gensui.api.fleet_audit import router as fleet_audit_router
+    from gensui.api.identity import router as identity_router
 
     prefix = "/api/gensui"
     app.include_router(auth_router, prefix=prefix)
@@ -107,6 +109,8 @@ def create_app() -> FastAPI:
     app.include_router(alerts_router, prefix=prefix)
     app.include_router(dashboard_router, prefix=prefix)
     app.include_router(monitoring_router, prefix=prefix)
+    app.include_router(fleet_audit_router, prefix=prefix)
+    app.include_router(identity_router, prefix=prefix)
 
     # ── Health Check ─────────────────────────────────────────
     @app.get("/api/gensui/health")

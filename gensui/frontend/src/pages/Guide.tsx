@@ -4,7 +4,7 @@ import {
   FileSearch, Bell, UserPlus, Skull, Network, Settings,
   BookOpen, List, Server, AlertTriangle, Zap, Lock,
   Monitor, Globe, Tag, Copy, Search, Eye, Trash2,
-  Check, X, Key, Info, ShieldAlert, Clock
+  Check, X, Key, Info, ShieldAlert, Clock, BarChart3
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -21,6 +21,8 @@ const SECTIONS = [
   { id: 'ref-enrollment', label: 'Enrollment', icon: UserPlus, color: 'text-amber-400' },
   { id: 'ref-settings', label: 'Settings', icon: Settings, color: 'text-cyan-400' },
   { id: 'ref-security', label: 'Security Protocols', icon: ShieldAlert, color: 'text-red-400' },
+  { id: 'ref-fleet-audit', label: 'Fleet Audit', icon: BarChart3, color: 'text-cyan-400' },
+  { id: 'ref-identity', label: 'Enterprise Identity', icon: Key, color: 'text-purple-400' },
 ];
 
 export default function Guide() {
@@ -587,6 +589,103 @@ export default function Guide() {
                 <h3 className="text-lg font-bold text-gensui-100">Audit & Compliance</h3>
               </div>
               <p className="text-xs text-gensui-400 leading-relaxed">Every security decision — ToolGate allow/confirm/block/deny, posture changes, harakiri activations, token revocations — is logged to the HMAC-chained immutable audit trail. This provides cryptographically tamper-evident evidence for NIS2, SOC2, and EU AI Act compliance. The audit chain can be verified at any time to detect tampering.</p>
+            </div>
+          </section>
+
+          {/* Fleet Audit Dashboard */}
+          <section id="ref-fleet-audit" className="space-y-6">
+            <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
+              <BarChart3 size={28} className="text-cyan-400" />
+              <div>
+                <h2 className="text-2xl font-bold text-gensui-50">Fleet Audit Dashboard</h2>
+                <p className="text-xs text-gensui-400">Multi-instance audit analytics, compliance reporting, and chain verification.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><BarChart3 size={14} className="text-cyan-400" /> Overview Tab</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Fleet-wide statistics: total audit events, last 24h/7d counts, security-critical events (30d), HMAC chain integrity verification, action breakdown, and actor type distribution. A green or red banner shows chain integrity status.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Users size={14} className="text-emerald-400" /> Per Member Tab</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Audit and telemetry event counts per fleet member. Shows instance name, enrollment status, total audit/telemetry events, critical event count, and last event timestamp. Sorted by telemetry volume.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Activity size={14} className="text-amber-400" /> Telemetry Analytics Tab</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Aggregated telemetry breakdown by severity (info/warn/error/critical), category, event type (top 20), and per-member distribution. Filterable by date range and specific member.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Shield size={14} className="text-cyan-400" /> Compliance Tab</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">NIS2/SOC2/EU AI Act compliance report. Shows fleet size, harakiri activations, posture changes, enrollment events, token revocations, critical telemetry count, and HMAC chain integrity over the last 30 days.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><FileSearch size={14} className="text-gensui-400" /> Raw Log Tab</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Full audit log with action filtering. Shows timestamp, actor type, action, target, reason, and IP address. Supports up to 200 entries per query.</p>
+              </div>
+              <div className="glass-card p-4 space-y-2">
+                <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Copy size={14} className="text-purple-400" /> CSV Export</div>
+                <p className="text-xs text-gensui-400 leading-relaxed">Export the full audit trail as a CSV file for offline analysis, compliance audits, or SIEM integration. Up to 50,000 entries per export.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Enterprise Identity */}
+          <section id="ref-identity" className="space-y-6">
+            <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
+              <Key size={28} className="text-purple-400" />
+              <div>
+                <h2 className="text-2xl font-bold text-gensui-50">Enterprise Identity</h2>
+                <p className="text-xs text-gensui-400">Service accounts, API keys, and SSO/OIDC configuration for enterprise environments.</p>
+              </div>
+            </div>
+
+            {/* Service Accounts */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Key size={18} className="text-amber-400" />
+                <h3 className="text-lg font-bold text-gensui-100">Service Accounts &amp; API Keys</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">Service accounts provide machine-to-machine API authentication for CI/CD pipelines, SIEM integrations, monitoring systems, and custom automation. Each account has a unique API key (shown once on creation), a role, optional scopes, and rate limiting.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">API Key Format</div>
+                  <p className="text-[11px] text-gensui-400"><code className="text-gensui-300 bg-gensui-900 px-1 rounded">gsk_</code> prefix + 48 random characters. HMAC-SHA256 hashed at rest. Key prefix stored for display identification.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Key Lifecycle</div>
+                  <p className="text-[11px] text-gensui-400"><strong>Create</strong> &rarr; shown once. <strong>Rotate</strong> &rarr; invalidates old key, generates new. <strong>Revoke</strong> &rarr; permanently deactivates. All actions are audit-logged.</p>
+                </div>
+              </div>
+              <div className="bg-gensui-800 border border-gensui-700 p-3 rounded-lg">
+                <p className="text-xs text-gensui-400 leading-relaxed"><strong className="text-gensui-200">Roles:</strong> <span className="text-cyan-400">readonly</span> (read-only access), <span className="text-emerald-400">auditor</span> (audit + telemetry read), <span className="text-amber-400">operator</span> (fleet management), <span className="text-red-400">admin</span> (full access). Authenticate via <code className="text-gensui-300 bg-gensui-900 px-1 rounded">X-API-Key</code> header.</p>
+              </div>
+            </div>
+
+            {/* SSO / OIDC */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Globe size={18} className="text-purple-400" />
+                <h3 className="text-lg font-bold text-gensui-100">SSO / OIDC Providers</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">Configure external identity providers for single sign-on. Gensui supports <strong>OpenID Connect</strong> (Keycloak, Auth0, Okta, Azure AD, Google), <strong>SAML 2.0</strong>, and <strong>SPIFFE/SPIRE</strong> trust domains. One provider can be marked as &ldquo;Primary&rdquo; to show an SSO button on the login page.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">OIDC Configuration</div>
+                  <p className="text-[11px] text-gensui-400">Set issuer URL, client ID, client secret (encrypted at rest), scopes, and audience. Discovery URL is auto-derived from the issuer.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Role Mapping</div>
+                  <p className="text-[11px] text-gensui-400">Map external IdP roles/groups to Gensui roles. Claim mapping extracts email, name, and role from OIDC tokens. Unmapped users receive the default role.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Auto-Provisioning</div>
+                  <p className="text-[11px] text-gensui-400">Optionally auto-create Gensui admin accounts on first SSO login. Domain allowlisting restricts which email domains can register.</p>
+                </div>
+                <div className="bg-gensui-800 border border-gensui-700 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-gensui-200">Security</div>
+                  <p className="text-[11px] text-gensui-400">Client secrets are encrypted at rest. Token validation checks issuer, audience, and expiry. All SSO config changes are logged in the HMAC audit chain.</p>
+                </div>
+              </div>
             </div>
           </section>
 

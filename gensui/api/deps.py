@@ -64,6 +64,37 @@ def require_role(*allowed_roles: str):
     return _check
 
 
+
+# ── API Key Auth (Service Accounts) ──────────────────────────
+
+async def get_api_key_identity(
+    x_api_key: str = Header(None),
+    db: AsyncSession = Depends(get_db),
+) -> dict | None:
+    """Validate a service account API key from X-API-Key header.
+
+    Returns a dict with the service account identity, or None if no key provided.
+    Raises 401 if key is provided but invalid.
+    """
+    if not x_api_key:
+        return None
+
+    from gensui.services.identity_service import IdentityService
+    svc = IdentityService(db)
+    sa = await svc.validate_api_key(x_api_key)
+
+    if sa is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired API key")
+
+    return {
+        "id": str(sa.id),
+        "name": sa.name,
+        "role": sa.role,
+        "scopes": sa.scopes_json,
+        "auth_type": "api_key",
+    }
+
+
 # ── Shogun Membership Auth ───────────────────────────────────
 
 async def get_shogun_identity(

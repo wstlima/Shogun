@@ -13,6 +13,8 @@ from gensui.db.models.policy_decision import PolicyDecision
 from gensui.db.models.audit_log import AuditLog
 from gensui.db.models.alert import Alert
 from gensui.db.models.command import Command
+from gensui.db.models.service_account import ServiceAccount
+from gensui.db.models.sso_provider import SSOProvider
 
 __all__ = [
     "AdminUser",
@@ -28,4 +30,6 @@ __all__ = [
     "AuditLog",
     "Alert",
     "Command",
+    "ServiceAccount",
+    "SSOProvider",
 ]

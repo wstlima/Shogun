@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Shield, Users, Layers, Activity,
   FileSearch, Bell, UserPlus, Skull, LogOut, ChevronLeft, ChevronRight,
-  Network, Settings, BookOpen
+  Network, Settings, BookOpen, BarChart3, Key
 } from 'lucide-react';
 import { clearAuth, getAdmin } from '../../lib/auth';
 
@@ -16,8 +16,10 @@ const NAV_ITEMS = [
   { path: '/harakiri', label: 'Harakiri', icon: Skull },
   { path: '/activity', label: 'Activity', icon: Activity },
   { path: '/audit', label: 'Audit Log', icon: FileSearch },
+  { path: '/fleet-audit', label: 'Fleet Audit', icon: BarChart3 },
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/enrollment', label: 'Enrollment', icon: UserPlus },
+  { path: '/identity', label: 'Identity', icon: Key },
   { path: '/settings', label: 'Settings', icon: Settings },
   { path: '/guide', label: 'Reference', icon: BookOpen },
 ];

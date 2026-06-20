@@ -78,7 +78,9 @@ When you move beyond a single Shogun instance, **Gensui** becomes your command-a
 | 🛡️ **Security Posture Management** | Full CRUD for security postures — create custom postures, edit built-in ones, delete custom postures. 14 permission flags + per-tool overrides (allow/confirm/block). Pushed to fleet members automatically. |
 | 💀 **Remote Harakiri** | Emergency kill switch — instantly freeze any agent (soft freeze, hard stop, network isolate, or full terminate) from the Gensui dashboard. |
 | 📋 **Centralized Audit Log** | Tamper-proof HMAC-chained audit trail across all managed agents. NIS2/SOC2/EU AI Act compliant. |
-| 🔒 **Admin Authentication** | JWT-based admin portal with role-based access control (Owner, Admin, Viewer). |
+| 📊 **Fleet Audit Dashboard** | Multi-instance audit analytics with per-member breakdown, telemetry analytics (severity/category/event type), NIS2/SOC2/EU AI Act compliance reports, HMAC chain verification, and CSV export for SIEM integration. |
+| 🔑 **Enterprise Identity** | Service accounts with API key management (create/rotate/revoke) for CI/CD and SIEM integrations. SSO/OIDC provider configuration (Keycloak, Auth0, Okta, Azure AD) with auto-provisioning, role mapping, and domain allowlisting. |
+| 🔒 **Admin Authentication** | JWT-based admin portal with role-based access control (Owner, Admin, Auditor, Operator). Machine auth via `X-API-Key` header. |
 
 ### Install Gensui (One Click)
 
