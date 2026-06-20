@@ -41,6 +41,7 @@ vault/
 data/
 logs/
 configs/
+.shogun_trash/
 
 # ── Node ─────────────────────────────────────────────────────
 node_modules/

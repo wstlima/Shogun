@@ -48,6 +48,7 @@ import {
   Monitor as MonitorIcon,
   Power,
   List,
+  Clock,
 } from "lucide-react";
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -1952,7 +1953,79 @@ export function Guide() {
                 </div>
              </section>
 
-             {/* 6. Threat Model */}
+             {/* 6. ToolGate — Runtime Tool Enforcement */}
+             <section className="space-y-6">
+                <div className="flex items-center gap-3 border-b-2 border-amber-500/40 pb-3">
+                   <ShieldAlert className="w-6 h-6 text-amber-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">ToolGate — Runtime Tool Enforcement</h4>
+                      <p className="text-xs text-shogun-subdued">Per-invocation safety gating with risk scoring and human-in-the-loop confirmation.</p>
+                   </div>
+                </div>
+                <div className="shogun-card space-y-4">
+                   <p className="text-xs text-shogun-subdued leading-relaxed">ToolGate sits between PostureGuard (which determines <em>which tools are available</em>) and the tool executor (which <em>runs them</em>). It provides fine-grained, per-call enforcement based on tool risk levels and parameter analysis.</p>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-1">
+                         <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">ALLOW</div>
+                         <p className="text-[11px] text-shogun-subdued">Low-risk tools (browse, fetch, list) execute immediately with no interruption.</p>
+                      </div>
+                      <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 space-y-1">
+                         <div className="text-xs font-bold text-amber-400 uppercase tracking-wider">CONFIRM</div>
+                         <p className="text-[11px] text-shogun-subdued">High-risk tools (send email, desktop control) pause and show a confirmation card in the chat. You must click Approve or Deny before execution proceeds.</p>
+                      </div>
+                      <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-1">
+                         <div className="text-xs font-bold text-red-400 uppercase tracking-wider">BLOCK</div>
+                         <p className="text-[11px] text-shogun-subdued">Critical-risk or destructive patterns are blocked outright. The tool receives a "blocked" response, and the AI must find an alternative approach.</p>
+                      </div>
+                   </div>
+                   <div className="space-y-3">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><AlertCircle className="w-4 h-4 text-amber-400" /> Risk Classification</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Every tool in the registry is assigned a risk level: <strong className="text-emerald-400">LOW</strong> (read-only, no side effects), <strong className="text-amber-400">MEDIUM</strong> (creates/modifies internal state), <strong className="text-orange-400">HIGH</strong> (external side effects or control actions), or <strong className="text-red-400">CRITICAL</strong> (destructive or irreversible). The Mode × Risk threshold matrix determines the default action for each combination.</p>
+                   </div>
+                   <div className="space-y-3">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-amber-400" /> Parameter-Aware Checks</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Beyond the static risk level, ToolGate inspects <em>how</em> a tool is called. It detects: destructive shell patterns (rm -rf, DROP TABLE, format C:), sensitive system paths (System32, /etc/), recursive delete flags, mass operations (10+ items), credential-like content in typed text, and force flags. These checks can escalate the action from ALLOW → CONFIRM or CONFIRM → BLOCK regardless of the tool's static risk.</p>
+                   </div>
+                   <div className="space-y-3">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Clock className="w-4 h-4 text-amber-400" /> Confirmation Timeout</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">When a confirmation card appears, you have <strong>60 seconds</strong> to respond. If the timer expires, the tool is <strong>auto-denied</strong> for safety. The AI receives a "denied by operator" result and can adapt its approach.</p>
+                   </div>
+                </div>
+             </section>
+
+             {/* 7. Quarantine — Shogun Trash */}
+             <section className="space-y-6">
+                <div className="flex items-center gap-3 border-b-2 border-purple-500/40 pb-3">
+                   <Trash2 className="w-6 h-6 text-purple-400" />
+                   <div>
+                      <h4 className="text-xl font-bold uppercase tracking-widest">Quarantine — Shogun Trash</h4>
+                      <p className="text-xs text-shogun-subdued">Recoverable soft-delete for file operations.</p>
+                   </div>
+                </div>
+                <div className="shogun-card space-y-4">
+                   <p className="text-xs text-shogun-subdued leading-relaxed">When Shogun deletes a file (via Ronin desktop automation or future file tools), the file is not permanently removed. Instead, it is moved to a <code className="text-amber-400 bg-black/30 px-1.5 py-0.5 rounded">.shogun_trash/</code> directory at the project root. This acts as a safety net against accidental or AI-initiated data loss.</p>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="bg-shogun-card border border-shogun-border rounded-lg p-3 space-y-2">
+                         <div className="text-xs font-bold text-shogun-text">Quarantine</div>
+                         <p className="text-[11px] text-shogun-subdued">Files are timestamped and moved to trash. A manifest.json tracks the original path, deletion reason, file size, and timestamp.</p>
+                      </div>
+                      <div className="bg-shogun-card border border-shogun-border rounded-lg p-3 space-y-2">
+                         <div className="text-xs font-bold text-shogun-text">Recover</div>
+                         <p className="text-[11px] text-shogun-subdued">Any quarantined file can be restored to its original location via the recovery function. No data is permanently lost until explicitly purged.</p>
+                      </div>
+                      <div className="bg-shogun-card border border-shogun-border rounded-lg p-3 space-y-2">
+                         <div className="text-xs font-bold text-shogun-text">Auto-Purge</div>
+                         <p className="text-[11px] text-shogun-subdued">Files older than 30 days are eligible for automatic permanent deletion. This prevents unbounded disk growth while preserving recent safety net coverage.</p>
+                      </div>
+                      <div className="bg-shogun-card border border-shogun-border rounded-lg p-3 space-y-2">
+                         <div className="text-xs font-bold text-shogun-text">Audit Trail</div>
+                         <p className="text-[11px] text-shogun-subdued">Every quarantine and recovery action is logged. The manifest provides a complete history of what was deleted, when, and why.</p>
+                      </div>
+                   </div>
+                </div>
+             </section>
+
+             {/* 8. Threat Model */}
              <section className="space-y-6">
                 <div className="flex items-center gap-3 border-b-2 border-red-400/40 pb-3">
                    <AlertCircle className="w-6 h-6 text-red-400" />
