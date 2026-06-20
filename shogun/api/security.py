@@ -487,3 +487,48 @@ async def delete_campaign_preset(preset_key: str):
     except Exception:
         pass
     return ApiResponse(data={"deleted": preset_key})
+
+
+# ── ToolGate Confirmation ────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class ToolGateConfirmRequest(BaseModel):
+    confirm_id: str
+    approved: bool
+
+
+@router.post("/toolgate/confirm")
+async def toolgate_confirm(body: ToolGateConfirmRequest):
+    """Resolve a pending ToolGate confirmation from the chat UI.
+
+    The frontend calls this when the operator clicks Approve or Deny
+    on a confirmation card in the chat stream.
+    """
+    from shogun.services.toolgate_confirm import resolve_confirmation
+
+    found = resolve_confirmation(body.confirm_id, body.approved)
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Confirmation '{body.confirm_id}' not found (expired or already resolved)",
+        )
+
+    # ── Audit ──
+    try:
+        from shogun.services.event_logger import EventLogger
+        await EventLogger.emit_policy_event(
+            "policy.toolgate_confirmation_resolved",
+            f"ToolGate confirmation {body.confirm_id}: {'approved' if body.approved else 'denied'}",
+            policy_ref=f"toolgate:{body.confirm_id}",
+            policy_decision="approved" if body.approved else "denied",
+        )
+    except Exception:
+        pass
+
+    return ApiResponse(data={
+        "confirm_id": body.confirm_id,
+        "approved": body.approved,
+    })
+

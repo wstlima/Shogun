@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, Globe, Mail, Calendar, MessageSquare, Zap, Shield, Target, Sparkles, Monitor, MousePointer2, Keyboard, AlertCircle, Camera, Square } from 'lucide-react';
+import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, ChevronUp, Globe, Mail, Calendar, MessageSquare, Zap, Shield, ShieldAlert, Target, Sparkles, Monitor, MousePointer2, Keyboard, AlertCircle, Camera, Square, Check, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { MailView } from './MailView';
@@ -9,7 +9,8 @@ type ChatMode = 'auto' | 'fast' | 'governed' | 'mission';
 
 type RoninAttachment =
   | { type: 'screenshot'; url: string; description: string }
-  | { type: 'action'; action: string; detail: string };
+  | { type: 'action'; action: string; detail: string }
+  | { type: 'toolgate_confirm'; confirmId: string; tool: string; args: Record<string, string>; risk: string; reason: string; resolved?: 'approved' | 'denied' | 'timeout' };
 
 interface Message {
   role: 'user' | 'shogun';
@@ -78,6 +79,119 @@ function archiveSession(msgs: Message[], t: any) {
   const updated = [session, ...history].slice(0, MAX_HISTORY_SESSIONS);
   localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
+
+// â”€â”€ ToolGate Confirmation Card (extracted to avoid hooks-in-map) â”€â”€
+
+const RISK_COLORS: Record<string, string> = {
+  low: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+const ToolGateCard = ({ att, idx, setMessages }: {
+  att: Extract<RoninAttachment, { type: 'toolgate_confirm' }>;
+  idx: number;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+}) => {
+  const [showArgs, setShowArgs] = useState(false);
+  const isResolved = !!att.resolved;
+
+  const handleConfirm = async (approved: boolean) => {
+    try {
+      await fetch('/api/v1/security/toolgate/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm_id: att.confirmId, approved }),
+      });
+      // Optimistic update
+      setMessages(prev => {
+        const copy = [...prev];
+        for (let mi = copy.length - 1; mi >= 0; mi--) {
+          const atts = copy[mi].attachments;
+          if (!atts) continue;
+          const aidx = atts.findIndex((a: RoninAttachment) => a.type === 'toolgate_confirm' && a.confirmId === att.confirmId);
+          if (aidx >= 0) {
+            const updated = [...atts];
+            updated[aidx] = { ...updated[aidx], resolved: approved ? 'approved' : 'denied' } as RoninAttachment;
+            copy[mi] = { ...copy[mi], attachments: updated };
+            break;
+          }
+        }
+        return copy;
+      });
+    } catch (e) { console.error('ToolGate confirm failed:', e); }
+  };
+
+  return (
+    <div key={idx} className={cn(
+      'rounded-xl border-2 overflow-hidden transition-all',
+      isResolved
+        ? att.resolved === 'approved'
+          ? 'border-emerald-500/40 bg-emerald-500/5'
+          : 'border-red-500/40 bg-red-500/5'
+        : 'border-amber-500/50 bg-amber-500/5 animate-pulse'
+    )}>
+      <div className={cn(
+        'flex items-center gap-2 px-4 py-2.5',
+        isResolved
+          ? att.resolved === 'approved' ? 'bg-emerald-500/10' : 'bg-red-500/10'
+          : 'bg-amber-500/10'
+      )}>
+        <ShieldAlert className={cn('w-4 h-4', isResolved ? att.resolved === 'approved' ? 'text-emerald-400' : 'text-red-400' : 'text-amber-400')} />
+        <span className={cn('text-xs font-bold uppercase tracking-widest', isResolved ? att.resolved === 'approved' ? 'text-emerald-300' : 'text-red-300' : 'text-amber-300')}>
+          {isResolved
+            ? att.resolved === 'approved' ? 'âœ… APPROVED' : 'âŒ DENIED'
+            : 'âš ï¸ CONFIRMATION REQUIRED'
+          }
+        </span>
+      </div>
+      <div className="px-4 py-3 space-y-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-shogun-text font-mono">{att.tool}</span>
+          <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase', RISK_COLORS[att.risk || 'medium'] || RISK_COLORS.medium)}>
+            {att.risk} risk
+          </span>
+        </div>
+        <p className="text-[11px] text-shogun-subdued leading-relaxed">{att.reason}</p>
+        {att.args && Object.keys(att.args).length > 0 && (
+          <div>
+            <button
+              onClick={() => setShowArgs(!showArgs)}
+              className="flex items-center gap-1 text-[10px] text-shogun-subdued hover:text-shogun-text transition-colors"
+            >
+              {showArgs ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              Parameters ({Object.keys(att.args).length})
+            </button>
+            {showArgs && (
+              <div className="mt-1.5 bg-black/30 rounded-lg p-2 text-[10px] font-mono text-shogun-subdued space-y-0.5 max-h-32 overflow-y-auto">
+                {Object.entries(att.args).map(([k, v]) => (
+                  <div key={k}><span className="text-amber-400">{k}:</span> {JSON.stringify(v)}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {!isResolved && (
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => handleConfirm(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600/80 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+            >
+              <Check className="w-3.5 h-3.5" /> Approve
+            </button>
+            <button
+              onClick={() => handleConfirm(false)}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Deny
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const ChatConsole = () => {
   const { t } = useTranslation();
@@ -219,6 +333,46 @@ export const ChatConsole = () => {
                 };
                 return copy;
               });
+            } else if (evt.type === 'toolgate_confirm') {
+              // ToolGate confirmation request â€” show inline card
+              setMessages(prev => {
+                const copy = [...prev];
+                const last = copy[copy.length - 1];
+                const existing = last.attachments || [];
+                copy[copy.length - 1] = {
+                  ...last,
+                  attachments: [...existing, {
+                    type: 'toolgate_confirm',
+                    confirmId: evt.confirm_id,
+                    tool: evt.tool,
+                    args: evt.args || {},
+                    risk: evt.risk,
+                    reason: evt.reason,
+                  }],
+                };
+                return copy;
+              });
+              setIsThinking(false);
+              setStatusText('Awaiting confirmation...');
+            } else if (evt.type === 'toolgate_resolved') {
+              // ToolGate resolution from backend â€” update the card
+              setMessages(prev => {
+                const copy = [...prev];
+                for (let mi = copy.length - 1; mi >= 0; mi--) {
+                  const atts = copy[mi].attachments;
+                  if (!atts) continue;
+                  const idx = atts.findIndex((a: RoninAttachment) => a.type === 'toolgate_confirm' && a.confirmId === evt.confirm_id);
+                  if (idx >= 0) {
+                    const updated = [...atts];
+                    updated[idx] = { ...updated[idx], resolved: evt.approved ? 'approved' : 'denied' } as RoninAttachment;
+                    copy[mi] = { ...copy[mi], attachments: updated };
+                    break;
+                  }
+                }
+                return copy;
+              });
+              setStatusText(null);
+              setIsThinking(true);
             } else if (evt.type === 'action') {
               setStatusText(evt.content);
             }
@@ -227,14 +381,14 @@ export const ChatConsole = () => {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        // User cancelled — mark the message as cancelled
+        // User cancelled â€” mark the message as cancelled
         setMessages(prev => {
           const copy = [...prev];
           const last = copy[copy.length - 1];
           if (last.content === '') {
-            copy[copy.length - 1] = { ...last, content: '⛔ Cancelled by operator.' };
+            copy[copy.length - 1] = { ...last, content: 'â›” Cancelled by operator.' };
           } else {
-            copy[copy.length - 1] = { ...last, content: last.content + '\n\n⛔ *Cancelled by operator.*' };
+            copy[copy.length - 1] = { ...last, content: last.content + '\n\nâ›” *Cancelled by operator.*' };
           }
           return copy;
         });
@@ -244,7 +398,7 @@ export const ChatConsole = () => {
           const copy = [...prev];
           copy[copy.length - 1] = {
             ...copy[copy.length - 1],
-            content: '⚠️ ' + t('chat.bridge_interrupted', 'Neural bridge interrupted. Check logs.'),
+            content: 'âš ï¸ ' + t('chat.bridge_interrupted', 'Neural bridge interrupted. Check logs.'),
           };
           return copy;
         });
@@ -365,7 +519,7 @@ export const ChatConsole = () => {
                   ) : (
                     <>
                       {msg.content}
-                      {/* ── Ronin Visual Feed ── */}
+                      {/* â”€â”€ Ronin Visual Feed â”€â”€ */}
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className={cn("space-y-2", msg.content ? "mt-3 border-t border-shogun-border/30 pt-3" : "")}>
                           {msg.attachments.map((att, idx) => {
@@ -384,6 +538,9 @@ export const ChatConsole = () => {
                                   />
                                 </div>
                               );
+                            }
+                            if (att.type === 'toolgate_confirm') {
+                              return <ToolGateCard key={idx} att={att} idx={idx} setMessages={setMessages} />;
                             }
                             if (att.type === 'action') {
                               const isClick = att.action === 'click';
@@ -468,7 +625,7 @@ export const ChatConsole = () => {
           <div className="flex items-center gap-1 mb-3">
             {([
               { id: 'auto' as ChatMode, label: 'Auto', icon: Sparkles, color: 'cyan', desc: 'Automatically selects the best mode' },
-              { id: 'fast' as ChatMode, label: 'Fast Chat', icon: Zap, color: 'emerald', desc: 'Conversation only — no tools or memory' },
+              { id: 'fast' as ChatMode, label: 'Fast Chat', icon: Zap, color: 'emerald', desc: 'Conversation only â€” no tools or memory' },
               { id: 'governed' as ChatMode, label: 'Governed', icon: Shield, color: 'amber', desc: 'Context-aware with memory (coming soon)' },
               { id: 'mission' as ChatMode, label: 'Mission', icon: Target, color: 'purple', desc: 'Full agent orchestration with tools' },
             ]).map(({ id, label, icon: Icon, color }) => (
@@ -501,7 +658,7 @@ export const ChatConsole = () => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
               disabled={isThinking}
-              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : chatMode === 'auto' ? 'Ask anything — Shogun routes automatically...' : chatMode === 'fast' ? 'Ask anything...' : chatMode === 'mission' ? 'Enter mission directive...' : 'Ask with context...'}
+              placeholder={isThinking ? t('chat.placeholder_thinking', 'Shogun is thinking...') : chatMode === 'auto' ? 'Ask anything â€” Shogun routes automatically...' : chatMode === 'fast' ? 'Ask anything...' : chatMode === 'mission' ? 'Enter mission directive...' : 'Ask with context...'}
               className="w-full bg-shogun-card border border-shogun-border rounded-xl py-4 pl-6 pr-14 text-shogun-text placeholder:text-shogun-subdued focus:outline-none focus:border-shogun-blue focus:ring-1 focus:ring-shogun-blue/20 transition-all font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {isThinking ? (
@@ -540,7 +697,7 @@ export const ChatConsole = () => {
         </div>
       </div>
 
-      {/* ── History Drawer ─────────────────────────────────────── */}
+      {/* â”€â”€ History Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {showHistory && (
         <div className="fixed inset-0 z-50 flex">
           <div
@@ -591,7 +748,7 @@ export const ChatConsole = () => {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-mono text-shogun-text truncate">{preview}</p>
                           <p className="text-[10px] text-shogun-subdued mt-0.5">
-                            {session.startedAt} · {msgCount} {t('chat.messages', 'messages')}
+                            {session.startedAt} Â· {msgCount} {t('chat.messages', 'messages')}
                           </p>
                         </div>
                         <button
@@ -612,7 +769,7 @@ export const ChatConsole = () => {
                                   ? 'bg-shogun-blue/10 text-shogun-text border border-shogun-blue/20'
                                   : 'bg-shogun-gold/5 text-shogun-gold border border-shogun-gold/10 font-mono'
                               )}>
-                                {m.content.length > 120 ? m.content.slice(0, 120) + '…' : m.content}
+                                {m.content.length > 120 ? m.content.slice(0, 120) + 'â€¦' : m.content}
                               </span>
                               <div className="text-[9px] text-shogun-subdued mt-0.5 px-1">{m.timestamp}</div>
                             </div>
@@ -662,7 +819,7 @@ export const Chat = () => {
               {activeTab === 'calendar' && t('calendar.badge', 'Calendar Board')}
             </span>
           </h2>
-          <p className="text-shogun-subdued text-sm mt-1">{t('comms.subtitle', 'Chat · Mail · Calendar')}</p>
+          <p className="text-shogun-subdued text-sm mt-1">{t('comms.subtitle', 'Chat Â· Mail Â· Calendar')}</p>
         </div>
       </div>
 
