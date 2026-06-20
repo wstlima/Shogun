@@ -238,13 +238,22 @@ class GensuiClient:
             await asyncio.sleep(self.policy_sync_interval)
 
     async def _sync_policy(self):
-        """Fetch the effective posture from Gensui."""
+        """Fetch the effective posture from Gensui and apply tool overrides."""
         if not self._shogun_id:
             return
         result = await self._request("GET", f"/api/gensui/policy/effective/{self._shogun_id}")
         if result:
             self._effective_posture = result
             self._save_cache()
+
+            # ── Apply Gensui tool overrides to local ToolGate ──
+            tool_overrides = result.get("tool_overrides")
+            if isinstance(tool_overrides, dict):
+                try:
+                    from shogun.services.tool_gate import apply_gensui_overrides
+                    apply_gensui_overrides(tool_overrides)
+                except Exception as e:
+                    log.warning("[GensuiClient] Failed to apply tool overrides: %s", e)
 
     # ── Command Polling ──────────────────────────────────────
 

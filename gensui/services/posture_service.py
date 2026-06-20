@@ -271,5 +271,6 @@ class PostureService:
                 "allow_file_write": posture.allow_file_write,
                 "allow_external_api": posture.allow_external_api,
             },
+            "tool_overrides": posture.tool_overrides_json or {},
             "global_posture_active": bool(global_state and global_state.is_active),
         }

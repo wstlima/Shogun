@@ -24,6 +24,28 @@ from typing import Any
 
 log = logging.getLogger("shogun.tool_gate")
 
+# ── Gensui Central Governance Overrides ──────────────────────────────
+# Populated by GensuiClient._sync_policy() when connected to a Gensui server.
+# Format: {"tool_name": "allow" | "confirm" | "block"}
+_gensui_overrides: dict[str, str] = {}
+
+
+def apply_gensui_overrides(overrides: dict[str, str]) -> None:
+    """Set tool-level overrides pushed from Gensui central governance.
+
+    Called by GensuiClient when it receives tool_overrides in the
+    effective posture payload during policy sync.
+    """
+    global _gensui_overrides
+    _gensui_overrides = dict(overrides) if overrides else {}
+    if _gensui_overrides:
+        log.info("[ToolGate] Applied %d Gensui governance overrides", len(_gensui_overrides))
+
+
+def get_gensui_overrides() -> dict[str, str]:
+    """Return current Gensui overrides (for diagnostics/API)."""
+    return dict(_gensui_overrides)
+
 
 # ── Risk Levels ──────────────────────────────────────────────────────
 
@@ -278,6 +300,20 @@ async def check_tool_access(
             risk_level=risk,
             tool_name=tool_name,
         )
+
+    # ── 1.5. Gensui central governance override ──
+    gensui_action_str = _gensui_overrides.get(tool_name)
+    if gensui_action_str:
+        try:
+            gensui_action = GateAction(gensui_action_str)
+            return GateDecision(
+                action=gensui_action,
+                reason=f"Gensui governance override: {gensui_action.value}",
+                risk_level=risk,
+                tool_name=tool_name,
+            )
+        except ValueError:
+            log.warning("Invalid Gensui override action '%s' for tool '%s'", gensui_action_str, tool_name)
 
     # ── 2. Parameter-aware destructive checks ──
     param_flags = check_dangerous_parameters(tool_name, args)

@@ -4,7 +4,7 @@ import {
   FileSearch, Bell, UserPlus, Skull, Network, Settings,
   BookOpen, List, Server, AlertTriangle, Zap, Lock,
   Monitor, Globe, Tag, Copy, Search, Eye, Trash2,
-  Check, X, Key, Info
+  Check, X, Key, Info, ShieldAlert, Clock
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -20,6 +20,7 @@ const SECTIONS = [
   { id: 'ref-alerts', label: 'Alerts', icon: Bell, color: 'text-amber-400' },
   { id: 'ref-enrollment', label: 'Enrollment', icon: UserPlus, color: 'text-amber-400' },
   { id: 'ref-settings', label: 'Settings', icon: Settings, color: 'text-cyan-400' },
+  { id: 'ref-security', label: 'Security Protocols', icon: ShieldAlert, color: 'text-red-400' },
 ];
 
 export default function Guide() {
@@ -507,6 +508,85 @@ export default function Guide() {
                 <div className="font-semibold text-gensui-100 flex items-center gap-2 text-sm"><Info size={14} className="text-gensui-400" /> About</div>
                 <p className="text-xs text-gensui-400 leading-relaxed">Displays the Gensui version number and confirms it is part of the <strong>Shogun AFM (Agent Fleet Management)</strong> platform.</p>
               </div>
+            </div>
+          </section>
+
+          {/* Security Protocols */}
+          <section id="ref-security" className="space-y-6">
+            <div className="flex items-center gap-3 border-b border-gensui-700 pb-3">
+              <ShieldAlert size={28} className="text-red-400" />
+              <div>
+                <h2 className="text-2xl font-bold text-gensui-50">Safety & Security Protocols</h2>
+                <p className="text-xs text-gensui-400">Gensui's defense-in-depth security model for centrally governing Shogun instances.</p>
+              </div>
+            </div>
+
+            {/* ToolGate Governance */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <ShieldAlert size={18} className="text-amber-400" />
+                <h3 className="text-lg font-bold text-gensui-100">ToolGate — Centralized Tool Enforcement</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">ToolGate is the runtime safety gate that sits between the AI model and tool execution on every Shogun instance. From Gensui, you can centrally manage <strong>tool-level overrides</strong> that are pushed to all member instances via the policy sync mechanism.</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">ALLOW</div>
+                  <p className="text-[11px] text-gensui-400">Tool executes immediately with no interruption. Used for low-risk, read-only operations.</p>
+                </div>
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-amber-400 uppercase tracking-wider">CONFIRM</div>
+                  <p className="text-[11px] text-gensui-400">Tool pauses and shows a confirmation card to the local operator. They must approve or deny before execution. 60-second auto-deny timeout.</p>
+                </div>
+                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-1">
+                  <div className="text-xs font-bold text-red-400 uppercase tracking-wider">BLOCK</div>
+                  <p className="text-[11px] text-gensui-400">Tool is blocked outright. The AI receives a "blocked" response and must find an alternative.</p>
+                </div>
+              </div>
+              <div className="bg-gensui-800 border border-gensui-700 p-3 rounded-lg">
+                <p className="text-xs text-gensui-400 leading-relaxed"><strong className="text-gensui-200">Governance Override Priority:</strong> Campaign Preset → <strong className="text-amber-400">Gensui Governance Override</strong> → Parameter-Aware Checks → Mode×Risk Threshold. Gensui overrides take priority over local ToolGate defaults but are superseded by active Campaign Presets.</p>
+              </div>
+            </div>
+
+            {/* Posture Push */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Shield size={18} className="text-cyan-400" />
+                <h3 className="text-lg font-bold text-gensui-100">Posture Push — Policy Sync</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">Every Shogun instance periodically (every 30 seconds by default) fetches its effective posture from Gensui. This includes:</p>
+              <ul className="text-xs text-gensui-400 space-y-2 ml-4 list-disc leading-relaxed">
+                <li><strong className="text-gensui-200">Posture Rules:</strong> allow/deny flags for external models, tool execution, Mado browser, memory access, Nexus, sub-agents, scheduled triggers, autonomous loops, file writes, and external APIs.</li>
+                <li><strong className="text-gensui-200">Tool Overrides:</strong> Per-tool allow/confirm/block overrides configured in the posture's tool_overrides field. These are pushed to ToolGate on the local instance.</li>
+                <li><strong className="text-gensui-200">Global Posture:</strong> If a global posture override is active, it takes precedence over individual or group assignments.</li>
+                <li><strong className="text-gensui-200">Harakiri State:</strong> If Harakiri is triggered from Gensui, the posture is forced to the most restrictive level.</li>
+              </ul>
+            </div>
+
+            {/* Quarantine */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Trash2 size={18} className="text-purple-400" />
+                <h3 className="text-lg font-bold text-gensui-100">Quarantine — Shogun Trash</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">Each Shogun instance includes a quarantine system (<code className="text-gensui-300 bg-gensui-800 px-1 py-0.5 rounded">.shogun_trash/</code>) that moves deleted files to a recoverable trash folder instead of permanently deleting them. Files can be recovered within 30 days. This protects against accidental or AI-initiated data loss.</p>
+            </div>
+
+            {/* Prompt Injection Containment */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Lock size={18} className="text-red-400" />
+                <h3 className="text-lg font-bold text-gensui-100">Prompt Injection Containment</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">When Shogun agents fetch external content (web pages, emails, calendar events), the content is wrapped with <strong className="text-amber-400">[UNTRUSTED EXTERNAL DATA]</strong> boundary markers. This prevents the LLM from following instructions embedded in external content (a common prompt injection attack vector). The wrapping is automatic and applies to all tools that return external data.</p>
+            </div>
+
+            {/* Audit & Compliance */}
+            <div className="glass-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <FileSearch size={18} className="text-gensui-400" />
+                <h3 className="text-lg font-bold text-gensui-100">Audit & Compliance</h3>
+              </div>
+              <p className="text-xs text-gensui-400 leading-relaxed">Every security decision — ToolGate allow/confirm/block/deny, posture changes, harakiri activations, token revocations — is logged to the HMAC-chained immutable audit trail. This provides cryptographically tamper-evident evidence for NIS2, SOC2, and EU AI Act compliance. The audit chain can be verified at any time to detect tampering.</p>
             </div>
           </section>
 
