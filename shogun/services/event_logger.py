@@ -232,6 +232,42 @@ class EventLogger:
         )
 
     @staticmethod
+    async def emit_office_event(
+        event_type: str,
+        action: str,
+        *,
+        application: str | None = None,
+        input_file: str | None = None,
+        output_file: str | None = None,
+        result: str = "success",
+        detail: dict | None = None,
+        duration_ms: int | None = None,
+        **kwargs,
+    ) -> str:
+        """Emit an Office App Mode event (Katana).
+
+        Event types: office.excel.open, office.excel.write_range,
+        office.word.replace_placeholders, office.outlook.create_draft,
+        office.config_changed, etc.
+        """
+        merged_detail = dict(detail or {})
+        if application:
+            merged_detail["application"] = application
+        if input_file:
+            merged_detail["input_file"] = input_file
+        if output_file:
+            merged_detail["output_file"] = output_file
+        return await EventLogger.emit(
+            category="office",
+            event_type=event_type,
+            action=action,
+            result=result,
+            detail=merged_detail,
+            duration_ms=duration_ms,
+            **kwargs,
+        )
+
+    @staticmethod
     async def emit_policy_event(
         event_type: str,
         action: str,

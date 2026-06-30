@@ -6,7 +6,7 @@ from shogun.nexus.schemas.nexus_task import NexusTaskCreate
 
 
 class WebhookAdapter:
-    """Mock/base adapter structure for mapping external webhooks to normalized NexusTasks."""
+    """Maps external webhook payloads to normalized NexusTask schemas."""
 
     @staticmethod
     def map_webhook_payload(payload: dict) -> NexusTaskCreate:

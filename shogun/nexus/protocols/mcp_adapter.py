@@ -6,7 +6,7 @@ from shogun.nexus.schemas.nexus_task import NexusTaskCreate
 
 
 class MCPAdapter:
-    """Mock/base adapter structure for mapping MCP callTool requests to normalized NexusTasks."""
+    """Maps MCP callTool JSON-RPC requests to normalized NexusTask schemas."""
 
     @staticmethod
     def map_mcp_request(client_id: str, tool_name: str, arguments: dict) -> NexusTaskCreate:

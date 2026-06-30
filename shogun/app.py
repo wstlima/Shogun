@@ -107,6 +107,24 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    # ── Office App Mode: Detection + temp cleanup ─────────────
+    try:
+        from shogun.office.office_detector import detect_office_applications
+        from shogun.office.config import load_office_config
+        from shogun.office.output_versioning import cleanup_temp_folder
+        import logging as _log
+        office_detection = detect_office_applications()
+        _log.getLogger(__name__).info("Office detection: %s", office_detection.message)
+        # Run temp cleanup on startup if configured
+        office_cfg = load_office_config()
+        if office_cfg.temp_cleanup_on_startup and office_cfg.folders.temp:
+            cleaned = cleanup_temp_folder(office_cfg.folders.temp)
+            if cleaned:
+                _log.getLogger(__name__).info("Office temp cleanup: removed %d files", cleaned)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Office detection/cleanup skipped: %s", exc)
+
     # ── Start Gensui Membership Client ────────────────────────
     gensui = None
     if settings.gensui_enabled:
@@ -145,6 +163,19 @@ async def lifespan(app: FastAPI):
                 .values(status="closed")
             )
             await session.commit()
+    except Exception:
+        pass
+
+    # Close all Office COM instances
+    try:
+        from shogun.office.process_manager import get_process_manager
+        from shogun.office.com_thread_pool import run_com, shutdown_pool
+        pm = get_process_manager()
+        closed = pm.close_all()
+        if closed:
+            import logging
+            logging.getLogger(__name__).info("Office: closed %d COM instances on shutdown", closed)
+        shutdown_pool()
     except Exception:
         pass
 
@@ -250,6 +281,11 @@ def create_app() -> FastAPI:
     app.include_router(mado_router, prefix=prefix)
     app.include_router(gensui_config_router, prefix=prefix)
     app.include_router(ronin_router, prefix=prefix)
+
+    # Office App Mode (Katana)
+    from shogun.api.office import router as office_router
+    app.include_router(office_router, prefix=prefix)
+
     app.include_router(nexus_router, prefix=prefix)
 
     # ── Health / Identity Endpoint ───────────────────────────

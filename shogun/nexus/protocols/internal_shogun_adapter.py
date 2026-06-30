@@ -27,8 +27,13 @@ class InternalShogunAdapter:
         # 1. Resolve LLM Provider
         provider = await self._resolve_provider(agent)
         if not provider:
-            logger.warning("No active LLM provider found for task %s, using mock fallback", task.id)
-            return self._mock_fallback(task, agent)
+            logger.error("No active LLM provider for task %s — cannot execute", task.id)
+            return {
+                "agent_name": agent.name,
+                "capability": task.requested_action,
+                "output": "Execution failed: No LLM provider is configured. Please add a model provider in Katana → Model Setup.",
+                "status": "failed",
+            }
 
         # 2. Formulate Prompt based on requested capability
         system_prompt = self._build_system_prompt(task, agent)
@@ -139,22 +144,3 @@ Please process the context and provide the output for capability '{task.requeste
             
             payload = resp.json()
             return payload["choices"][0]["message"]["content"]
-
-    def _mock_fallback(self, task: NexusTaskModel, agent: Agent) -> dict:
-        """Fallback mock result when no active LLM provider is connected."""
-        action = task.requested_action
-        context = task.input_context
-        
-        if action == "document.summarize":
-            summary = f"Summary of document at '{context.get('file_path', 'unknown')}': This is a mock summary of the risk assessment."
-            return {"agent_name": agent.name, "capability": action, "output": summary, "status": "success"}
-        elif action == "spreadsheet.analyze":
-            analysis = f"Analysis of spreadsheet '{context.get('file_path', 'unknown')}': Identified 3 missing compliance comments."
-            return {"agent_name": agent.name, "capability": action, "output": analysis, "status": "success"}
-        
-        return {
-            "agent_name": agent.name,
-            "capability": action,
-            "output": f"Mock output execution completed for capability '{action}'.",
-            "status": "success"
-        }

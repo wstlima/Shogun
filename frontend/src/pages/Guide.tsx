@@ -46,6 +46,7 @@ import {
   HelpCircle,
   Crosshair,
   Monitor as MonitorIcon,
+  FileSpreadsheet,
   Power,
   List,
   Clock,
@@ -73,6 +74,7 @@ export function Guide() {
     { id: 'ref-bushido', label: 'Bushido', icon: RefreshCw, color: 'text-shogun-blue' },
     { id: 'ref-mado', label: 'Mado', icon: AppWindow, color: 'text-cyan-400' },
     { id: 'ref-ronin', label: 'Ronin', icon: Crosshair, color: 'text-orange-400' },
+    { id: 'ref-office', label: 'Office', icon: FileSpreadsheet, color: 'text-green-400' },
     { id: 'ref-torii', label: 'Torii', icon: Lock, color: 'text-red-400' },
     { id: 'ref-nexus', label: 'Nexus', icon: Globe, color: 'text-indigo-400' },
     { id: 'ref-nexus-gateway', label: 'Nexus Gateway', icon: Link2, color: 'text-indigo-400' },
@@ -1157,6 +1159,85 @@ export function Guide() {
                           <li><strong className="text-red-400">Torii Harakiri:</strong> The global kill switch on the Torii page. Stops everything system-wide.</li>
                        </ul>
                     </div>
+                 </div>
+              </section>
+
+
+              {/* OFFICE APP MODE */}
+              <section id="ref-office" className="space-y-6 scroll-mt-6">
+                 <div className="flex items-center gap-3 border-b-2 border-green-400/40 pb-3">
+                    <FileSpreadsheet className="w-6 h-6 text-green-400" />
+                    <div>
+                       <h4 className="text-xl font-bold uppercase tracking-widest">Office App Mode</h4>
+                       <p className="text-xs text-shogun-subdued">Controlled Microsoft Office automation &mdash; Excel, Word, PowerPoint, Outlook.</p>
+                    </div>
+                 </div>
+                 <div className="shogun-card space-y-3">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><Sparkles className="w-4 h-4 text-green-400" /> Overview</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">{"Office App Mode (codename Katana) lets the AI agent read, modify, and create Excel workbooks, Word documents, PowerPoint presentations, and Outlook emails \u2014 all within strict security boundaries. It uses a hybrid architecture: pure Python libraries handle most operations cross-platform. COM automation is only used for PDF export, formula calculation, and Outlook."}</p>
+                 </div>
+                 <div className="shogun-card bg-green-500/10 border-green-500/30 border-l-4 border-l-green-500 space-y-3">
+                    <h5 className="text-sm font-bold text-green-400 flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Getting Started</h5>
+                    <ol className="text-xs text-shogun-subdued space-y-2 ml-4 list-decimal">
+                       <li>{"Navigate to Sidebar \u2192 Office (under Capabilities)."}</li>
+                       <li>{"Enable Office App Mode with the master toggle."}</li>
+                       <li>{"Configure all four folders \u2014 input, output, templates, and temp."}</li>
+                       <li>{"Toggle individual apps \u2014 enable only what you need."}</li>
+                       <li>{"Save your configuration."}</li>
+                       <li>{"The 27 Office tools are now available to the agent in chat."}</li>
+                    </ol>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-green-400" /> Approved Folders</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"Every file operation is validated against four folder boundaries (input, output, templates, temp). Files outside are rejected. Path traversal, UNC paths, and .lnk shortcuts are blocked."}</p>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Layers className="w-4 h-4 text-green-400" /> Output Versioning</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"The agent never overwrites originals. Every save creates a timestamped copy (e.g. report_20260630_094500.xlsx). Old outputs are cleaned after the retention period (default: 30 days)."}</p>
+                    </div>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><FileSpreadsheet className="w-4 h-4 text-green-400" /> Excel (8 tools)</div>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc"><li>Open workbook</li><li>Read range / all cells</li><li>Write range</li><li>List sheets</li><li>Save as (versioned)</li><li>Export PDF (COM)</li><li>Recalculate (COM)</li><li>Get metadata</li></ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><FileText className="w-4 h-4 text-blue-400" /> Word (6 tools)</div>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc"><li>Open document</li><li>Replace placeholders</li><li>Insert table</li><li>Save as (versioned)</li><li>Export PDF (COM)</li><li>Get metadata</li></ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Layers className="w-4 h-4 text-orange-400" /> PowerPoint (7 tools)</div>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc"><li>Open presentation</li><li>Replace placeholders</li><li>Insert table</li><li>Insert image</li><li>Save as (versioned)</li><li>Export PDF (COM)</li><li>Get metadata</li></ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-cyan-400" /> Outlook (4 tools)</div>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc"><li>Create draft</li><li>Attach file</li><li>Save + review</li><li>Send (high-risk)</li></ul>
+                    </div>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-cyan-400" /> Outlook Modes</div>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-green-400 bg-green-400/10 px-2 py-0.5 rounded">DRAFT ONLY</span><span className="text-xs text-shogun-subdued">Create and save drafts. Never sends.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">CONFIRMED SEND</span><span className="text-xs text-shogun-subdued">Can send with human approval.</span></div>
+                          <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-red-400 bg-red-400/10 px-2 py-0.5 rounded">APPROVED RECIPIENTS</span><span className="text-xs text-shogun-subdued">Auto-send to allowlisted domains.</span></div>
+                       </div>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-green-400" /> Security Per Posture</div>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>SHRINE:</strong> Office completely disabled.</li>
+                          <li><strong>GUARDED:</strong> Read, write, save-as. No overwrite, no macros, no send.</li>
+                          <li><strong>TACTICAL:</strong> + Delete (approval). + Send (approval).</li>
+                          <li><strong>CAMPAIGN:</strong> + Delete (allowed). + Send (approval).</li>
+                          <li><strong>RONIN:</strong> + Overwrite originals. Send still requires approval.</li>
+                       </ul>
+                    </div>
+                 </div>
+                 <div className="shogun-card space-y-2">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-green-400" /> Audit Trail</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">{"Every Office operation emits an office.* event into the dual-write audit chain. Events include application, action, file paths, duration, and status. View them on the Logs page filtered by category: office."}</p>
                  </div>
               </section>
 

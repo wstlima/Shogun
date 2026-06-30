@@ -542,6 +542,593 @@ NATIVE_TOOLS = [
             },
         },
     },
+    # ── Office App Mode — Excel (Katana) ─────────────────────────
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_excel_open",
+            "description": "Open an Excel workbook (.xlsx) from the approved input folder. Returns workbook metadata including sheet names. Must be called before any other Excel operation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the .xlsx file. Must be within the configured Office input folder.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_excel_read_range",
+            "description": "Read cell values from an Excel sheet. Returns a 2D array of values. The workbook must be opened first with office_excel_open.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened workbook.",
+                    },
+                    "sheet_name": {
+                        "type": "string",
+                        "description": "Name of the sheet to read from.",
+                    },
+                    "range": {
+                        "type": "string",
+                        "description": "Cell range to read (e.g. 'A1:D10'). Omit to read all used cells.",
+                    },
+                },
+                "required": ["file_path", "sheet_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_excel_write_range",
+            "description": "Write values to an Excel sheet. Provide a 2D array of values and a start cell or range. The workbook must be opened first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened workbook.",
+                    },
+                    "sheet_name": {
+                        "type": "string",
+                        "description": "Target sheet name.",
+                    },
+                    "range": {
+                        "type": "string",
+                        "description": "Start cell or range (e.g. 'B4' or 'B4:D12').",
+                    },
+                    "values": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {}},
+                        "description": "2D array of values to write, e.g. [['Name', 'Age'], ['Alice', 30]].",
+                    },
+                },
+                "required": ["file_path", "sheet_name", "range", "values"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_excel_list_sheets",
+            "description": "List all sheet names in an opened Excel workbook.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened workbook.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_excel_save_as",
+            "description": "Save the Excel workbook to the approved output folder with a versioned filename. The output path is auto-generated.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened workbook.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the output file (without extension). A timestamp suffix will be added automatically.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_excel_export_pdf",
+            "description": "Export the Excel workbook to PDF format. Requires Microsoft Excel to be installed (uses COM automation).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the workbook to export.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the PDF file (without extension).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_excel_get_metadata",
+            "description": "Get metadata about an opened Excel workbook (sheet names, creator, dates, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened workbook.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_excel_calculate",
+            "description": "Recalculate all formulas in the workbook. Requires Microsoft Excel to be installed (uses COM automation).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the workbook to recalculate.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    # ── Office App Mode — Word (Katana) ──────────────────────────
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_open",
+            "description": "Open a Word document (.docx) from the approved input folder. Returns document metadata. Must be called before other Word operations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the .docx file. Must be within the configured Office input folder.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_replace_placeholders",
+            "description": "Replace {{placeholder}} patterns in a Word document with provided values. Searches paragraphs, tables, headers, and footers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                    "mapping": {
+                        "type": "object",
+                        "description": "Dictionary of placeholder → replacement value, e.g. {'{{company_name}}': 'Acme Corp', '{{date}}': '2026-06-30'}.",
+                    },
+                },
+                "required": ["file_path", "mapping"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_insert_table",
+            "description": "Insert a table into a Word document.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                    "headers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Column header strings.",
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {}},
+                        "description": "2D array of row data.",
+                    },
+                },
+                "required": ["file_path", "headers", "rows"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_save_as",
+            "description": "Save the Word document to the approved output folder with a versioned filename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the output file (without extension).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_export_pdf",
+            "description": "Export the Word document to PDF. Requires Microsoft Word installed (uses COM).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the document to export.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the PDF file.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_get_metadata",
+            "description": "Get metadata about an opened Word document (paragraph count, tables, author, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    # ── Office App Mode — PowerPoint (Katana) ────────────────────
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_open",
+            "description": "Open a PowerPoint presentation (.pptx) from the approved input folder. Returns presentation metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the .pptx file.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_replace_placeholders",
+            "description": "Replace {{placeholder}} patterns across all slides and tables in a PowerPoint presentation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened presentation.",
+                    },
+                    "mapping": {
+                        "type": "object",
+                        "description": "Dictionary of placeholder → replacement value.",
+                    },
+                },
+                "required": ["file_path", "mapping"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_insert_table",
+            "description": "Insert a table on a specific slide in a PowerPoint presentation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened presentation.",
+                    },
+                    "slide_index": {
+                        "type": "integer",
+                        "description": "Index of the slide to insert the table on (0-based).",
+                    },
+                    "headers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Column header strings.",
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {}},
+                        "description": "2D array of row data.",
+                    },
+                },
+                "required": ["file_path", "slide_index", "headers", "rows"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_insert_image",
+            "description": "Insert an image on a specific slide. The image must be from an approved folder.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened presentation.",
+                    },
+                    "slide_index": {
+                        "type": "integer",
+                        "description": "Index of the slide (0-based).",
+                    },
+                    "image_path": {
+                        "type": "string",
+                        "description": "Path to the image file.",
+                    },
+                },
+                "required": ["file_path", "slide_index", "image_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_save_as",
+            "description": "Save the presentation to the approved output folder with a versioned filename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened presentation.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the output file (without extension).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_export_pdf",
+            "description": "Export the presentation to PDF. Requires Microsoft PowerPoint installed (uses COM).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the presentation to export.",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Base name for the PDF file.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_pptx_get_metadata",
+            "description": "Get metadata about an opened PowerPoint presentation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened presentation.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    # ── Office App Mode — Outlook (Katana) ───────────────────────
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_outlook_create_draft",
+            "description": "Create a new draft email in Outlook. This is the primary way to compose emails — provide all fields in one call. The draft is saved but NOT sent. Requires Microsoft Outlook installed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "recipients": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of recipient email addresses.",
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Email subject line.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Email body (HTML supported).",
+                    },
+                    "cc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "CC recipients (optional).",
+                    },
+                    "bcc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "BCC recipients (optional).",
+                    },
+                },
+                "required": ["recipients", "subject", "body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_outlook_attach_file",
+            "description": "Attach a file to an existing Outlook draft. The file must be from an approved output folder.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {
+                        "type": "string",
+                        "description": "The draft ID returned by office_outlook_create_draft.",
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the file to attach.",
+                    },
+                },
+                "required": ["draft_id", "file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_outlook_save_draft",
+            "description": "Explicitly save an Outlook draft and open it in Outlook for human review.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {
+                        "type": "string",
+                        "description": "The draft ID to save and display.",
+                    },
+                },
+                "required": ["draft_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "high",
+        "category": "office",
+        "function": {
+            "name": "office_outlook_send",
+            "description": "Send an Outlook draft email. HIGH-RISK: This will actually send the email. Requires human-in-the-loop approval. Only available at Tactical posture and above.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {
+                        "type": "string",
+                        "description": "The draft ID to send.",
+                    },
+                },
+                "required": ["draft_id"],
+            },
+        },
+    },
 ]
 
 
@@ -1317,6 +1904,10 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
                         "message": f"Typed: {text[:50]}{'...' if len(text) > 50 else ''}",
                     })
 
+        # ── Office App Mode (Katana) ──────────────────────────────
+        elif name.startswith("office_"):
+            return await _execute_office_tool(name, args)
+
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
             
@@ -1325,3 +1916,397 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
         return json.dumps({"status": "error", "message": str(e)})
 
 
+# ── Office Tool Executor ─────────────────────────────────────────────
+# Tracks open workbook/document/presentation handles across tool calls.
+_open_handles: dict[str, Any] = {}  # file_path → handle object
+
+
+async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
+    """Execute an Office App Mode tool.
+
+    All Office tools route through this function, which handles:
+      1. Config loading
+      2. Path validation
+      3. Permission checks
+      4. Adapter delegation
+      5. Output versioning
+      6. Event logging
+    """
+    import time as _time
+    start_ms = int(_time.time() * 1000)
+
+    try:
+        from shogun.office.config import load_office_config
+        from shogun.office.path_validator import FileBoundaryValidator, PathPurpose
+        from shogun.office.permission_engine import (
+            check_office_permission, get_current_posture_tier, OfficeAction,
+        )
+        from shogun.office.output_versioning import version_output_path
+        from shogun.office.exceptions import OfficeError
+
+        config = load_office_config()
+        if not config.enabled:
+            return json.dumps({
+                "status": "blocked",
+                "message": "Office App Mode is disabled. Enable it in the Katana configuration.",
+            })
+
+        validator = FileBoundaryValidator(config)
+        tier = await get_current_posture_tier()
+
+        # ── Excel Tools ──────────────────────────────────────────
+        if name == "office_excel_open":
+            vp = validator.validate(args["file_path"], PathPurpose.READ)
+            from shogun.office.adapters.excel_adapter import open_workbook, get_workbook_metadata
+            handle = open_workbook(str(vp.resolved_path))
+            _open_handles[str(vp.resolved_path)] = handle
+            meta = get_workbook_metadata(handle)
+            await _log_office_event("office.excel.open", "Opened workbook", "excel", str(vp.resolved_path), start_ms=start_ms)
+            return json.dumps({"status": "success", "data": meta})
+
+        elif name == "office_excel_read_range":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                vp = validator.validate(fp, PathPurpose.READ)
+                from shogun.office.adapters.excel_adapter import open_workbook
+                handle = open_workbook(str(vp.resolved_path))
+                _open_handles[str(vp.resolved_path)] = handle
+                fp = str(vp.resolved_path)
+            from shogun.office.adapters.excel_adapter import read_range, read_used_range
+            sheet = args["sheet_name"]
+            rng = args.get("range")
+            data = read_range(handle, sheet, rng) if rng else read_used_range(handle, sheet)
+            await _log_office_event("office.excel.read", f"Read {sheet}{'!' + rng if rng else ''}", "excel", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": data})
+
+        elif name == "office_excel_write_range":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Workbook not open. Call office_excel_open first."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "excel", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.excel_adapter import write_range
+            write_range(handle, args["sheet_name"], args["range"], args["values"])
+            await _log_office_event("office.excel.write", f"Wrote to {args['sheet_name']}!{args['range']}", "excel", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Written to {args['sheet_name']}!{args['range']}"})
+
+        elif name == "office_excel_list_sheets":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Workbook not open."})
+            from shogun.office.adapters.excel_adapter import list_sheets
+            sheets = list_sheets(handle)
+            return json.dumps({"status": "success", "data": {"sheets": sheets}})
+
+        elif name == "office_excel_save_as":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Workbook not open."})
+            perm = check_office_permission(OfficeAction.SAVE_AS_NEW, "excel", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.excel_adapter import save_as
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".xlsx", config.folders.output)
+            result = save_as(handle, str(out_path))
+            await _log_office_event("office.excel.save", f"Saved as {out_path.name}", "excel", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_excel_export_pdf":
+            fp = args["file_path"]
+            perm = check_office_permission(OfficeAction.EXPORT_PDF, "excel", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.excel_adapter import export_pdf
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".pdf", config.folders.output)
+            result = await export_pdf(fp, str(out_path))
+            await _log_office_event("office.excel.export_pdf", f"Exported PDF {out_path.name}", "excel", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_excel_get_metadata":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Workbook not open."})
+            from shogun.office.adapters.excel_adapter import get_workbook_metadata
+            meta = get_workbook_metadata(handle)
+            return json.dumps({"status": "success", "data": meta})
+
+        elif name == "office_excel_calculate":
+            fp = args["file_path"]
+            perm = check_office_permission(OfficeAction.CALCULATE, "excel", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.excel_adapter import calculate
+            await calculate(fp)
+            await _log_office_event("office.excel.calculate", "Recalculated formulas", "excel", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": "Formulas recalculated."})
+
+        # ── Word Tools ───────────────────────────────────────────
+        elif name == "office_word_open":
+            vp = validator.validate(args["file_path"], PathPurpose.READ)
+            from shogun.office.adapters.word_adapter import open_document, get_document_metadata
+            handle = open_document(str(vp.resolved_path))
+            _open_handles[str(vp.resolved_path)] = handle
+            meta = get_document_metadata(handle)
+            await _log_office_event("office.word.open", "Opened document", "word", str(vp.resolved_path), start_ms=start_ms)
+            return json.dumps({"status": "success", "data": meta})
+
+        elif name == "office_word_replace_placeholders":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.word_adapter import replace_placeholders
+            counts = replace_placeholders(handle, args["mapping"])
+            await _log_office_event("office.word.replace", f"Replaced placeholders: {sum(counts.values())} total", "word", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": {"replacements": counts}})
+
+        elif name == "office_word_insert_table":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.word_adapter import insert_table
+            insert_table(handle, args["headers"], args["rows"])
+            await _log_office_event("office.word.insert_table", f"Inserted table ({len(args['headers'])} cols)", "word", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Table inserted ({len(args['headers'])} columns, {len(args['rows'])} rows)"})
+
+        elif name == "office_word_save_as":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open."})
+            perm = check_office_permission(OfficeAction.SAVE_AS_NEW, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.word_adapter import save_as
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".docx", config.folders.output)
+            result = save_as(handle, str(out_path))
+            await _log_office_event("office.word.save", f"Saved as {out_path.name}", "word", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_word_export_pdf":
+            fp = args["file_path"]
+            perm = check_office_permission(OfficeAction.EXPORT_PDF, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.word_adapter import export_pdf
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".pdf", config.folders.output)
+            result = await export_pdf(fp, str(out_path))
+            await _log_office_event("office.word.export_pdf", f"Exported PDF {out_path.name}", "word", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_word_get_metadata":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open."})
+            from shogun.office.adapters.word_adapter import get_document_metadata
+            meta = get_document_metadata(handle)
+            return json.dumps({"status": "success", "data": meta})
+
+        # ── PowerPoint Tools ─────────────────────────────────────
+        elif name == "office_pptx_open":
+            vp = validator.validate(args["file_path"], PathPurpose.READ)
+            from shogun.office.adapters.pptx_adapter import open_presentation, get_presentation_metadata
+            handle = open_presentation(str(vp.resolved_path))
+            _open_handles[str(vp.resolved_path)] = handle
+            meta = get_presentation_metadata(handle)
+            await _log_office_event("office.pptx.open", "Opened presentation", "powerpoint", str(vp.resolved_path), start_ms=start_ms)
+            return json.dumps({"status": "success", "data": meta})
+
+        elif name == "office_pptx_replace_placeholders":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Presentation not open."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "powerpoint", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.pptx_adapter import replace_placeholders
+            counts = replace_placeholders(handle, args["mapping"])
+            await _log_office_event("office.pptx.replace", f"Replaced placeholders: {sum(counts.values())} total", "powerpoint", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": {"replacements": counts}})
+
+        elif name == "office_pptx_insert_table":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Presentation not open."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "powerpoint", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.pptx_adapter import insert_table
+            insert_table(handle, args["slide_index"], args["headers"], args["rows"])
+            await _log_office_event("office.pptx.insert_table", f"Inserted table on slide {args['slide_index']}", "powerpoint", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Table inserted on slide {args['slide_index']}"})
+
+        elif name == "office_pptx_insert_image":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Presentation not open."})
+            perm = check_office_permission(OfficeAction.INSERT_IMAGE, "powerpoint", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.pptx_adapter import insert_image
+            insert_image(handle, args["slide_index"], args["image_path"])
+            await _log_office_event("office.pptx.insert_image", f"Inserted image on slide {args['slide_index']}", "powerpoint", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Image inserted on slide {args['slide_index']}"})
+
+        elif name == "office_pptx_save_as":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Presentation not open."})
+            perm = check_office_permission(OfficeAction.SAVE_AS_NEW, "powerpoint", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.pptx_adapter import save_as
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".pptx", config.folders.output)
+            result = save_as(handle, str(out_path))
+            await _log_office_event("office.pptx.save", f"Saved as {out_path.name}", "powerpoint", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_pptx_export_pdf":
+            fp = args["file_path"]
+            perm = check_office_permission(OfficeAction.EXPORT_PDF, "powerpoint", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.pptx_adapter import export_pdf
+            from pathlib import Path
+            base_name = args.get("output_name") or Path(fp).stem
+            out_path = version_output_path(base_name, ".pdf", config.folders.output)
+            result = await export_pdf(fp, str(out_path))
+            await _log_office_event("office.pptx.export_pdf", f"Exported PDF {out_path.name}", "powerpoint", fp, output_file=result, start_ms=start_ms)
+            return json.dumps({"status": "success", "output_file": result})
+
+        elif name == "office_pptx_get_metadata":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Presentation not open."})
+            from shogun.office.adapters.pptx_adapter import get_presentation_metadata
+            meta = get_presentation_metadata(handle)
+            return json.dumps({"status": "success", "data": meta})
+
+        # ── Outlook Tools ────────────────────────────────────────
+        elif name == "office_outlook_create_draft":
+            perm = check_office_permission(OfficeAction.CREATE_DRAFT, "outlook", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.outlook_adapter import create_draft
+            result = await create_draft(
+                recipients=args["recipients"],
+                subject=args["subject"],
+                body=args["body"],
+                cc=args.get("cc"),
+                bcc=args.get("bcc"),
+            )
+            await _log_office_event(
+                "office.outlook.create_draft",
+                f"Created draft to {', '.join(args['recipients'])}",
+                "outlook", start_ms=start_ms,
+            )
+            return json.dumps({"status": "success", "data": result.to_dict()})
+
+        elif name == "office_outlook_attach_file":
+            perm = check_office_permission(OfficeAction.ATTACH_FILE, "outlook", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.outlook_adapter import attach_file
+            await attach_file(args["draft_id"], args["file_path"])
+            await _log_office_event("office.outlook.attach", f"Attached file to draft {args['draft_id']}", "outlook", start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"File attached to draft {args['draft_id']}"})
+
+        elif name == "office_outlook_save_draft":
+            from shogun.office.adapters.outlook_adapter import save_draft, open_draft_for_review
+            await save_draft(args["draft_id"])
+            await open_draft_for_review(args["draft_id"])
+            await _log_office_event("office.outlook.save_draft", f"Saved and displayed draft {args['draft_id']}", "outlook", start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Draft {args['draft_id']} saved and opened in Outlook for review."})
+
+        elif name == "office_outlook_send":
+            perm = check_office_permission(OfficeAction.SEND_EMAIL, "outlook", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            if perm.requires_approval:
+                return json.dumps({
+                    "status": "approval_required",
+                    "message": f"Sending email requires human approval at {tier.upper()} posture. The draft has been saved for review.",
+                    "draft_id": args["draft_id"],
+                })
+            from shogun.office.adapters.outlook_adapter import send_with_confirmation
+            await send_with_confirmation(args["draft_id"])
+            await _log_office_event("office.outlook.send", f"Sent email from draft {args['draft_id']}", "outlook", start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Email sent from draft {args['draft_id']}"})
+
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown office tool: {name}"})
+
+    except OfficeError as exc:
+        logger.warning("Office tool error (%s): %s", name, exc)
+        elapsed = int(_time.time() * 1000) - start_ms
+        try:
+            await _log_office_event(
+                f"office.error.{name}", str(exc), result="error",
+                start_ms=start_ms,
+            )
+        except Exception:
+            pass
+        return json.dumps({
+            "status": "error",
+            "message": str(exc),
+            "context": exc.context.to_dict() if exc.context else {},
+        })
+    except Exception as exc:
+        logger.error("Office tool unexpected error (%s): %s", name, exc, exc_info=True)
+        return json.dumps({"status": "error", "message": f"Unexpected error: {exc}"})
+
+
+async def _log_office_event(
+    event_type: str,
+    action: str,
+    application: str = "",
+    input_file: str = "",
+    output_file: str = "",
+    result: str = "success",
+    start_ms: int = 0,
+) -> None:
+    """Helper to emit Office events through EventLogger."""
+    import time as _time
+    try:
+        from shogun.services.event_logger import EventLogger
+        elapsed = int(_time.time() * 1000) - start_ms if start_ms else None
+        await EventLogger.emit_office_event(
+            event_type=event_type,
+            action=action,
+            application=application,
+            input_file=input_file,
+            output_file=output_file,
+            result=result,
+            duration_ms=elapsed,
+        )
+    except Exception as exc:
+        logger.debug("Failed to log office event: %s", exc)

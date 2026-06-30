@@ -17,6 +17,7 @@ import {
   AppWindow,
   ShieldCheck,
   Crosshair,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -151,6 +152,13 @@ export const Sidebar = () => {
             subLabel={t('nav.ronin_sub', 'Desktop Control')} 
             active={location.pathname === '/ronin'}
             onClick={() => navigate('/ronin')}
+          />
+          <NavItem 
+            icon={FileSpreadsheet} 
+            label={t('nav.office', 'Office')} 
+            subLabel={t('nav.office_sub', 'Office Automation')} 
+            active={location.pathname === '/office'}
+            onClick={() => navigate('/office')}
           />
         </nav>
       </div>

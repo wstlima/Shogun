@@ -1,14 +1,15 @@
-"""Shogun runtime — agent orchestration engine stub.
+"""Shogun runtime — agent orchestration engine placeholder.
 
-This module will contain the core runtime loop, agent lifecycle management,
-and task orchestration in future phases.
+DEPRECATED: Orchestration is handled by flow_engine.py (Agent Flows),
+bushido_engine.py (scheduled jobs), and the chat pipeline in agents.py.
+This module exists for backward compatibility only.
 """
 
 from __future__ import annotations
 
 
 class ShogunRuntime:
-    """Stub for the Shogun agent orchestration runtime."""
+    """Deprecated placeholder for the Shogun agent orchestration runtime."""
 
     def __init__(self):
         self.status = "initialized"

@@ -882,5 +882,24 @@
     "calibration_reset": "Calibration reset to baseline.",
     "calibration_reset_failed": "Failed to reset calibration.",
     "epoch": "epoch"
+  },
+  "updates_page": {
+    "title": "System Updates",
+    "subtitle": "Keep your Shogun installation up to date.",
+    "current_version": "Current Version",
+    "latest_available": "Latest Available",
+    "new_version_available": "A new version is available!",
+    "up_to_date": "You are running the latest version.",
+    "whats_new": "What's New in",
+    "released": "Released",
+    "check_for_updates": "Check for Updates",
+    "checking": "Checking...",
+    "install_update": "Install Update",
+    "installing": "Installing update...",
+    "last_checked": "Last checked",
+    "install_confirm": "This will download and apply the latest version. The frontend will be rebuilt. Continue?",
+    "info_auto_check": "Updates are checked automatically every 6 hours.",
+    "info_preserve": "Updates preserve your data, database, configurations, and virtual environment.",
+    "info_restart": "Restart Shogun to apply changes after an update."
   }
 }

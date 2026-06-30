@@ -62,6 +62,13 @@ _DEFAULT_POSTURE = {
     "ronin_install_software": "blocked",
     "ronin_komainu_level": 1,
     "ronin_environment_policy": "any",
+    # Office App Mode (Katana)
+    "office_enabled": False,
+    "office_excel_enabled": True,
+    "office_word_enabled": True,
+    "office_ppt_enabled": True,
+    "office_outlook_enabled": True,
+    "office_outlook_mode": "draft_only",
 }
 
 # Constraint values that each tier enforces when selected
@@ -87,6 +94,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_enabled": False,
         "ronin_posture": "disabled",
         "ronin_max_sessions": 0,
+        "office_enabled": False,
     },
     "guarded": {
         "filesystem_mode": "allowlist",
@@ -109,6 +117,8 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_enabled": False,
         "ronin_posture": "disabled",
         "ronin_max_sessions": 0,
+        "office_enabled": True,
+        "office_outlook_mode": "draft_only",
     },
     "tactical": {
         "filesystem_mode": "scoped",
@@ -131,6 +141,8 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_enabled": False,
         "ronin_posture": "disabled",
         "ronin_max_sessions": 0,
+        "office_enabled": True,
+        "office_outlook_mode": "confirmed_send",
     },
     "campaign": {
         "filesystem_mode": "full",
@@ -153,6 +165,8 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_enabled": False,
         "ronin_posture": "disabled",
         "ronin_max_sessions": 0,
+        "office_enabled": True,
+        "office_outlook_mode": "confirmed_send",
     },
     "ronin": {
         "filesystem_mode": "full",
@@ -187,6 +201,8 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_install_software": "allowed",
         "ronin_komainu_level": 1,
         "ronin_environment_policy": "any",
+        "office_enabled": True,
+        "office_outlook_mode": "confirmed_send",
     },
 }
 

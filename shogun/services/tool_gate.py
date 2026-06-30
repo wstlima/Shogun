@@ -112,6 +112,35 @@ TOOL_RISK_REGISTRY: dict[str, dict[str, str]] = {
     "spawn_samurai":          {"risk": "medium",   "category": "agents"},
     # Workflows
     "create_agent_flow":      {"risk": "medium",   "category": "workflow"},
+    # Office — Excel (Katana)
+    "office_excel_open":          {"risk": "low",      "category": "office"},
+    "office_excel_read_range":    {"risk": "low",      "category": "office"},
+    "office_excel_write_range":   {"risk": "medium",   "category": "office"},
+    "office_excel_calculate":     {"risk": "low",      "category": "office"},
+    "office_excel_save_as":       {"risk": "medium",   "category": "office"},
+    "office_excel_export_pdf":    {"risk": "medium",   "category": "office"},
+    "office_excel_list_sheets":   {"risk": "low",      "category": "office"},
+    "office_excel_get_metadata":  {"risk": "low",      "category": "office"},
+    # Office — Word (Katana)
+    "office_word_open":                  {"risk": "low",      "category": "office"},
+    "office_word_replace_placeholders":  {"risk": "medium",   "category": "office"},
+    "office_word_insert_table":          {"risk": "medium",   "category": "office"},
+    "office_word_save_as":               {"risk": "medium",   "category": "office"},
+    "office_word_export_pdf":            {"risk": "medium",   "category": "office"},
+    "office_word_get_metadata":          {"risk": "low",      "category": "office"},
+    # Office — PowerPoint (Katana)
+    "office_pptx_open":                  {"risk": "low",      "category": "office"},
+    "office_pptx_replace_placeholders":  {"risk": "medium",   "category": "office"},
+    "office_pptx_insert_image":          {"risk": "medium",   "category": "office"},
+    "office_pptx_insert_table":          {"risk": "medium",   "category": "office"},
+    "office_pptx_save_as":               {"risk": "medium",   "category": "office"},
+    "office_pptx_export_pdf":            {"risk": "medium",   "category": "office"},
+    "office_pptx_get_metadata":          {"risk": "low",      "category": "office"},
+    # Office — Outlook (Katana)
+    "office_outlook_create_draft":   {"risk": "medium",   "category": "office"},
+    "office_outlook_attach_file":    {"risk": "medium",   "category": "office"},
+    "office_outlook_save_draft":     {"risk": "medium",   "category": "office"},
+    "office_outlook_send":           {"risk": "high",     "category": "office"},
 }
 
 

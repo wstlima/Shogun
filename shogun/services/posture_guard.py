@@ -158,7 +158,38 @@ async def get_posture_tool_filter() -> dict[str, Any]:
         "ronin_mouse_enabled": posture.get("ronin_mouse_enabled", False),
         "ronin_keyboard_enabled": posture.get("ronin_keyboard_enabled", False),
         "ronin_screenshots_enabled": posture.get("ronin_screenshots_enabled", True),
+        # Office App Mode (Katana)
+        "office_enabled": posture.get("office_enabled", False),
+        "office_excel_enabled": posture.get("office_excel_enabled", True),
+        "office_word_enabled": posture.get("office_word_enabled", True),
+        "office_ppt_enabled": posture.get("office_ppt_enabled", True),
+        "office_outlook_enabled": posture.get("office_outlook_enabled", True),
+        "office_outlook_mode": posture.get("office_outlook_mode", "draft_only"),
     }
+
+
+# ── Office App Mode access gate ─────────────────────────────────────
+
+async def check_office_access() -> None:
+    """Raise HTTP 403 if Office App Mode is disabled at current tier.
+
+    Call this before any Office automation operation.
+    """
+    from shogun.api.security import _get_agent_posture
+
+    posture = await _get_agent_posture()
+    if not posture.get("office_enabled", False):
+        tier = posture.get("active_tier", "tactical")
+        log.warning("[PostureGuard] Office App Mode blocked (tier=%s)", tier)
+        _emit_block_event(
+            "office_disabled",
+            f"Office automation blocked: Office App Mode is disabled at tier {tier.upper()}",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Security posture [{tier.upper()}] does not permit Office automation. "
+                   "Enable Office App Mode in the Katana settings.",
+        )
 
 
 # ── Mado browser access gate ────────────────────────────────────────
@@ -274,6 +305,24 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
 
         # ── Mado: Browser tools ──
         if name in ("browse_web", "take_screenshot") and not posture.get("mado_enabled", False):
+            denied.append(name)
+            continue
+
+        # ── Office: Katana tools ──
+        if name.startswith("office_") and not posture.get("office_enabled", False):
+            denied.append(name)
+            continue
+        # Per-app office tool gating
+        if name.startswith("office_excel_") and not posture.get("office_excel_enabled", True):
+            denied.append(name)
+            continue
+        if name.startswith("office_word_") and not posture.get("office_word_enabled", True):
+            denied.append(name)
+            continue
+        if name.startswith("office_pptx_") and not posture.get("office_ppt_enabled", True):
+            denied.append(name)
+            continue
+        if name.startswith("office_outlook_") and not posture.get("office_outlook_enabled", True):
             denied.append(name)
             continue
 

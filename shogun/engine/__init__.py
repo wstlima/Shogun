@@ -1,1 +1,1 @@
-"""Engine package — runtime stubs for Phase 1."""
+"""Engine package — flow execution, memory salience, and vector store."""

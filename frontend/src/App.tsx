@@ -18,6 +18,7 @@ import { Backups } from './pages/Backups'
 import { Mado } from './pages/Mado'
 import { Ronin } from './pages/Ronin'
 import { Gensui } from './pages/Gensui'
+import { Office } from './pages/Office'
 import { SetupWizard } from './pages/SetupWizard'
 import { useState, useEffect } from 'react'
 import { useTranslation, I18nProvider } from './i18n'
@@ -104,6 +105,7 @@ function AppContent() {
           <Route path="/mado" element={<Shell><Mado /></Shell>} />
           <Route path="/ronin" element={<Shell><Ronin /></Shell>} />
           <Route path="/gensui" element={<Shell><Gensui /></Shell>} />
+          <Route path="/office" element={<Shell><Office /></Shell>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
