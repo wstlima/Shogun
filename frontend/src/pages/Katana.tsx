@@ -39,12 +39,17 @@ import {
   Mail,
   Cloud,
   Monitor,
+  FileSpreadsheet,
+  Loader2,
+  Power,
+  FolderOpen,
+  FileText,
 } from "lucide-react";
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
-type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'mail_calendar';
+type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'mail_calendar' | 'office';
 type RegisterMode = 'quick' | 'manual';
 
 // ── Documentation links for cloud providers ─────────────────────
@@ -253,6 +258,73 @@ export function Katana() {
     perm_delete_events: false,
   });
   const [showMailPassword, setShowMailPassword] = useState(false);
+
+  // ── Office App Mode state ─────────────────────────────────────
+  const [officeStatus, setOfficeStatus] = useState<any>(null);
+  const [officeConfig, setOfficeConfig] = useState<any>(null);
+  const [officePosture, setOfficePosture] = useState<string>('');
+  const [officeSaving, setOfficeSaving] = useState(false);
+  const [officeDetecting, setOfficeDetecting] = useState(false);
+  const [officeUnsaved, setOfficeUnsaved] = useState(false);
+
+  const fetchOfficeData = async () => {
+    try {
+      const [statusRes, configRes, postureRes] = await Promise.all([
+        axios.get('/api/v1/office/status'),
+        axios.get('/api/v1/office/config'),
+        axios.get('/api/v1/security/posture'),
+      ]);
+      if (statusRes.data?.success) setOfficeStatus(statusRes.data.data);
+      if (configRes.data?.success) setOfficeConfig(configRes.data.data);
+      if (postureRes.data?.data?.active_tier) setOfficePosture(postureRes.data.data.active_tier);
+    } catch (err) {
+      console.error('Failed to load Office data:', err);
+    }
+  };
+
+  const saveOfficeConfig = async () => {
+    if (!officeConfig) return;
+    setOfficeSaving(true);
+    try {
+      const res = await axios.post('/api/v1/office/config', officeConfig);
+      if (res.data?.success) {
+        setOfficeConfig(res.data.data);
+        setOfficeUnsaved(false);
+        setStatusMessage({ type: 'success', text: 'Office configuration saved' });
+        setTimeout(() => setStatusMessage(null), 3000);
+      }
+    } catch (err) {
+      setStatusMessage({ type: 'error', text: 'Failed to save Office configuration' });
+      setTimeout(() => setStatusMessage(null), 3000);
+    } finally {
+      setOfficeSaving(false);
+    }
+  };
+
+  const detectOfficeApps = async () => {
+    setOfficeDetecting(true);
+    try {
+      await axios.post('/api/v1/office/detect');
+      await fetchOfficeData();
+    } catch (err) {
+      console.error('Detection failed:', err);
+    } finally {
+      setOfficeDetecting(false);
+    }
+  };
+
+  const updateOfficeConfig = (path: string, value: any) => {
+    if (!officeConfig) return;
+    const keys = path.split('.');
+    const updated = JSON.parse(JSON.stringify(officeConfig));
+    let obj = updated;
+    for (let i = 0; i < keys.length - 1; i++) {
+      obj = obj[keys[i]];
+    }
+    obj[keys[keys.length - 1]] = value;
+    setOfficeConfig(updated);
+    setOfficeUnsaved(true);
+  };
 
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
@@ -1114,13 +1186,14 @@ export function Katana() {
 
       {/* ── Tab bar ────────────────────────────────────────────── */}
       <div className="flex border-b border-shogun-border">
-        {(['providers', 'tools', 'routing', 'telegram', 'mail_calendar'] as TabType[]).map((tab) => (
+        {(['providers', 'tools', 'routing', 'telegram', 'mail_calendar', 'office'] as TabType[]).map((tab) => (
           <button
             key={tab}
             onClick={() => {
               setActiveTab(tab);
               if (tab === 'telegram' && !tgStatus) fetchTgStatus();
               if (tab === 'mail_calendar' && !mailAccount) fetchMailStatus();
+              if (tab === 'office' && !officeStatus) fetchOfficeData();
             }}
             className={cn(
               "px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all relative",
@@ -1144,6 +1217,15 @@ export function Katana() {
                 <Mail className="w-3.5 h-3.5" />
                 Mail & Calendar
                 {mailAccount?.is_active && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                )}
+              </span>
+            )}
+            {tab === 'office' && (
+              <span className={cn("flex items-center gap-1.5", officePosture === 'shrine' && "opacity-40")}>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Office
+                {officeStatus?.enabled && officePosture !== 'shrine' && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
                 )}
               </span>
@@ -3127,6 +3209,229 @@ export function Katana() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════
+            OFFICE TAB
+        ════════════════════════════════════════════════════════ */}
+        {activeTab === 'office' && (
+          <div className="space-y-6">
+            {officePosture === 'shrine' && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5 flex items-center gap-4">
+                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
+                <div>
+                  <h3 className="text-sm font-bold text-red-400">Office Disabled at SHRINE Posture</h3>
+                  <p className="text-xs text-shogun-subdued mt-1">Office App Mode is blocked at SHRINE security tier. Raise your posture in Torii to at least GUARDED to use Office automation.</p>
+                </div>
+              </div>
+            )}
+
+            <div className={cn(officePosture === 'shrine' && 'opacity-40 pointer-events-none select-none')}>
+              {/* Master Enable */}
+              {officeConfig && (
+                <div className={cn(
+                  "rounded-xl border p-5 transition-all duration-500 mb-6",
+                  officeConfig.enabled
+                    ? "border-green-500/40 bg-gradient-to-r from-[#0f1422] to-[#131926] shadow-xl shadow-green-500/10"
+                    : "border-shogun-border bg-shogun-card"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "p-3 rounded-xl transition-colors duration-500",
+                        officeConfig.enabled ? "bg-green-500/15 text-green-400" : "bg-shogun-bg text-shogun-subdued"
+                      )}>
+                        <Power className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-shogun-text">Office App Mode</h2>
+                        <p className="text-xs text-shogun-subdued mt-0.5">
+                          {officeConfig.enabled ? 'Active — AI agents can interact with Office applications' : 'Disabled — Enable to allow Office automation'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {officeUnsaved && <span className="text-xs text-amber-400 animate-pulse">Unsaved</span>}
+                      <button onClick={saveOfficeConfig} disabled={officeSaving || !officeUnsaved}
+                        className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                          officeUnsaved ? "bg-shogun-gold text-black hover:bg-[#e6b422] shadow-lg shadow-shogun-gold/20" : "bg-shogun-border text-shogun-subdued cursor-not-allowed"
+                        )}>
+                        {officeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                      </button>
+                      <button onClick={() => updateOfficeConfig('enabled', !officeConfig.enabled)}
+                        className={cn("relative w-14 h-7 rounded-full transition-all duration-500", officeConfig.enabled ? "bg-green-500" : "bg-shogun-border")}>
+                        <span className={cn("absolute top-1 w-5 h-5 rounded-full bg-white shadow-lg transition-transform duration-500", officeConfig.enabled ? "translate-x-8 left-0" : "left-1")} />
+                      </button>
+                    </div>
+                  </div>
+                  {!officeStatus?.platform_supported && (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded-lg p-3">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>{officeStatus?.message || 'Office App Mode requires Windows with Microsoft Office installed.'}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Applications */}
+              {officeStatus && officeConfig && (
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-shogun-subdued uppercase tracking-wider">Applications</h2>
+                    <button onClick={detectOfficeApps} disabled={officeDetecting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-shogun-subdued bg-shogun-bg hover:bg-shogun-border border border-shogun-border transition-all">
+                      <RefreshCw className={cn("w-3.5 h-3.5", officeDetecting && "animate-spin")} /> Re-detect
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                      { app: officeStatus.excel, key: 'excel', icon: FileSpreadsheet, color: 'text-green-400', label: 'Excel' },
+                      { app: officeStatus.word, key: 'word', icon: FileText, color: 'text-blue-400', label: 'Word' },
+                      { app: officeStatus.powerpoint, key: 'powerpoint', icon: Layers, color: 'text-orange-400', label: 'PowerPoint' },
+                      { app: officeStatus.outlook, key: 'outlook', icon: Mail, color: 'text-cyan-400', label: 'Outlook' },
+                    ].map(({ app, key, icon: Icon, color, label }) => (
+                      <div key={key} className={cn(
+                        "relative rounded-xl border p-5 transition-all duration-300",
+                        app?.installed && officeConfig[key]?.enabled
+                          ? "border-shogun-gold/30 bg-shogun-card shadow-lg shadow-shogun-gold/5"
+                          : "border-shogun-border bg-shogun-bg/60 opacity-70"
+                      )}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={cn("p-2.5 rounded-lg bg-shogun-bg", color)}><Icon className="w-5 h-5" /></div>
+                            <div>
+                              <h3 className="text-sm font-semibold text-shogun-text">{label}</h3>
+                              {app?.version && <p className="text-xs text-shogun-subdued mt-0.5">v{app.version}</p>}
+                            </div>
+                          </div>
+                          <button onClick={() => updateOfficeConfig(`${key}.enabled`, !officeConfig[key]?.enabled)}
+                            disabled={!app?.installed}
+                            className={cn("relative w-10 h-5 rounded-full transition-all duration-300",
+                              officeConfig[key]?.enabled && app?.installed ? "bg-shogun-gold" : "bg-shogun-border",
+                              !app?.installed && "opacity-40 cursor-not-allowed"
+                            )}>
+                            <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-300",
+                              officeConfig[key]?.enabled && app?.installed ? "translate-x-5 left-0.5" : "left-0.5"
+                            )} />
+                          </button>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium tracking-wide",
+                            app?.installed ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30" : "bg-red-500/15 text-red-400 ring-1 ring-red-500/30"
+                          )}>
+                            {app?.installed ? <CheckCircle2 className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                            {app?.installed ? 'Installed' : 'Not found'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Folders */}
+              {officeConfig && (
+                <div className="shogun-card space-y-4 mb-6">
+                  <div className="font-bold text-shogun-text flex items-center gap-2"><FolderOpen className="w-4 h-4 text-shogun-gold" /> Approved Folders</div>
+                  <p className="text-xs text-shogun-subdued">All file operations are restricted to these folders. Files outside these boundaries will be rejected.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {['input', 'output', 'templates', 'temp'].map(folder => (
+                      <div key={folder}>
+                        <label className="block text-xs font-medium text-shogun-subdued mb-1.5 capitalize">{folder}</label>
+                        <div className="flex items-center gap-2">
+                          <Folder className="w-4 h-4 text-shogun-subdued flex-shrink-0" />
+                          <input type="text" value={officeConfig.folders?.[folder] || ''}
+                            onChange={e => updateOfficeConfig(`folders.${folder}`, e.target.value)}
+                            placeholder={`C:\\Users\\...\\Documents\\Office\\${folder}`}
+                            className="flex-1 bg-shogun-bg border border-shogun-border rounded-lg px-3 py-2 text-sm text-shogun-text placeholder-shogun-subdued/40 focus:outline-none focus:border-shogun-gold/50 transition-colors font-mono" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Safety */}
+              {officeConfig && (
+                <div className="shogun-card space-y-4 mb-6">
+                  <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-shogun-gold" /> Safety &amp; Security</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[
+                      { key: 'safety.block_path_traversal', label: 'Block path traversal', desc: 'Prevent ../ escape attacks' },
+                      { key: 'safety.block_shortcuts', label: 'Block .lnk files', desc: 'Prevent shortcut escape' },
+                      { key: 'safety.block_unc_paths', label: 'Block UNC paths', desc: 'Prevent network path access' },
+                      { key: 'safety.version_outputs', label: 'Version outputs', desc: 'Auto-timestamp output files' },
+                      { key: 'safety.require_output_validation', label: 'Validate outputs', desc: 'Verify output file integrity' },
+                      { key: 'temp_cleanup_on_startup', label: 'Cleanup temp on startup', desc: 'Remove temp files at boot' },
+                    ].map(item => {
+                      const keys = item.key.split('.');
+                      const val = keys.length === 2 ? officeConfig[keys[0]]?.[keys[1]] : officeConfig[keys[0]];
+                      return (
+                        <label key={item.key} className="flex items-start gap-3 p-3 rounded-lg bg-shogun-bg border border-shogun-border cursor-pointer hover:border-shogun-gold/20 transition-colors">
+                          <input type="checkbox" checked={!!val} onChange={() => updateOfficeConfig(item.key, !val)} className="mt-0.5 accent-[#d4a017]" />
+                          <div>
+                            <p className="text-sm text-shogun-text font-medium">{item.label}</p>
+                            <p className="text-xs text-shogun-subdued mt-0.5">{item.desc}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Outlook */}
+              {officeConfig && (
+                <div className="shogun-card space-y-4">
+                  <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-cyan-400" /> Outlook Settings</div>
+                  <div>
+                    <label className="block text-xs font-medium text-shogun-subdued mb-2">Outlook Mode</label>
+                    <div className="flex gap-3">
+                      {[
+                        { value: 'draft_only', label: 'Draft Only', desc: 'Create drafts, never send' },
+                        { value: 'confirmed_send', label: 'Confirmed Send', desc: 'Send with approval' },
+                        { value: 'approved_recipient_send', label: 'Approved Recipients', desc: 'Auto-send to allowlist' },
+                      ].map(mode => (
+                        <button key={mode.value} onClick={() => updateOfficeConfig('outlook.mode', mode.value)}
+                          className={cn("flex-1 p-3 rounded-lg border text-left transition-all",
+                            officeConfig.outlook?.mode === mode.value
+                              ? "border-shogun-gold/50 bg-shogun-gold/10"
+                              : "border-shogun-border bg-shogun-bg hover:border-shogun-gold/20"
+                          )}>
+                          <p className={cn("text-sm font-medium", officeConfig.outlook?.mode === mode.value ? "text-shogun-gold" : "text-shogun-text")}>{mode.label}</p>
+                          <p className="text-xs text-shogun-subdued mt-0.5">{mode.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="flex items-start gap-3 p-3 rounded-lg bg-shogun-bg border border-shogun-border cursor-pointer hover:border-shogun-gold/20 transition-colors">
+                      <input type="checkbox" checked={!!officeConfig.outlook?.require_confirmation}
+                        onChange={() => updateOfficeConfig('outlook.require_confirmation', !officeConfig.outlook?.require_confirmation)} className="mt-0.5 accent-[#d4a017]" />
+                      <div>
+                        <p className="text-sm text-shogun-text font-medium">Require confirmation</p>
+                        <p className="text-xs text-shogun-subdued mt-0.5">Human must approve before sending</p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 p-3 rounded-lg bg-shogun-bg border border-shogun-border cursor-pointer hover:border-shogun-gold/20 transition-colors">
+                      <input type="checkbox" checked={!!officeConfig.outlook?.allow_external_recipients}
+                        onChange={() => updateOfficeConfig('outlook.allow_external_recipients', !officeConfig.outlook?.allow_external_recipients)} className="mt-0.5 accent-[#d4a017]" />
+                      <div>
+                        <p className="text-sm text-shogun-text font-medium">Allow external recipients</p>
+                        <p className="text-xs text-shogun-subdued mt-0.5">Send to domains outside the allowlist</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {!officeStatus && !officeConfig && (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="w-6 h-6 text-shogun-gold animate-spin" />
+                </div>
+              )}
             </div>
           </div>
         )}
