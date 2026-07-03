@@ -8,6 +8,7 @@ Routes:
   DELETE /api/v1/workspace/delete?path=...— delete file or empty dir
   POST   /api/v1/workspace/rename        — rename/move file or dir
   POST   /api/v1/workspace/upload        — upload files (multipart)
+  GET    /api/v1/workspace/download?path= — download file (binary)
   GET    /api/v1/workspace/info          — workspace metadata
 """
 
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from shogun.config import settings
@@ -325,3 +327,20 @@ async def upload_files(
             "files": results,
         },
     }
+
+
+@router.get("/download")
+async def download_file(path: str):
+    """Download a file from the workspace as binary."""
+    await _check_posture()
+    root = _get_workspace_root()
+    target = _validate_path(root, path)
+
+    if not target.is_file():
+        raise HTTPException(404, f"File not found: {path}")
+
+    return FileResponse(
+        path=str(target),
+        filename=target.name,
+        media_type="application/octet-stream",
+    )

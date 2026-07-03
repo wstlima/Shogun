@@ -3,7 +3,7 @@ import {
   FolderOpen, File, Folder, Trash2, Edit3, Save, X, RefreshCw,
   ChevronRight, ChevronDown, FileText, FileCode, FileSpreadsheet,
   Image, Archive, FolderPlus, FilePlus, HardDrive,
-  AlertTriangle, Check, Search, Upload
+  AlertTriangle, Check, Search, Upload, Download
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -127,6 +127,7 @@ export const FileExplorer = () => {
   const [fileContent, setFileContent] = useState<string>('');
   const [editContent, setEditContent] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
+  const [isBinary, setIsBinary] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +174,7 @@ export const FileExplorer = () => {
   const handleSelect = async (node: TreeNode) => {
     setSelectedNode(node);
     setIsEditing(false);
+    setIsBinary(false);
     setShowDeleteConfirm(false);
     setShowRenameDialog(false);
 
@@ -185,7 +187,12 @@ export const FileExplorer = () => {
         }
       } catch (err: any) {
         const detail = err?.response?.data?.detail || 'Failed to read file';
-        setFileContent(`[Error] ${detail}`);
+        if (detail.toLowerCase().includes('binary')) {
+          setIsBinary(true);
+          setFileContent('');
+        } else {
+          setFileContent(`[Error] ${detail}`);
+        }
         setEditContent('');
       }
     } else {
@@ -528,22 +535,31 @@ export const FileExplorer = () => {
                       <span className="text-[10px] text-shogun-subdued font-mono">{formatSize(selectedNode.size)}</span>
                     )}
                     <div className="flex-1" />
-                    {isEditing ? (
-                      <div className="flex items-center gap-1">
-                        <button onClick={handleSave} disabled={saving}
-                          className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs font-medium hover:bg-emerald-500/30 transition-colors flex items-center gap-1">
-                          <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
+                    {!isBinary && (
+                      isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={handleSave} disabled={saving}
+                            className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs font-medium hover:bg-emerald-500/30 transition-colors flex items-center gap-1">
+                            <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button onClick={() => { setIsEditing(false); setEditContent(fileContent); }}
+                            className="px-3 py-1 bg-shogun-card text-shogun-subdued rounded text-xs hover:text-shogun-text transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setIsEditing(true)}
+                          className="px-3 py-1 bg-shogun-blue/10 text-shogun-blue rounded text-xs font-medium hover:bg-shogun-blue/20 transition-colors flex items-center gap-1">
+                          <Edit3 className="w-3 h-3" /> Edit
                         </button>
-                        <button onClick={() => { setIsEditing(false); setEditContent(fileContent); }}
-                          className="px-3 py-1 bg-shogun-card text-shogun-subdued rounded text-xs hover:text-shogun-text transition-colors">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setIsEditing(true)}
+                      )
+                    )}
+                    {isBinary && (
+                      <a href={`/api/v1/workspace/download?path=${encodeURIComponent(selectedNode.path)}`}
+                        download
                         className="px-3 py-1 bg-shogun-blue/10 text-shogun-blue rounded text-xs font-medium hover:bg-shogun-blue/20 transition-colors flex items-center gap-1">
-                        <Edit3 className="w-3 h-3" /> Edit
-                      </button>
+                        <Download className="w-3 h-3" /> Download
+                      </a>
                     )}
                   </>
                 ) : (
@@ -558,7 +574,27 @@ export const FileExplorer = () => {
               {/* Content */}
               <div className="flex-1 overflow-auto">
                 {selectedNode.type === 'file' ? (
-                  isEditing ? (
+                  isBinary ? (
+                    /* Binary file info card */
+                    <div className="flex-1 flex items-center justify-center p-8">
+                      <div className="text-center space-y-4 max-w-sm">
+                        {(() => { const Icon = getFileIcon(selectedNode.extension || ''); return <Icon className="w-16 h-16 text-shogun-subdued/30 mx-auto" />; })()}
+                        <h3 className="text-lg font-bold text-shogun-text">{selectedNode.name}</h3>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-center gap-4 text-xs text-shogun-subdued">
+                            <span className="bg-shogun-card px-2 py-1 rounded font-mono">.{selectedNode.extension}</span>
+                            {selectedNode.size !== undefined && <span>{formatSize(selectedNode.size)}</span>}
+                          </div>
+                          <p className="text-xs text-shogun-subdued/60">Binary file — cannot be displayed as text.</p>
+                        </div>
+                        <a href={`/api/v1/workspace/download?path=${encodeURIComponent(selectedNode.path)}`}
+                          download
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-shogun-blue/15 text-shogun-blue rounded-lg text-sm font-medium hover:bg-shogun-blue/25 transition-colors">
+                          <Download className="w-4 h-4" /> Download File
+                        </a>
+                      </div>
+                    </div>
+                  ) : isEditing ? (
                     <textarea
                       value={editContent}
                       onChange={e => setEditContent(e.target.value)}
