@@ -861,6 +861,90 @@ NATIVE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_read_text",
+            "description": "Read the full text content of an opened Word document. Returns all paragraphs as a single string. Call office_word_open first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_read_headings",
+            "description": "Read all headings from an opened Word document. Returns a list of {level, text} objects. Call office_word_open first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_insert_paragraph",
+            "description": "Insert a paragraph of text into an opened Word document. Optionally set the style (e.g. 'Heading 1', 'Normal').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the already-opened document.",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Text content to insert.",
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "Paragraph style (e.g. 'Normal', 'Heading 1'). Optional.",
+                    },
+                },
+                "required": ["file_path", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_create",
+            "description": "Create a new blank Word document (.docx) at the specified path in the workspace. Returns the absolute path to the created file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "output_path": {
+                        "type": "string",
+                        "description": "Path for the new document (relative to workspace, e.g. 'Output/report.docx').",
+                    },
+                },
+                "required": ["output_path"],
+            },
+        },
+    },
     # ── Office App Mode — PowerPoint (Katana) ────────────────────
     {
         "type": "function",
@@ -2239,6 +2323,58 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             from shogun.office.adapters.word_adapter import get_document_metadata
             meta = get_document_metadata(handle)
             return json.dumps({"status": "success", "data": meta})
+
+        elif name == "office_word_read_text":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+            from shogun.office.adapters.word_adapter import read_text
+            text = read_text(handle)
+            await _log_office_event("office.word.read_text", f"Read {len(text)} chars", "word", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": {"text": text, "length": len(text)}})
+
+        elif name == "office_word_read_headings":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+            from shogun.office.adapters.word_adapter import read_headings
+            headings = read_headings(handle)
+            await _log_office_event("office.word.read_headings", f"Read {len(headings)} headings", "word", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": headings})
+
+        elif name == "office_word_insert_paragraph":
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+            perm = check_office_permission(OfficeAction.WRITE_CONTENT, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            from shogun.office.adapters.word_adapter import insert_paragraph
+            style = args.get("style", "Normal")
+            insert_paragraph(handle, args["text"], style)
+            await _log_office_event("office.word.insert_paragraph", f"Inserted paragraph ({len(args['text'])} chars)", "word", fp, start_ms=start_ms)
+            return json.dumps({"status": "success", "message": f"Paragraph inserted ({len(args['text'])} chars)"})
+
+        elif name == "office_word_create":
+            perm = check_office_permission(OfficeAction.SAVE_AS_NEW, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            vp = validator.validate(args["output_path"], PathPurpose.WRITE)
+            from docx import Document as DocxDocument
+            from pathlib import Path
+            abs_out = str(vp.resolved_path)
+            Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+            doc = DocxDocument()
+            doc.save(abs_out)
+            # Also open it so subsequent operations can use it
+            from shogun.office.adapters.word_adapter import open_document
+            handle = open_document(abs_out)
+            _open_handles[abs_out] = handle
+            await _log_office_event("office.word.create", f"Created document {args['output_path']}", "word", abs_out, start_ms=start_ms)
+            return json.dumps({"status": "success", "data": {"path": abs_out, "message": f"Created new document: {args['output_path']}"}})
 
         # ── PowerPoint Tools ─────────────────────────────────────
         elif name == "office_pptx_open":
