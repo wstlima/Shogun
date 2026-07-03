@@ -1263,17 +1263,20 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService,
             # Get workspace file listing for context
             _ws_files = await _get_workspace_file_listing()
             _ws_path = str(settings.workspace_path.resolve())
-            system_prompt = f"""You are {persona_name}, an AI assistant with tool-calling capabilities.
-Operator: {operator_name}
-Workspace root: {_ws_path}
+            system_prompt = f"""You are {persona_name}, an AI assistant. You MUST use your tool functions to complete tasks.
 
-FILES IN WORKSPACE:
+Operator: {operator_name}
+Workspace: {_ws_path}
+
+WORKSPACE FILES:
 {_ws_files or '(empty)'}
 
-RULES:
-- Call tools immediately. Do not narrate what you will do.
-- For file paths, use paths relative to the workspace root (e.g. "Input/filename.docx").
-- For multi-step tasks, call the first tool, then the next after getting results.
+CRITICAL INSTRUCTIONS:
+1. You MUST call tool functions to perform actions. NEVER pretend or narrate that you performed an action.
+2. If asked to read a file, call office_word_read_text. If asked to create a file, call office_word_create.
+3. Use RELATIVE paths from the workspace root (e.g. "Input/filename.docx", "Output/filename.docx").
+4. Do NOT describe steps you "will" take. Call the first tool NOW.
+5. If you cannot call a tool, say so. NEVER claim you performed an action without calling a tool.
 """
             logger.info(f"[OPTIMIZE] Using compact system prompt for small model: {model_name}")
         if not _small_model:
@@ -1593,6 +1596,7 @@ BEHAVIOUR:
 
         _tool_retry_used = False  # only retry once
         _any_tool_executed = False
+        _tool_enforcement_retried = False
 
         while True:
             assistant_tokens: list[str] = []
@@ -2320,9 +2324,14 @@ BEHAVIOUR:
                 _full_resp = "".join(assistant_tokens) if assistant_tokens else ""
                 _resp_lower = _full_resp.lower()
                 _mentioned = [tn for tn in _active_tool_names if tn.replace("_", " ") in _resp_lower or tn in _resp_lower]
-                if _mentioned and len(_full_resp) > 20 and not _tool_retry_used:
+                # For small local models, always nudge if no tools were called (they narrate instead)
+                _force_nudge = _small_model and len(_full_resp) > 20
+                if (_mentioned or _force_nudge) and not _tool_retry_used:
                     _tool_retry_used = True
                     logger.info(f"[Shogun] Nudge retry ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â model mentioned tools {_mentioned} but didn't call them.")
+                    # For small models, suggest specific tool names
+                    if _small_model and not _mentioned:
+                        _mentioned = _active_tool_names[:3]  # suggest first 3 available tools
                     messages.append({
                         "role": "user",
                         "content": (
