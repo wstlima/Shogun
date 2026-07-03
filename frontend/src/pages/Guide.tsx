@@ -674,6 +674,11 @@ export function Guide() {
                          <p className="text-xs text-shogun-subdued leading-relaxed mt-2">Click <strong>Execute</strong> to run a workflow. Nodes process in topological order, passing outputs as inputs to the next. Shogun Approval nodes pause until you confirm.</p>
                          <p className="text-xs text-shogun-subdued leading-relaxed mt-2">You can also ask the Shogun to <strong>build workflows for you</strong> via the <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_agent_flow</code> native skill.</p>
                       </div>
+                      <div className="shogun-card space-y-2 border-l-2 border-violet-400/40">
+                         <div className="font-bold text-shogun-text flex items-center gap-2"><Package className="w-4 h-4 text-violet-400" /> Template Gallery</div>
+                         <p className="text-xs text-shogun-subdued leading-relaxed">Click <strong>New Flow</strong> to browse 137 pre-built workflow templates across 10 different categories (e.g., Data Analysis, Content Creation, Document Processing). Templates range in difficulty from <strong>Beginner</strong> to <strong>Advanced</strong>.</p>
+                         <p className="text-xs text-shogun-subdued leading-relaxed mt-2">When you select a template, the canvas is automatically populated. Samurai nodes inside templates use <strong>Ephemeral (Ad-Hoc)</strong> agents by default to keep your Fleet clean, but can be manually linked to a permanent Fleet Samurai via the node properties panel.</p>
+                      </div>
                    </div>
                 </div>
              </section>
