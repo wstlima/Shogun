@@ -686,7 +686,7 @@ export function Guide() {
                    <Cpu className="w-6 h-6 text-shogun-blue" />
                    <div>
                       <h4 className="text-xl font-bold uppercase tracking-widest">Katana — The System Forge</h4>
-                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has 4 tabs.</p>
+                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has 6 tabs.</p>
                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -705,6 +705,26 @@ export function Guide() {
                    <div className="shogun-card space-y-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Network className="w-4 h-4 text-shogun-blue" /> Toolbox Tab</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Lists all the external tools the Shogun can use — web search, file access, database connections, code execution, etc. Each tool shows its <strong>name</strong>, <strong>type</strong>, and <strong>status</strong> (enabled/disabled). You can <strong>register new tools</strong> and toggle existing ones on or off.</p>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><FileSpreadsheet className="w-4 h-4 text-shogun-blue" /> Office App Mode Tab</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Controls the <strong>Office App Mode</strong> — Shogun's ability to read, create, and modify Microsoft Office documents (<code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code>). The tab has a master <strong>enable/disable</strong> toggle at the top. Below it are four sections:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Approved Folders:</strong> Four directory paths (Input, Output, Templates, Temp) that define the allowed file boundaries. When left empty, they automatically use the <strong>workspace root</strong> folder. All file operations are jailed to these directories — any path outside them is rejected.</li>
+                         <li><strong>Per-Application Settings:</strong> Individual cards for <strong>Excel</strong>, <strong>Word</strong>, <strong>PowerPoint</strong>, and <strong>Outlook</strong> — each with its own enable toggle, macro policy (allow/block), overwrite protection, and timeout. Excel also has an external links toggle; Outlook has draft-only vs. send mode and domain allowlists.</li>
+                         <li><strong>Safety Rules:</strong> Global policies including path traversal blocking, Windows shortcut (<code>.lnk</code>) blocking, UNC/network path blocking, output versioning, and a maximum file size cap (default 100 MB).</li>
+                         <li><strong>Security Posture Gate:</strong> Office operations require at least <strong>Guarded</strong> posture. In <strong>Shrine</strong> mode, all Office tools are disabled. The minimum posture can be raised (e.g., to Tactical) for stricter environments.</li>
+                      </ul>
+                   </div>
+                   <div className="shogun-card space-y-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><Mail className="w-4 h-4 text-shogun-blue" /> Mail &amp; Calendar Tab</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Connect your email account for AI-powered mail capabilities. Configure an <strong>IMAP/SMTP</strong> account by entering server addresses, port numbers, and credentials. Once connected, the Shogun can:</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Read emails:</strong> Fetch and analyze incoming mail from the inbox.</li>
+                         <li><strong>Send emails:</strong> Compose and send messages (requires <code>perm_send_mail</code> to be enabled).</li>
+                         <li><strong>Calendar events:</strong> Create and manage calendar entries (when supported by the provider).</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">The tab shows <strong>connection status</strong>, account details, and permission toggles for read, send, and calendar access. All mail activity is logged in the immutable audit chain.</p>
                    </div>
                    <div className="shogun-card space-y-2 md:col-span-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-shogun-blue" /> Telegram Integration</div>
