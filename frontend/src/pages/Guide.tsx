@@ -496,7 +496,7 @@ export function Guide() {
                    <MessageSquare className="w-6 h-6 text-shogun-blue" />
                    <div>
                       <h4 className="text-xl font-bold uppercase tracking-widest">Comms — The Conversation</h4>
-                      <p className="text-xs text-shogun-subdued">Your direct line to the Shogun AI. Type a question or command and get a response.</p>
+                      <p className="text-xs text-shogun-subdued">Your direct line to the Shogun AI. Four tabs: Chat, Mail, Calendar, and Files.</p>
                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -533,6 +533,53 @@ export function Guide() {
                       <p className="text-xs text-shogun-subdued leading-relaxed">CalDAV calendar integration. View your upcoming events on a timeline with titles, times, locations, and descriptions. Create new events by specifying a title, start/end time, location, and optional description. Supports all-day events. Connect a CalDAV server in the system settings. The Shogun can query and create events via native skills: <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">list_calendar_events</code>, <code className="bg-shogun-bg px-1 py-0.5 rounded text-shogun-text">create_calendar_event</code>.</p>
                    </div>
                 </div>
+
+                 {/* Files Tab (Workspace File Explorer) */}
+                 <div className="shogun-card space-y-3 border-l-2 border-amber-400/40 mt-4">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><FolderOpenIcon className="w-4 h-4 text-amber-400" /> Files — Workspace File Explorer</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">A full visual file manager for the Agent Workspace — the dedicated folder shared between the Shogun, all Samurai agents, and the user. The Files tab provides everything you need to browse, create, edit, upload, and delete files without leaving the Comms page.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-1.5">
+                          <div className="text-xs font-bold text-amber-400">Tree Sidebar (Left)</div>
+                          <ul className="text-[11px] text-shogun-subdued space-y-1 ml-3 list-disc">
+                             <li>Expandable directory tree with file-type icons (code, spreadsheet, image, archive, text).</li>
+                             <li>File sizes shown in human-readable format (KB, MB).</li>
+                             <li>Real-time search filter to find files instantly.</li>
+                             <li>Workspace info footer: total files, directories, and disk usage.</li>
+                          </ul>
+                       </div>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-1.5">
+                          <div className="text-xs font-bold text-amber-400">Content Panel (Right)</div>
+                          <ul className="text-[11px] text-shogun-subdued space-y-1 ml-3 list-disc">
+                             <li>Click a file to view its contents in a monospace reader.</li>
+                             <li>Click <strong>Edit</strong> to modify any text file inline, then <strong>Save</strong> to write back to disk.</li>
+                             <li>Click a folder to see its contents as a clickable card grid with icons and sizes.</li>
+                             <li>Empty state shows workspace path and usage instructions.</li>
+                          </ul>
+                       </div>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-1.5">
+                          <div className="text-xs font-bold text-amber-400">Toolbar Actions</div>
+                          <ul className="text-[11px] text-shogun-subdued space-y-1 ml-3 list-disc">
+                             <li><strong>New File</strong> (file+ icon): Creates a file inside the selected folder or workspace root.</li>
+                             <li><strong>New Folder</strong> (folder+ icon): Creates a directory. Nested paths auto-created.</li>
+                             <li><strong>Upload</strong> (upload icon): Opens a file picker to upload one or more files.</li>
+                             <li><strong>Rename</strong> (edit icon): Renames the selected file or folder.</li>
+                             <li><strong>Delete</strong> (trash icon): Deletes with confirmation. Directories deleted recursively.</li>
+                             <li><strong>Refresh</strong> (refresh icon): Reloads the tree from disk.</li>
+                          </ul>
+                       </div>
+                       <div className="bg-shogun-bg rounded-lg p-3 space-y-1.5">
+                          <div className="text-xs font-bold text-amber-400">Drag &amp; Drop Upload</div>
+                          <ul className="text-[11px] text-shogun-subdued space-y-1 ml-3 list-disc">
+                             <li>Drag files from your desktop or file manager and drop them anywhere on the File Explorer.</li>
+                             <li>A blue overlay appears showing where files will land.</li>
+                             <li>Files are uploaded into the currently selected folder, or workspace root if none is selected.</li>
+                             <li>Multiple files can be dropped at once. All file types are supported.</li>
+                             <li>Filenames are sanitized on the server. Path traversal is blocked.</li>
+                          </ul>
+                       </div>
+                    </div>
+                 </div>
              </section>
 
              {/* ═══════════════════════════════════════════════════════════════ */}
@@ -1287,6 +1334,8 @@ export function Guide() {
                           <li><strong>Delete:</strong> Select an item, click the trash icon. A confirmation dialog appears. Directories are deleted recursively including all contents.</li>
                           <li><strong>Grid view:</strong> When a directory is selected, its contents are displayed as a clickable card grid with icons and sizes.</li>
                           <li><strong>Info footer:</strong> Shows the full workspace path, total file count, directory count, and disk usage in MB.</li>
+                          <li><strong>Drag &amp; drop upload:</strong> Drag files from your desktop onto the File Explorer to upload them. A blue overlay indicates the drop target. Multiple files supported simultaneously.</li>
+                          <li><strong>Upload button:</strong> Click the upload icon in the toolbar to open a native file picker for selecting files to upload into the current folder.</li>
                        </ul>
                     </div>
                     <div className="shogun-card space-y-2">
