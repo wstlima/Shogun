@@ -1650,12 +1650,25 @@ BEHAVIOUR:
                             err = body_bytes.decode(errors="replace")[:300]
 
                             # ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Retry without tools on invalid tool call arguments ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
-                            if resp.status_code == 400 and "invalid tool call" in err.lower() and not _tool_retry_used:
+                            _err_lower = err.lower()
+                            _is_tool_error = (
+                                "invalid tool call" in _err_lower
+                                or "does not support tools" in _err_lower
+                                or "tool use is not supported" in _err_lower
+                            )
+                            if resp.status_code == 400 and _is_tool_error and not _tool_retry_used:
                                 import logging as _logging
                                 _logging.getLogger("shogun.agents").warning("[Shogun] 400 invalid tool call ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â retrying without tools")
+                                # Inject tools as text into system prompt for fallback
+                                from shogun.services.native_skills import generate_tool_prompt as _gen_tp
+                                _fb_tools = [t for t in NATIVE_TOOLS if t["function"]["name"] in _active_tool_names]
+                                if _fb_tools and not _prompt_injected_tools:
+                                    messages[0]["content"] += "\n\n" + _gen_tp(_fb_tools)
+                                    _prompt_injected_tools = True
                                 active_tools = []
                                 _tool_retry_used = True
                                 _retry_without_tools = True
+                                _model_supports_tools = False
                                 # Strip any tool-related messages so the model gets a clean conversation
                                 messages = [m for m in messages if m.get("role") not in ("tool",) and "tool_calls" not in m]
 
