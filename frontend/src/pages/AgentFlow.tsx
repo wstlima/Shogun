@@ -462,7 +462,7 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
     setLoadingFolders(true);
     try {
       const res = await axios.get('/api/v1/workspace/tree');
-      const tree = res.data?.data || [];
+      const tree = res.data?.data?.tree || res.data?.data || [];
       // Flatten to just directories
       const dirs: { path: string; depth: number }[] = [];
       const walk = (nodes: any[], depth: number) => {
