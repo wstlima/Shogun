@@ -93,12 +93,17 @@ class FileBoundaryValidator:
 
     def __init__(self, config: OfficeAppConfig):
         self.config = config
+
+        # Auto-include workspace root when explicit folders are not configured
+        from shogun.config import settings
+        workspace_root = str(settings.workspace_path.resolve())
+
         self._approved_folders: dict[PathPurpose, Path | None] = {
-            PathPurpose.READ: Path(config.folders.input) if config.folders.input else None,
-            PathPurpose.TEMPLATE: Path(config.folders.templates) if config.folders.templates else None,
-            PathPurpose.WRITE: Path(config.folders.output) if config.folders.output else None,
-            PathPurpose.OUTPUT: Path(config.folders.output) if config.folders.output else None,
-            PathPurpose.TEMP: Path(config.folders.temp) if config.folders.temp else None,
+            PathPurpose.READ: Path(config.folders.input) if config.folders.input else Path(workspace_root),
+            PathPurpose.TEMPLATE: Path(config.folders.templates) if config.folders.templates else Path(workspace_root),
+            PathPurpose.WRITE: Path(config.folders.output) if config.folders.output else Path(workspace_root),
+            PathPurpose.OUTPUT: Path(config.folders.output) if config.folders.output else Path(workspace_root),
+            PathPurpose.TEMP: Path(config.folders.temp) if config.folders.temp else Path(workspace_root),
         }
 
     def validate(self, file_path: str, purpose: PathPurpose) -> ValidatedPath:

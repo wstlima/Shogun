@@ -61,6 +61,8 @@ import {
   Calendar,
   Radio,
   Clipboard,
+  FolderOpen,
+  FileSpreadsheet,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -129,6 +131,8 @@ const NODE_PALETTE = [
   { type: 'output',          label: 'Output',           icon: LogOut,    color: '#f97316', desc: 'Final delivery' },
   { type: 'mado_browser',    label: 'Mado Browser',     icon: Globe,     color: '#06b6d4', desc: 'Browser automation' },
   { type: 'email_send',      label: 'Email Send',       icon: Mail,      color: '#e879a8', desc: 'Send email via SMTP' },
+  { type: 'workspace',       label: 'Workspace',        icon: FolderOpen, color: '#f59e0b', desc: 'File operations' },
+  { type: 'office',          label: 'Office',           icon: FileSpreadsheet, color: '#10b981', desc: 'Office documents' },
 ] as const;
 
 
@@ -144,6 +148,8 @@ const nodeColors: Record<string, string> = {
   output: '#f97316',
   mado_browser: '#06b6d4',
   email_send: '#e879a8',
+  workspace: '#f59e0b',
+  office: '#10b981',
 };
 
 const nodeIcons: Record<string, React.ElementType> = {
@@ -154,6 +160,8 @@ const nodeIcons: Record<string, React.ElementType> = {
   output: LogOut,
   mado_browser: Globe,
   email_send: Mail,
+  workspace: FolderOpen,
+  office: FileSpreadsheet,
 };
 
 function FlowNode({ data, selected, type }: { data: Record<string, any>; selected: boolean; type: string }) {
@@ -272,6 +280,32 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
             )}
           </>
         )}
+        {type === 'workspace' && (
+          <>
+            <div className="flex items-center gap-1">
+              <FolderOpen className="w-2.5 h-2.5 text-[#f59e0b]/70" />
+              <span className="text-[8px] font-bold text-[#f59e0b]/80 uppercase">
+                {config.action || 'read_file'}
+              </span>
+            </div>
+            {config.path && (
+              <p className="text-[9px] text-[#7a8899] truncate">{config.path}</p>
+            )}
+          </>
+        )}
+        {type === 'office' && (
+          <>
+            <div className="flex items-center gap-1">
+              <FileSpreadsheet className="w-2.5 h-2.5 text-[#10b981]/70" />
+              <span className="text-[8px] font-bold text-[#10b981]/80 uppercase">
+                {config.action || 'word_read'}
+              </span>
+            </div>
+            {config.input_path && (
+              <p className="text-[9px] text-[#7a8899] truncate">{config.input_path}</p>
+            )}
+          </>
+        )}
       </div>
 
       {/* Handles */}
@@ -342,6 +376,8 @@ const nodeTypes: NodeTypes = {
   output: FlowNode,
   mado_browser: FlowNode,
   email_send: FlowNode,
+  workspace: FlowNode,
+  office: FlowNode,
 };
 
 
@@ -1405,6 +1441,171 @@ Content-Type: application/json
               <p className="text-[8px] text-[#e879a8]/80">
                 <strong>Mail ✉</strong> — Sends via the SMTP account configured in the Mail page.
                 Requires <code className="text-[#e879a8]">perm_send_mail</code> to be enabled.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Workspace fields */}
+        {nodeType === 'workspace' && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Action</label>
+              <select
+                value={config.action || 'read_file'}
+                onChange={(e) => updateConfig('action', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#f59e0b] transition-colors outline-none"
+              >
+                <option value="read_file">Read File</option>
+                <option value="write_file">Write File</option>
+                <option value="list_files">List Files</option>
+                <option value="mkdir">Create Directory</option>
+                <option value="delete">Delete</option>
+                <option value="copy">Copy</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Path</label>
+              <input
+                type="text"
+                value={config.path || ''}
+                onChange={(e) => updateConfig('path', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#f59e0b] transition-colors outline-none"
+                placeholder="Input/myfile.txt (relative to workspace)"
+              />
+            </div>
+
+            {config.action === 'copy' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Source Path</label>
+                  <input
+                    type="text"
+                    value={config.source_path || ''}
+                    onChange={(e) => updateConfig('source_path', e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#f59e0b] transition-colors outline-none"
+                    placeholder="Input/source.txt"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Destination Path</label>
+                  <input
+                    type="text"
+                    value={config.dest_path || ''}
+                    onChange={(e) => updateConfig('dest_path', e.target.value)}
+                    className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#f59e0b] transition-colors outline-none"
+                    placeholder="Output/dest.txt"
+                  />
+                </div>
+              </>
+            )}
+
+            {config.action === 'write_file' && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Content Template</label>
+                <textarea
+                  value={config.content_template || ''}
+                  onChange={(e) => updateConfig('content_template', e.target.value)}
+                  rows={3}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#f59e0b] transition-colors outline-none resize-none"
+                  placeholder='Leave empty to write predecessor output. Use {{context}} for predecessor data.'
+                />
+              </div>
+            )}
+
+            <div className="p-2.5 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-lg">
+              <p className="text-[8px] text-[#f59e0b]/80">
+                <strong>Workspace</strong> &mdash; All paths are relative to the agent workspace folder.
+                Governed by the Torii security posture.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Office fields */}
+        {nodeType === 'office' && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Action</label>
+              <select
+                value={config.action || 'word_read'}
+                onChange={(e) => updateConfig('action', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+              >
+                <optgroup label="Excel">
+                  <option value="excel_read">Excel &mdash; Read</option>
+                  <option value="excel_create">Excel &mdash; Create</option>
+                  <option value="excel_write">Excel &mdash; Write</option>
+                </optgroup>
+                <optgroup label="Word">
+                  <option value="word_read">Word &mdash; Read</option>
+                  <option value="word_create">Word &mdash; Create</option>
+                  <option value="word_replace">Word &mdash; Replace Placeholders</option>
+                </optgroup>
+                <optgroup label="PowerPoint">
+                  <option value="pptx_read">PowerPoint &mdash; Read</option>
+                  <option value="pptx_replace">PowerPoint &mdash; Replace Placeholders</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {['excel_read', 'excel_write', 'word_read', 'word_replace', 'pptx_read', 'pptx_replace'].includes(config.action || '') && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Input Path</label>
+                <input
+                  type="text"
+                  value={config.input_path || ''}
+                  onChange={(e) => updateConfig('input_path', e.target.value)}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+                  placeholder="Input/report.xlsx"
+                />
+              </div>
+            )}
+
+            {['excel_create', 'excel_write', 'word_create', 'word_replace', 'pptx_replace'].includes(config.action || '') && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Output Path</label>
+                <input
+                  type="text"
+                  value={config.output_path || ''}
+                  onChange={(e) => updateConfig('output_path', e.target.value)}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+                  placeholder="Output/result.xlsx"
+                />
+              </div>
+            )}
+
+            {['excel_read', 'excel_create', 'excel_write'].includes(config.action || '') && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Sheet Name</label>
+                <input
+                  type="text"
+                  value={config.sheet_name || ''}
+                  onChange={(e) => updateConfig('sheet_name', e.target.value)}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+                  placeholder="Sheet1"
+                />
+              </div>
+            )}
+
+            {['word_create'].includes(config.action || '') && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Content Template</label>
+                <textarea
+                  value={config.content_template || ''}
+                  onChange={(e) => updateConfig('content_template', e.target.value)}
+                  rows={3}
+                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none resize-none"
+                  placeholder='Leave empty to use predecessor output. Use {{context}} for predecessor data.'
+                />
+              </div>
+            )}
+
+            <div className="p-2.5 bg-[#10b981]/5 border border-[#10b981]/20 rounded-lg">
+              <p className="text-[8px] text-[#10b981]/80">
+                <strong>Office</strong> &mdash; Uses openpyxl, python-docx, and python-pptx adapters.
+                All paths relative to workspace. Requires Office App Mode enabled.
               </p>
             </div>
           </>

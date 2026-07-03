@@ -329,6 +329,10 @@ async def _execute_single_node(
         return await _exec_mado_browser(config, context_str)
     elif node_type == "email_send":
         return await _exec_email_send(config, context_str)
+    elif node_type == "workspace":
+        return await _exec_workspace(config, context_str)
+    elif node_type == "office":
+        return await _exec_office(config, context_str)
     else:
         raise ValueError(f"Unknown node type: {node_type}")
 
@@ -772,6 +776,326 @@ async def _exec_email_send(config: dict, context_str: str) -> str:
     status = result.get("message", "Sent")
     log.info("Email sent to %s — %s", to_address, status)
     return f"Email sent to {to_address}\nSubject: {subject}\nStatus: {status}"
+
+
+async def _exec_workspace(config: dict, context_str: str) -> str:
+    """Workspace node — performs file operations inside the agent workspace.
+
+    Actions: read_file, write_file, list_files, mkdir, delete, copy
+    """
+    from pathlib import Path
+    import shutil
+    from shogun.config import settings
+    from shogun.services.posture_guard import get_posture_permissions
+
+    action = config.get("action", "read_file")
+    file_path = config.get("path", "").strip()
+    content_template = config.get("content_template", "")
+
+    # Check posture
+    perms = await get_posture_permissions()
+    if not perms.get("workspace_enabled", True):
+        return "[BLOCKED] Workspace access is disabled at current security posture"
+
+    root = settings.workspace_path.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    def _safe(rel: str) -> Path:
+        """Resolve and validate a relative path within workspace."""
+        if not rel:
+            return root
+        if ".." in rel:
+            raise ValueError(f"Path traversal blocked: {rel}")
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise ValueError(f"Path escape blocked: {rel}")
+        return target
+
+    try:
+        if action == "read_file":
+            if not file_path:
+                return "[ERROR] No path specified for read_file"
+            target = _safe(file_path)
+            if not target.is_file():
+                return f"[ERROR] File not found: {file_path}"
+            try:
+                content = target.read_text(encoding="utf-8", errors="replace")
+            except UnicodeDecodeError:
+                return f"[Binary file — {target.stat().st_size} bytes] Cannot read as text: {file_path}"
+            log.info("[Flow/Workspace] read_file: %s (%d chars)", file_path, len(content))
+            return content
+
+        elif action == "write_file":
+            if not file_path:
+                return "[ERROR] No path specified for write_file"
+            target = _safe(file_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Content: template with {{context}} or raw predecessor output
+            if content_template:
+                body = content_template.replace("{{context}}", context_str)
+            else:
+                body = context_str or ""
+            target.write_text(body, encoding="utf-8")
+            log.info("[Flow/Workspace] write_file: %s (%d chars)", file_path, len(body))
+            return f"Written {len(body)} characters to: {file_path}"
+
+        elif action == "list_files":
+            target = _safe(file_path) if file_path else root
+            if not target.is_dir():
+                return f"[ERROR] Not a directory: {file_path}"
+            entries = []
+            for item in sorted(target.iterdir()):
+                rel = str(item.relative_to(root)).replace("\\", "/")
+                if item.is_dir():
+                    entries.append(f"📁 {rel}/")
+                else:
+                    size = item.stat().st_size
+                    entries.append(f"📄 {rel} ({size:,} bytes)")
+            log.info("[Flow/Workspace] list_files: %s (%d entries)", file_path or ".", len(entries))
+            return "\n".join(entries) if entries else "(empty directory)"
+
+        elif action == "mkdir":
+            if not file_path:
+                return "[ERROR] No path specified for mkdir"
+            target = _safe(file_path)
+            target.mkdir(parents=True, exist_ok=True)
+            log.info("[Flow/Workspace] mkdir: %s", file_path)
+            return f"Directory created: {file_path}"
+
+        elif action == "delete":
+            if not file_path:
+                return "[ERROR] No path specified for delete"
+            target = _safe(file_path)
+            if not target.exists():
+                return f"[ERROR] Not found: {file_path}"
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            log.info("[Flow/Workspace] delete: %s", file_path)
+            return f"Deleted: {file_path}"
+
+        elif action == "copy":
+            source_path = config.get("source_path", "").strip()
+            dest_path = config.get("dest_path", "").strip()
+            if not source_path or not dest_path:
+                return "[ERROR] Both source_path and dest_path are required for copy"
+            src = _safe(source_path)
+            dst = _safe(dest_path)
+            if not src.exists():
+                return f"[ERROR] Source not found: {source_path}"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+            log.info("[Flow/Workspace] copy: %s → %s", source_path, dest_path)
+            return f"Copied: {source_path} → {dest_path}"
+
+        else:
+            return f"[ERROR] Unknown workspace action: {action}"
+
+    except Exception as exc:
+        return f"[ERROR] Workspace '{action}' failed: {str(exc)[:500]}"
+
+
+async def _exec_office(config: dict, context_str: str) -> str:
+    """Office node — performs Office document operations using adapters.
+
+    Actions: excel_read, excel_write, excel_create, word_read, word_replace,
+             word_create, pptx_read, pptx_replace
+    """
+    from pathlib import Path
+    from shogun.config import settings
+    from shogun.office.config import load_office_config
+
+    action = config.get("action", "word_read")
+    input_path = config.get("input_path", "").strip()
+    output_path = config.get("output_path", "").strip()
+    sheet_name = config.get("sheet_name", "Sheet1")
+
+    # Check office is enabled
+    office_cfg = load_office_config()
+    if not office_cfg.enabled:
+        return "[BLOCKED] Office App Mode is disabled. Enable it in the Katana settings."
+
+    root = settings.workspace_path.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    def _resolve(rel: str) -> str:
+        """Resolve relative workspace path to absolute string."""
+        if not rel:
+            raise ValueError("Path is required")
+        if ".." in rel:
+            raise ValueError(f"Path traversal blocked: {rel}")
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise ValueError(f"Path escape blocked: {rel}")
+        return str(target)
+
+    try:
+        # ── Excel Operations ──
+        if action == "excel_read":
+            from shogun.office.adapters.excel_adapter import (
+                open_workbook, read_used_range, list_sheets, close_workbook,
+            )
+            abs_path = _resolve(input_path)
+            handle = open_workbook(abs_path)
+            try:
+                target_sheet = sheet_name or list_sheets(handle)[0]
+                data = read_used_range(handle, target_sheet)
+                # Format as CSV-like text
+                lines = []
+                for row in data:
+                    lines.append("\t".join(str(c) if c is not None else "" for c in row))
+                result = f"[Sheet: {target_sheet}] ({len(data)} rows)\n" + "\n".join(lines)
+                log.info("[Flow/Office] excel_read: %s, sheet=%s, rows=%d", input_path, target_sheet, len(data))
+                return result
+            finally:
+                close_workbook(handle)
+
+        elif action == "excel_create":
+            from shogun.office.adapters.excel_adapter import (
+                open_workbook, write_range, save_as, close_workbook, create_sheet,
+            )
+            import openpyxl
+            abs_out = _resolve(output_path)
+            # Create new workbook
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = sheet_name or "Sheet1"
+            # Parse context as tab-separated data
+            lines = context_str.strip().split("\n") if context_str.strip() else []
+            for r_idx, line in enumerate(lines, 1):
+                cells = line.split("\t")
+                for c_idx, val in enumerate(cells, 1):
+                    ws.cell(row=r_idx, column=c_idx, value=val.strip())
+            Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+            wb.save(abs_out)
+            wb.close()
+            log.info("[Flow/Office] excel_create: %s (%d rows)", output_path, len(lines))
+            return f"Excel workbook created: {output_path} ({len(lines)} rows)"
+
+        elif action == "excel_write":
+            from shogun.office.adapters.excel_adapter import (
+                open_workbook, write_range, save_as, close_workbook,
+            )
+            abs_in = _resolve(input_path)
+            abs_out = _resolve(output_path) if output_path else abs_in
+            handle = open_workbook(abs_in)
+            try:
+                # Parse context as 2D data
+                lines = context_str.strip().split("\n") if context_str.strip() else []
+                data = []
+                for line in lines:
+                    data.append(line.split("\t"))
+                if data:
+                    target_sheet = sheet_name or handle.workbook.sheetnames[0]
+                    write_range(handle, target_sheet, 1, 1, data)
+                Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+                save_as(handle, abs_out)
+                log.info("[Flow/Office] excel_write: %s → %s (%d rows)", input_path, output_path or input_path, len(data))
+                return f"Excel updated: {output_path or input_path} ({len(data)} rows written)"
+            finally:
+                close_workbook(handle)
+
+        # ── Word Operations ──
+        elif action == "word_read":
+            from shogun.office.adapters.word_adapter import (
+                open_document, read_text, close_document,
+            )
+            abs_path = _resolve(input_path)
+            handle = open_document(abs_path)
+            try:
+                text = read_text(handle)
+                log.info("[Flow/Office] word_read: %s (%d chars)", input_path, len(text))
+                return text
+            finally:
+                close_document(handle)
+
+        elif action == "word_create":
+            from docx import Document
+            abs_out = _resolve(output_path)
+            doc = Document()
+            # Use template or context as content
+            content = config.get("content_template", "") or context_str or ""
+            if config.get("content_template"):
+                content = content.replace("{{context}}", context_str)
+            for para in content.split("\n"):
+                doc.add_paragraph(para)
+            Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+            doc.save(abs_out)
+            log.info("[Flow/Office] word_create: %s", output_path)
+            return f"Word document created: {output_path}"
+
+        elif action == "word_replace":
+            from shogun.office.adapters.word_adapter import (
+                open_document, replace_placeholders, save_as, close_document,
+            )
+            abs_in = _resolve(input_path)
+            abs_out = _resolve(output_path) if output_path else abs_in
+            handle = open_document(abs_in)
+            try:
+                replacements = config.get("replacements", {})
+                if not replacements:
+                    return "[ERROR] No replacements specified for word_replace"
+                count = replace_placeholders(handle, replacements)
+                Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+                save_as(handle, abs_out)
+                log.info("[Flow/Office] word_replace: %s → %s (%d replacements)", input_path, output_path or input_path, count)
+                return f"Word document updated: {output_path or input_path} ({count} replacements)"
+            finally:
+                close_document(handle)
+
+        # ── PowerPoint Operations ──
+        elif action == "pptx_read":
+            from shogun.office.adapters.pptx_adapter import (
+                open_presentation, list_slides, read_slide_text, close_presentation,
+            )
+            abs_path = _resolve(input_path)
+            handle = open_presentation(abs_path)
+            try:
+                slides = list_slides(handle)
+                texts = []
+                for i, s in enumerate(slides):
+                    text = read_slide_text(handle, i)
+                    texts.append(f"[Slide {i+1}: {s.get('title', 'Untitled')}]\n{text}")
+                result = "\n\n".join(texts)
+                log.info("[Flow/Office] pptx_read: %s (%d slides)", input_path, len(slides))
+                return result
+            finally:
+                close_presentation(handle)
+
+        elif action == "pptx_replace":
+            from shogun.office.adapters.pptx_adapter import (
+                open_presentation, replace_placeholders, save_as, close_presentation,
+            )
+            abs_in = _resolve(input_path)
+            abs_out = _resolve(output_path) if output_path else abs_in
+            handle = open_presentation(abs_in)
+            try:
+                replacements = config.get("replacements", {})
+                if not replacements:
+                    return "[ERROR] No replacements specified for pptx_replace"
+                count = replace_placeholders(handle, replacements)
+                Path(abs_out).parent.mkdir(parents=True, exist_ok=True)
+                save_as(handle, abs_out)
+                log.info("[Flow/Office] pptx_replace: %s → %s", input_path, output_path or input_path)
+                return f"Presentation updated: {output_path or input_path} ({count} replacements)"
+            finally:
+                close_presentation(handle)
+
+        else:
+            return f"[ERROR] Unknown office action: {action}"
+
+    except ImportError as exc:
+        return f"[ERROR] Missing dependency for '{action}': {exc}"
+    except Exception as exc:
+        return f"[ERROR] Office '{action}' failed: {str(exc)[:500]}"
 
 
 # ═══════════════════════════════════════════════════════════════
