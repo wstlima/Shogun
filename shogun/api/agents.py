@@ -276,6 +276,16 @@ async def shogun_chat(
     if mode == "auto":
         classification = _classify_chat_mode(user_msg, history)
         mode = classification["mode"]
+    elif mode == "fast":
+        # Auto-escalate: if user is on fast but message needs tools, upgrade to mission
+        auto_check = _classify_chat_mode(user_msg, history)
+        if auto_check["mode"] == "mission":
+            mode = "mission"
+            classification = {
+                "mode": "mission",
+                "reason": "auto_escalated_from_fast",
+                "matched": auto_check["matched"],
+            }
 
     # Governed Chat — context-aware with memory retrieval, no tools\r\n    if mode == \"governed\":\r\n        from shogun.api.governed_chat import _shogun_governed_chat\r\n        return await _shogun_governed_chat(user_msg, history, svc, classification=classification) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â routes to mission for now
     if mode == "governed":
@@ -336,6 +346,11 @@ def _classify_chat_mode(message: str, history: list) -> dict:
         "execute", "run ", "shell", "command", "script",
         # File operations
         "file", "read file", "write file", "upload", "download", "analyze",
+        # Office / Document operations
+        "document", "docx", ".docx", "spreadsheet", ".xlsx", "excel",
+        "word", "powerpoint", ".pptx", "translate", "office",
+        "workspace", "folder", "input/", "output/",
+        "open the", "save the", "create a", "convert",
         # Data mutations
         "delete", "update database", "modify",
         # External connections
