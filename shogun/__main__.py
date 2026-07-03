@@ -13,6 +13,28 @@ import uuid
 from pathlib import Path
 
 
+def _reexec_in_project_venv() -> None:
+    """Use the project's virtual environment when launched by global Python."""
+    project_root = Path(__file__).resolve().parent.parent
+    candidates = [
+        project_root / ".venv" / "Scripts" / "python.exe",
+        project_root / "venv" / "Scripts" / "python.exe",
+        project_root / ".venv" / "bin" / "python",
+        project_root / "venv" / "bin" / "python",
+    ]
+    current = Path(sys.executable).resolve()
+    for candidate in candidates:
+        if candidate.exists() and candidate.resolve() != current:
+            import os
+            env = os.environ.copy()
+            env["SHOGUN_PROJECT_VENV"] = str(candidate)
+            os.execve(
+                str(candidate),
+                [str(candidate), "-m", "shogun", *sys.argv[1:]],
+                env,
+            )
+
+
 def _ensure_env_file() -> None:
     """Auto-generate .env from .env.example on first run if missing."""
     project_root = Path(__file__).resolve().parent.parent
@@ -69,6 +91,8 @@ def _auto_bootstrap() -> None:
 
 
 def main() -> None:
+    _reexec_in_project_venv()
+
     """Start Shogun — Unified FastAPI + React entrypoint."""
     import uvicorn
     import os

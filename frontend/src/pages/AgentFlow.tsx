@@ -63,6 +63,8 @@ import {
   Clipboard,
   FolderOpen,
   FileSpreadsheet,
+  Sparkles,
+  LayoutGrid,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -445,45 +447,127 @@ const READ_ACTIONS = ['excel_read', 'word_read', 'pptx_read'];
 
 function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any>; updateConfig: (k: string, v: any) => void }) {
   const [showPicker, setShowPicker] = useState(false);
-  const [folders, setFolders] = useState<any[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [treeData, setTreeData] = useState<any[]>([]);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   const action = config.action || 'word_read';
   const isReadAction = READ_ACTIONS.includes(action);
   const pathKey = isReadAction ? 'input_path' : 'output_path';
-  const folderLabel = isReadAction ? 'Source Folder' : 'Destination Folder';
-  const folderHint = isReadAction
-    ? 'Where to read the file from'
+  const pickerLabel = isReadAction ? 'Source File' : 'Destination Folder';
+  const fieldHint = isReadAction
+    ? 'Select the file to read'
     : 'Where to save the output file';
-  const folderPlaceholder = isReadAction ? 'Input/' : 'Output/';
+  const fieldPlaceholder = isReadAction ? 'Input/document.docx' : 'Output/';
+
+  // File extensions relevant to the current action
+  const relevantExtensions = useMemo(() => {
+    if (action.startsWith('excel')) return ['xlsx', 'xls', 'csv'];
+    if (action.startsWith('word')) return ['docx', 'doc'];
+    if (action.startsWith('pptx')) return ['pptx', 'ppt'];
+    return [];
+  }, [action]);
 
   const openPicker = async () => {
     setShowPicker(true);
-    setLoadingFolders(true);
+    setLoadingTree(true);
     try {
       const res = await axios.get('/api/v1/workspace/tree');
       const tree = res.data?.data?.tree || res.data?.data || [];
-      // Flatten to just directories
-      const dirs: { path: string; depth: number }[] = [];
-      const walk = (nodes: any[], depth: number) => {
-        for (const n of nodes) {
-          if (n.type === 'directory') {
-            dirs.push({ path: n.path, depth });
-            if (n.children) walk(n.children, depth + 1);
-          }
-        }
-      };
-      walk(tree, 0);
-      setFolders(dirs);
+      setTreeData(tree);
     } catch {
-      setFolders([]);
+      setTreeData([]);
     }
-    setLoadingFolders(false);
+    setLoadingTree(false);
+  };
+
+  const selectFile = (filePath: string) => {
+    updateConfig(pathKey, filePath);
+    setShowPicker(false);
   };
 
   const selectFolder = (folderPath: string) => {
     updateConfig(pathKey, folderPath + '/');
     setShowPicker(false);
+  };
+
+  const toggleDir = (path: string) => {
+    setExpandedDirs(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  // Get the icon color for a file based on whether it matches the action's extensions
+  const getFileColor = (ext: string) => {
+    if (relevantExtensions.includes(ext.toLowerCase())) return 'text-[#10b981]';
+    return 'text-[#7a8899]/50';
+  };
+
+  // Recursive tree renderer
+  const renderTreeNode = (node: any, depth: number = 0) => {
+    if (node.type === 'directory') {
+      const isExpanded = expandedDirs.has(node.path);
+      const children = node.children || [];
+      // Check if this directory contains any relevant files (recursively)
+      const hasRelevantFiles = isReadAction ? _hasMatchingFiles(children, relevantExtensions) : true;
+
+      return (
+        <div key={node.path}>
+          <button
+            onClick={() => isReadAction ? toggleDir(node.path) : selectFolder(node.path)}
+            className={cn(
+              'w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-colors group',
+              'hover:bg-[#10b981]/10',
+              !hasRelevantFiles && isReadAction && 'opacity-40'
+            )}
+            style={{ paddingLeft: `${12 + depth * 16}px` }}
+          >
+            <FolderOpen className={cn('w-3.5 h-3.5', isExpanded ? 'text-[#10b981]' : 'text-[#f59e0b]/70')} />
+            <span className="text-xs text-[#c8d0d8] flex-1 truncate">{node.name}</span>
+            {isReadAction ? (
+              <span className="text-[8px] text-[#7a8899] opacity-0 group-hover:opacity-100 transition-opacity">
+                {isExpanded ? '▼' : '▶'}
+              </span>
+            ) : (
+              <span className="ml-auto text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">Select</span>
+            )}
+          </button>
+          {isReadAction && isExpanded && children.map((child: any) => renderTreeNode(child, depth + 1))}
+        </div>
+      );
+    }
+
+    // File node — only show in read mode
+    if (!isReadAction) return null;
+
+    const ext = node.extension || '';
+    const isRelevant = relevantExtensions.includes(ext.toLowerCase());
+    const sizeStr = node.size ? `${(node.size / 1024).toFixed(1)} KB` : '';
+
+    return (
+      <button
+        key={node.path}
+        onClick={() => isRelevant ? selectFile(node.path) : undefined}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-colors group',
+          isRelevant ? 'hover:bg-[#10b981]/10 cursor-pointer' : 'opacity-30 cursor-default'
+        )}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        disabled={!isRelevant}
+      >
+        <FileText className={cn('w-3.5 h-3.5', getFileColor(ext))} />
+        <span className={cn('text-xs flex-1 truncate', isRelevant ? 'text-[#c8d0d8]' : 'text-[#7a8899]/60')}>
+          {node.name}
+        </span>
+        {sizeStr && <span className="text-[8px] text-[#7a8899]/50 shrink-0">{sizeStr}</span>}
+        {isRelevant && (
+          <span className="text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Select</span>
+        )}
+      </button>
+    );
   };
 
   return (
@@ -513,10 +597,11 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
         </select>
       </div>
 
-      {/* Single smart folder field */}
+      {/* Smart path field with picker */}
       <div className="space-y-1.5">
         <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
-          <FolderOpen className="w-3 h-3 text-[#10b981]/60" /> {folderLabel}
+          {isReadAction ? <FileText className="w-3 h-3 text-[#10b981]/60" /> : <FolderOpen className="w-3 h-3 text-[#10b981]/60" />}
+          {pickerLabel}
         </label>
         <div className="flex gap-1.5">
           <input
@@ -524,17 +609,17 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
             value={config[pathKey] || ''}
             onChange={(e) => updateConfig(pathKey, e.target.value)}
             className="flex-1 bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-            placeholder={folderPlaceholder}
+            placeholder={fieldPlaceholder}
           />
           <button
             onClick={openPicker}
             className="px-2.5 bg-[#10b981]/10 border border-[#10b981]/30 rounded-lg text-[#10b981] hover:bg-[#10b981]/20 transition-colors"
-            title="Browse workspace folders"
+            title={isReadAction ? 'Browse workspace files' : 'Browse workspace folders'}
           >
-            <FolderOpen className="w-3.5 h-3.5" />
+            {isReadAction ? <FileText className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <p className="text-[8px] text-[#7a8899]/60">{folderHint}</p>
+        <p className="text-[8px] text-[#7a8899]/60">{fieldHint}</p>
       </div>
 
       {/* Excel sheet name */}
@@ -572,14 +657,14 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
         </p>
       </div>
 
-      {/* Folder Picker Modal */}
+      {/* File/Folder Picker Modal */}
       {showPicker && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-[#0a0e1a] border border-[#1a2040] rounded-xl p-5 w-96 max-h-[60vh] shadow-2xl flex flex-col">
+          <div className="bg-[#0a0e1a] border border-[#1a2040] rounded-xl p-5 w-[28rem] max-h-[70vh] shadow-2xl flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#c8d0d8] flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-[#10b981]" />
-                Select {folderLabel}
+                {isReadAction ? <FileText className="w-4 h-4 text-[#10b981]" /> : <FolderOpen className="w-4 h-4 text-[#10b981]" />}
+                {isReadAction ? 'Select Source File' : 'Select Destination Folder'}
               </h3>
               <button
                 onClick={() => setShowPicker(false)}
@@ -589,36 +674,32 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
               </button>
             </div>
 
+            {isReadAction && (
+              <p className="text-[9px] text-[#7a8899] mb-3">
+                Expand folders to find your file. Only <strong className="text-[#10b981]">{relevantExtensions.join(', ')}</strong> files are selectable.
+              </p>
+            )}
+
             <div className="flex-1 overflow-y-auto space-y-0.5 min-h-[200px]">
-              {loadingFolders ? (
+              {loadingTree ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-5 h-5 text-[#10b981] animate-spin" />
                 </div>
-              ) : folders.length === 0 ? (
-                <p className="text-xs text-[#7a8899] text-center py-8">No folders found in workspace</p>
+              ) : treeData.length === 0 ? (
+                <p className="text-xs text-[#7a8899] text-center py-8">No files found in workspace</p>
               ) : (
                 <>
-                  {/* Workspace root option */}
-                  <button
-                    onClick={() => selectFolder('')}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[#10b981]/10 transition-colors group"
-                  >
-                    <FolderOpen className="w-4 h-4 text-[#10b981]" />
-                    <span className="text-xs text-[#c8d0d8] font-medium">/ (workspace root)</span>
-                    <span className="ml-auto text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">Select</span>
-                  </button>
-                  {folders.map((f) => (
+                  {!isReadAction && (
                     <button
-                      key={f.path}
-                      onClick={() => selectFolder(f.path)}
+                      onClick={() => selectFolder('')}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[#10b981]/10 transition-colors group"
-                      style={{ paddingLeft: `${12 + f.depth * 16}px` }}
                     >
-                      <FolderOpen className="w-3.5 h-3.5 text-[#f59e0b]/70" />
-                      <span className="text-xs text-[#c8d0d8]">{f.path.split('/').pop()}</span>
+                      <FolderOpen className="w-4 h-4 text-[#10b981]" />
+                      <span className="text-xs text-[#c8d0d8] font-medium">/ (workspace root)</span>
                       <span className="ml-auto text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">Select</span>
                     </button>
-                  ))}
+                  )}
+                  {treeData.map((node) => renderTreeNode(node, 0))}
                 </>
               )}
             </div>
@@ -627,6 +708,19 @@ function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any
       )}
     </>
   );
+}
+
+/** Check if a tree branch contains any files with matching extensions. */
+function _hasMatchingFiles(children: any[], extensions: string[]): boolean {
+  for (const child of children) {
+    if (child.type === 'file' && extensions.includes((child.extension || '').toLowerCase())) {
+      return true;
+    }
+    if (child.type === 'directory' && child.children && _hasMatchingFiles(child.children, extensions)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 
@@ -2567,35 +2661,125 @@ function FlowListView({
 
 
 // ═══════════════════════════════════════════════════════════════
-// CREATE FLOW MODAL
+// TEMPLATE GALLERY MODAL
 // ═══════════════════════════════════════════════════════════════
+
+interface TemplateItem {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  difficulty: string;
+  trigger_type: string;
+  node_count: number;
+}
+
+interface TemplateCategoryInfo {
+  name: string;
+  count: number;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Document Processing': '#10b981',
+  'Data Analysis': '#3b82f6',
+  'Content Creation': '#f59e0b',
+  'Email Automation': '#8b5cf6',
+  'Research & Intelligence': '#ef4444',
+  'Business Operations': '#06b6d4',
+  'Marketing': '#ec4899',
+  'Human Resources': '#14b8a6',
+  'Legal & Compliance': '#6366f1',
+  'Education & Training': '#f97316',
+};
+
+const DIFFICULTY_BADGES: Record<string, { label: string; color: string }> = {
+  beginner: { label: 'Beginner', color: '#10b981' },
+  intermediate: { label: 'Intermediate', color: '#f59e0b' },
+  advanced: { label: 'Advanced', color: '#ef4444' },
+};
 
 function CreateFlowModal({
   onClose,
   onCreate,
+  onCreateFromTemplate,
 }: {
   onClose: () => void;
   onCreate: (name: string, description: string, triggerType: string) => void;
+  onCreateFromTemplate: (templateId: string) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<'templates' | 'blank'>('templates');
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [categories, setCategories] = useState<TemplateCategoryInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [creating, setCreating] = useState<string | null>(null);
+
+  // Blank flow state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [triggerType, setTriggerType] = useState('manual');
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const res = await axios.get('/api/v1/agent-flows/templates');
+        const data = res.data?.data;
+        if (data) {
+          setTemplates(data.templates || []);
+          setCategories(data.categories || []);
+        }
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  const filteredTemplates = useMemo(() => {
+    let list = templates;
+    if (selectedCategory) {
+      list = list.filter((t) => t.category === selectedCategory);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.description.toLowerCase().includes(q) ||
+          t.category.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [templates, selectedCategory, searchQuery]);
+
+  const handleUseTemplate = async (templateId: string) => {
+    setCreating(templateId);
+    try {
+      onCreateFromTemplate(templateId);
+    } catch {
+      setCreating(null);
+    }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-[#0a0e1a] border border-[#1a2040] rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-[#0a0e1a] border border-[#1a2040] rounded-xl w-full max-w-5xl h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
         {/* Header */}
-        <div className="bg-[#0e1225] border-b border-[#1a2040] p-6 flex items-center justify-between">
+        <div className="bg-[#0e1225] border-b border-[#1a2040] p-5 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-bold text-[#d4a017] flex items-center gap-2">
-              <GitBranch className="w-5 h-5" />
+              <Sparkles className="w-5 h-5" />
               Create Agent Flow
             </h3>
             <p className="text-[10px] text-[#7a8899] uppercase tracking-widest font-bold mt-1">
-              New Workflow Definition
+              Choose a template or start from scratch
             </p>
           </div>
           <button
@@ -2606,68 +2790,221 @@ function CreateFlowModal({
           </button>
         </div>
 
-        {/* Form */}
-        <div className="p-6 space-y-5">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Flow Name</label>
-            <input
-              type="text"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-2.5 text-sm text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none"
-              placeholder="e.g., Research Pipeline, Weekly Report..."
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Trigger Type</label>
-            <select
-              value={triggerType}
-              onChange={(e) => setTriggerType(e.target.value)}
-              className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-2.5 text-sm text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none cursor-pointer"
-            >
-              <option value="manual">Manual Execution</option>
-              <option value="scheduled">Scheduled / Cron</option>
-              <option value="event">Event-Based Trigger</option>
-              <option value="api">API Trigger</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-3 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none resize-none"
-              placeholder="Describe the purpose of this workflow..."
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 pt-0 flex gap-3">
+        {/* Tabs */}
+        <div className="border-b border-[#1a2040] flex gap-0 shrink-0">
           <button
-            onClick={onClose}
-            className="flex-1 bg-[#0e1225] hover:bg-[#1a2040] text-[#7a8899] font-bold py-2.5 rounded-lg transition-all border border-[#1a2040] text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onCreate(name, description, triggerType)}
-            disabled={!name.trim()}
+            onClick={() => setActiveTab('templates')}
             className={cn(
-              "flex-1 font-bold py-2.5 rounded-lg transition-all text-sm flex items-center justify-center gap-2",
-              !name.trim()
-                ? "bg-[#7a8899]/20 text-[#7a8899] cursor-not-allowed"
-                : "bg-[#4a8cc7] hover:bg-[#4a8cc7]/90 text-white shadow-[0_0_20px_rgba(74,140,199,0.15)]"
+              'px-6 py-3 text-sm font-bold transition-all flex items-center gap-2',
+              activeTab === 'templates'
+                ? 'text-[#d4a017] border-b-2 border-[#d4a017] bg-[#d4a017]/5'
+                : 'text-[#7a8899] hover:text-[#c8d0d8] hover:bg-[#1a2040]/50'
             )}
           >
-            <Plus className="w-3.5 h-3.5" />
-            Create Flow
+            <LayoutGrid className="w-4 h-4" />
+            Templates
+            <span className="text-[9px] bg-[#d4a017]/20 text-[#d4a017] px-1.5 py-0.5 rounded-full font-bold">
+              {templates.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('blank')}
+            className={cn(
+              'px-6 py-3 text-sm font-bold transition-all flex items-center gap-2',
+              activeTab === 'blank'
+                ? 'text-[#d4a017] border-b-2 border-[#d4a017] bg-[#d4a017]/5'
+                : 'text-[#7a8899] hover:text-[#c8d0d8] hover:bg-[#1a2040]/50'
+            )}
+          >
+            <Plus className="w-4 h-4" />
+            Blank Flow
           </button>
         </div>
+
+        {/* Content */}
+        {activeTab === 'templates' ? (
+          <div className="flex flex-1 overflow-hidden">
+            {/* Category sidebar */}
+            <div className="w-56 border-r border-[#1a2040] overflow-y-auto shrink-0 p-3 space-y-0.5">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={cn(
+                  'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors',
+                  !selectedCategory
+                    ? 'bg-[#d4a017]/10 text-[#d4a017]'
+                    : 'text-[#7a8899] hover:text-[#c8d0d8] hover:bg-[#1a2040]/50'
+                )}
+              >
+                All Templates
+                <span className="float-right text-[9px] opacity-60">{templates.length}</span>
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat.name}
+                  onClick={() => setSelectedCategory(cat.name === selectedCategory ? null : cat.name)}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2',
+                    selectedCategory === cat.name
+                      ? 'bg-[#d4a017]/10 text-[#d4a017]'
+                      : 'text-[#7a8899] hover:text-[#c8d0d8] hover:bg-[#1a2040]/50'
+                  )}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: CATEGORY_COLORS[cat.name] || '#7a8899' }}
+                  />
+                  <span className="flex-1 truncate">{cat.name}</span>
+                  <span className="text-[9px] opacity-60">{cat.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Template grid */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Search */}
+              <div className="p-3 border-b border-[#1a2040] shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#7a8899]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#050508] border border-[#1a2040] rounded-lg pl-9 pr-3 py-2 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none"
+                    placeholder="Search templates..."
+                  />
+                </div>
+              </div>
+
+              {/* Grid */}
+              <div className="flex-1 overflow-y-auto p-3">
+                {loading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 text-[#d4a017] animate-spin" />
+                  </div>
+                ) : filteredTemplates.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Search className="w-8 h-8 text-[#7a8899]/40 mx-auto mb-3" />
+                    <p className="text-sm text-[#7a8899]">No templates match your search</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {filteredTemplates.map((t) => {
+                      const catColor = CATEGORY_COLORS[t.category] || '#7a8899';
+                      const diff = DIFFICULTY_BADGES[t.difficulty] || DIFFICULTY_BADGES.beginner;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => handleUseTemplate(t.id)}
+                          disabled={!!creating}
+                          className={cn(
+                            'text-left p-3.5 rounded-xl border transition-all group',
+                            'bg-[#0e1225] border-[#1a2040] hover:border-[#d4a017]/50 hover:bg-[#0e1225]/80',
+                            'hover:shadow-[0_0_20px_rgba(212,160,23,0.08)]',
+                            creating === t.id && 'opacity-70 pointer-events-none'
+                          )}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-xl leading-none mt-0.5">{t.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="text-xs font-bold text-[#c8d0d8] truncate flex-1 group-hover:text-[#d4a017] transition-colors">
+                                  {t.name}
+                                </h4>
+                                {creating === t.id && <Loader2 className="w-3 h-3 text-[#d4a017] animate-spin shrink-0" />}
+                              </div>
+                              <p className="text-[10px] text-[#7a8899] line-clamp-2 leading-relaxed mb-2">
+                                {t.description}
+                              </p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                                  style={{ color: catColor, background: `${catColor}15` }}
+                                >
+                                  {t.category}
+                                </span>
+                                <span
+                                  className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                                  style={{ color: diff.color, background: `${diff.color}15` }}
+                                >
+                                  {diff.label}
+                                </span>
+                                <span className="text-[8px] text-[#7a8899]/60 ml-auto">
+                                  {t.node_count} nodes
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Blank Flow Tab */
+          <div className="p-6 space-y-5 overflow-y-auto">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Flow Name</label>
+              <input
+                type="text"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-2.5 text-sm text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none"
+                placeholder="e.g., Research Pipeline, Weekly Report..."
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Trigger Type</label>
+              <select
+                value={triggerType}
+                onChange={(e) => setTriggerType(e.target.value)}
+                className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-2.5 text-sm text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none cursor-pointer"
+              >
+                <option value="manual">Manual Execution</option>
+                <option value="scheduled">Scheduled / Cron</option>
+                <option value="event">Event-Based Trigger</option>
+                <option value="api">API Trigger</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[#7a8899] uppercase tracking-widest">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full bg-[#050508] border border-[#1a2040] rounded-lg p-3 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none resize-none"
+                placeholder="Describe the purpose of this workflow..."
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 bg-[#0e1225] hover:bg-[#1a2040] text-[#7a8899] font-bold py-2.5 rounded-lg transition-all border border-[#1a2040] text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => onCreate(name, description, triggerType)}
+                disabled={!name.trim()}
+                className={cn(
+                  "flex-1 font-bold py-2.5 rounded-lg transition-all text-sm flex items-center justify-center gap-2",
+                  !name.trim()
+                    ? "bg-[#7a8899]/20 text-[#7a8899] cursor-not-allowed"
+                    : "bg-[#4a8cc7] hover:bg-[#4a8cc7]/90 text-white shadow-[0_0_20px_rgba(74,140,199,0.15)]"
+                )}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create Blank Flow
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2742,6 +3079,20 @@ export const AgentFlow = () => {
     }
   }, [fetchFlows]);
 
+  // Create from template
+  const handleCreateFromTemplate = useCallback(async (templateId: string) => {
+    try {
+      const res = await axios.post('/api/v1/agent-flows/from-template', { template_id: templateId });
+      if (res.data.data) {
+        setShowCreateModal(false);
+        setActiveFlow(res.data.data);
+        fetchFlows();
+      }
+    } catch (err) {
+      console.error('Failed to create flow from template:', err);
+    }
+  }, [fetchFlows]);
+
   // Delete flow
   const handleDelete = useCallback(async (flowId: string) => {
     if (!confirm('Delete this Agent Flow?')) return;
@@ -2796,6 +3147,7 @@ export const AgentFlow = () => {
         <CreateFlowModal
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreate}
+          onCreateFromTemplate={handleCreateFromTemplate}
         />
       )}
     </>

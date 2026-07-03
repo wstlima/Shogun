@@ -69,6 +69,80 @@ def read_text(handle: WordDocumentHandle) -> str:
     return "\n".join(paragraphs)
 
 
+def read_pages(
+    handle: WordDocumentHandle,
+    start_page: int = 1,
+    end_page: int = 1,
+) -> dict[str, Any]:
+    """Read a bounded page range using Word's rendered-page markers.
+
+    Word stores ``w:lastRenderedPageBreak`` markers in DOCX files after it
+    paginates a document.  Reading those markers avoids sending an entire
+    large document to the model when only a few pages were requested.
+    """
+    if start_page < 1:
+        raise ValueError("start_page must be at least 1.")
+    if end_page < start_page:
+        raise ValueError("end_page must be greater than or equal to start_page.")
+
+    from docx.oxml.ns import qn
+
+    pages: list[list[str]] = [[]]
+    body = handle.document.element.body
+
+    def append(value: str) -> None:
+        pages[-1].append(value)
+
+    def walk(element: Any) -> None:
+        tag = element.tag
+        if tag == qn("w:lastRenderedPageBreak"):
+            pages.append([])
+            return
+        if tag == qn("w:br") and element.get(qn("w:type")) == "page":
+            pages.append([])
+            return
+        if tag == qn("w:t"):
+            append(element.text or "")
+            return
+        if tag == qn("w:tab"):
+            append("\t")
+            return
+        if tag == qn("w:br"):
+            append("\n")
+            return
+
+        for child in element:
+            walk(child)
+
+        if tag == qn("w:p"):
+            append("\n")
+        elif tag == qn("w:tc"):
+            append("\t")
+        elif tag == qn("w:tr"):
+            append("\n")
+
+    walk(body)
+    page_count = len(pages)
+    if start_page > page_count:
+        raise ValueError(
+            f"start_page {start_page} exceeds the document's {page_count} rendered pages."
+        )
+
+    actual_end = min(end_page, page_count)
+    text = "".join(
+        part
+        for page in pages[start_page - 1:actual_end]
+        for part in page
+    ).strip()
+    return {
+        "text": text,
+        "length": len(text),
+        "start_page": start_page,
+        "end_page": actual_end,
+        "page_count": page_count,
+    }
+
+
 def read_headings(handle: WordDocumentHandle) -> list[dict[str, Any]]:
     """Read all headings from the document.
 
@@ -164,6 +238,31 @@ def insert_paragraph(
     doc = handle.document
     doc.add_paragraph(text, style=style)
     log.debug("Inserted paragraph (style=%s): %s...", style, text[:50])
+
+
+def create_document_from_text(
+    output_path: str,
+    text: str,
+    append: bool = False,
+) -> WordDocumentHandle:
+    """Create or append to a Word document and return its open handle."""
+    try:
+        from docx import Document
+    except ImportError:
+        raise ImportError("python-docx is required for Word operations. Install with: pip install python-docx")
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    doc = Document(str(out)) if append and out.exists() else Document()
+    lines = text.splitlines()
+    if lines:
+        for line in lines:
+            doc.add_paragraph(line)
+    else:
+        doc.add_paragraph(text)
+    doc.save(str(out))
+    log.info("%s document text: %s (%d chars)", "Appended" if append else "Created", out, len(text))
+    return WordDocumentHandle(path=out, document=doc)
 
 
 def insert_table(

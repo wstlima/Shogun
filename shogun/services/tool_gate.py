@@ -128,6 +128,13 @@ TOOL_RISK_REGISTRY: dict[str, dict[str, str]] = {
     "office_word_save_as":               {"risk": "medium",   "category": "office"},
     "office_word_export_pdf":            {"risk": "medium",   "category": "office"},
     "office_word_get_metadata":          {"risk": "low",      "category": "office"},
+    "office_word_read_text":              {"risk": "low",      "category": "office"},
+    "office_word_read_page":              {"risk": "low",      "category": "office"},
+    "office_word_read_pages":             {"risk": "low",      "category": "office"},
+    "office_word_read_headings":          {"risk": "low",      "category": "office"},
+    "office_word_insert_paragraph":       {"risk": "medium",   "category": "office"},
+    "office_word_create":                 {"risk": "medium",   "category": "office"},
+    "office_word_create_from_text":       {"risk": "medium",   "category": "office"},
     # Office — PowerPoint (Katana)
     "office_pptx_open":                  {"risk": "low",      "category": "office"},
     "office_pptx_replace_placeholders":  {"risk": "medium",   "category": "office"},

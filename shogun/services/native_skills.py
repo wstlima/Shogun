@@ -867,7 +867,7 @@ NATIVE_TOOLS = [
         "category": "office",
         "function": {
             "name": "office_word_read_text",
-            "description": "Read the full text content of an opened Word document. Returns all paragraphs as a single string. Call office_word_open first.",
+            "description": "Read text from a Word document, bounded to protect the model context. Use office_word_read_pages when the user requests specific pages.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -875,8 +875,67 @@ NATIVE_TOOLS = [
                         "type": "string",
                         "description": "Path to the already-opened document.",
                     },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Maximum characters to return. Defaults to 30000.",
+                        "minimum": 1000,
+                        "maximum": 100000,
+                    },
                 },
                 "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_read_page",
+            "description": "Read one rendered page from a Word document. Use this for page-by-page translation. The document is opened automatically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the Word document.",
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number to read (1-based).",
+                        "minimum": 1,
+                    },
+                },
+                "required": ["file_path", "page"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "office",
+        "function": {
+            "name": "office_word_read_pages",
+            "description": "Read only a requested page range from a Word document. Use this instead of office_word_read_text when the user asks for specific pages. The document is opened automatically if needed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the Word document.",
+                    },
+                    "start_page": {
+                        "type": "integer",
+                        "description": "First page to read (1-based).",
+                        "minimum": 1,
+                    },
+                    "end_page": {
+                        "type": "integer",
+                        "description": "Last page to read, inclusive (1-based).",
+                        "minimum": 1,
+                    },
+                },
+                "required": ["file_path", "start_page", "end_page"],
             },
         },
     },
@@ -942,6 +1001,33 @@ NATIVE_TOOLS = [
                     },
                 },
                 "required": ["output_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "office",
+        "function": {
+            "name": "office_word_create_from_text",
+            "description": "Create, overwrite, or append text to a Word document. Use this after translating one page of content; no separate open, create, insert, or save call is needed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "output_path": {
+                        "type": "string",
+                        "description": "Output path relative to the workspace, e.g. 'Output/translated.docx'.",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Complete text to write into the Word document.",
+                    },
+                    "append": {
+                        "type": "boolean",
+                        "description": "False for the first page; true to append later translated pages.",
+                    },
+                },
+                "required": ["output_path", "text"],
             },
         },
     },
@@ -1339,10 +1425,10 @@ def generate_tool_prompt(tools: list[dict]) -> str:
         "## Available Tools",
         "",
         "You have access to the following tools. When you decide to call a tool, you must execute it by writing the tool call in one of the following formats.",
-        "Prefer writing it exactly in the `<tool_call>` tag format:",
+        "Write exactly one tool call in the `<tool_call>` tag format, using a JSON object for arguments:",
         "",
         "<tool_call>",
-        "tool_name(param1=\"value1\", param2=\"value2\")",
+        'tool_name({"param1": "value1", "param2": "value2"})',
         "</tool_call>",
         "",
         "For example, to list available models, output exactly:",
@@ -1352,6 +1438,7 @@ def generate_tool_prompt(tools: list[dict]) -> str:
         "",
         "CRITICAL RULES:",
         "- You MUST output the tool call exactly as defined. Do not modify the tool name.",
+        "- Arguments MUST be valid JSON. Escape quotes and newlines inside string values.",
         "- Output ONLY ONE tool call at a time, then STOP and wait for the result.",
         "- Do NOT hallucinate or fabricate tool results. The system will execute the tool and provide the real output.",
         "- After receiving a tool result, continue with your next action or provide the final answer.",
@@ -2345,8 +2432,61 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
                 fp = str(vp.resolved_path)
             from shogun.office.adapters.word_adapter import read_text
             text = read_text(handle)
-            await _log_office_event("office.word.read_text", f"Read {len(text)} chars", "word", fp, start_ms=start_ms)
-            return json.dumps({"status": "success", "data": {"text": text, "length": len(text)}})
+            total_length = len(text)
+            max_chars = max(1000, min(int(args.get("max_chars", 30000)), 100000))
+            truncated = total_length > max_chars
+            if truncated:
+                text = text[:max_chars]
+            await _log_office_event(
+                "office.word.read_text",
+                f"Read {len(text)} of {total_length} chars",
+                "word",
+                fp,
+                start_ms=start_ms,
+            )
+            return json.dumps({
+                "status": "success",
+                "data": {
+                    "text": text,
+                    "length": len(text),
+                    "total_length": total_length,
+                    "truncated": truncated,
+                    "message": (
+                        "Result was truncated to protect the model context. "
+                        "Use office_word_read_pages for a bounded page range."
+                        if truncated else ""
+                    ),
+                },
+            })
+
+        elif name in ("office_word_read_page", "office_word_read_pages"):
+            fp = args["file_path"]
+            handle = _open_handles.get(fp)
+            if not handle:
+                vp = validator.validate(fp, PathPurpose.READ)
+                handle = _open_handles.get(str(vp.resolved_path))
+                if not handle:
+                    from shogun.office.adapters.word_adapter import open_document
+                    handle = open_document(str(vp.resolved_path))
+                    _open_handles[str(vp.resolved_path)] = handle
+                fp = str(vp.resolved_path)
+            from shogun.office.adapters.word_adapter import read_pages
+            if name == "office_word_read_page":
+                start_page = int(args.get("page", 1))
+                end_page = start_page
+            else:
+                start_page = int(args.get("start_page", 1))
+                end_page = int(args.get("end_page", start_page))
+            page_data = read_pages(handle, start_page, end_page)
+            await _log_office_event(
+                "office.word.read_page" if name == "office_word_read_page" else "office.word.read_pages",
+                f"Read pages {page_data['start_page']}-{page_data['end_page']} "
+                f"({page_data['length']} chars)",
+                "word",
+                fp,
+                start_ms=start_ms,
+            )
+            return json.dumps({"status": "success", "data": page_data})
 
         elif name == "office_word_read_headings":
             fp = args["file_path"]
@@ -2403,6 +2543,31 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             return json.dumps({"status": "success", "data": {"path": abs_out, "message": f"Created new document: {args['output_path']}"}})
 
         # ── PowerPoint Tools ─────────────────────────────────────
+        elif name == "office_word_create_from_text":
+            perm = check_office_permission(OfficeAction.SAVE_AS_NEW, "word", tier)
+            if not perm.allowed:
+                return json.dumps({"status": "blocked", "message": perm.reason})
+            vp = validator.validate(args["output_path"], PathPurpose.WRITE)
+            text = str(args.get("text", ""))
+            append = bool(args.get("append", False))
+            from shogun.office.adapters.word_adapter import create_document_from_text
+            handle = create_document_from_text(str(vp.resolved_path), text, append=append)
+            abs_out = str(vp.resolved_path)
+            _open_handles[abs_out] = handle
+            await _log_office_event(
+                "office.word.create_from_text",
+                f"{'Appended' if append else 'Created'} document text ({len(text)} chars)",
+                "word",
+                abs_out,
+                output_file=abs_out,
+                start_ms=start_ms,
+            )
+            return json.dumps({
+                "status": "success",
+                "output_file": abs_out,
+                "message": f"{'Appended to' if append else 'Created'} Word document with {len(text)} characters.",
+            })
+
         elif name == "office_pptx_open":
             vp = validator.validate(args["file_path"], PathPurpose.READ)
             from shogun.office.adapters.pptx_adapter import open_presentation, get_presentation_metadata

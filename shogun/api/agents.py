@@ -286,6 +286,11 @@ async def shogun_chat(
                 "reason": "auto_escalated_from_fast",
                 "matched": auto_check["matched"],
             }
+    elif mode == "mission":
+        # Manual Mission mode still needs intent keywords so prompt-constrained
+        # local models receive only the relevant tools.
+        intent = _classify_chat_mode(user_msg, history)
+        classification["matched"] = intent.get("matched", [])
 
     # Governed Chat — context-aware with memory retrieval, no tools\r\n    if mode == \"governed\":\r\n        from shogun.api.governed_chat import _shogun_governed_chat\r\n        return await _shogun_governed_chat(user_msg, history, svc, classification=classification) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â routes to mission for now
     if mode == "governed":
@@ -310,9 +315,13 @@ def _is_small_local_model(provider, model_name: str) -> bool:
     if provider.provider_type not in ("ollama", "lmstudio", "local"):
         return False
     mn = (model_name or "").lower()
-    # Small model indicators: parameter counts under 14B
-    _small_indicators = ["1b", "2b", "3b", "4b", "7b", "8b", "9b", "e4b", ":4b", ":7b", ":8b"]
-    return any(ind in mn for ind in _small_indicators)
+    # Treat local models up to 14B as prompt-constrained. Parse the parameter
+    # count instead of maintaining an incomplete list (which missed 12B).
+    import re
+    size_match = re.search(r"(?<!\d)(\d+(?:\.\d+)?)b\b", mn)
+    if size_match:
+        return float(size_match.group(1)) <= 14
+    return "e4b" in mn
 
 
 def _filter_tools_by_intent(tools: list, matched_keywords: list, is_small_model: bool) -> list:
@@ -410,7 +419,50 @@ def _filter_tools_by_intent(tools: list, matched_keywords: list, is_small_model:
     # Always include memory tool
     needed_categories.add("memory")
 
-    filtered = [t for t in tools if t.get("category") in needed_categories]
+    # A generic "office" category still exposes every Excel, Word,
+    # PowerPoint, and Outlook function. Narrow obvious document intents to
+    # the matching application so small local models receive a usable prompt.
+    matched = set(matched_keywords)
+    word_intent = bool(matched & {"document", "docx", ".docx", "word", "translate"})
+    excel_intent = bool(matched & {"spreadsheet", ".xlsx", "excel"})
+    pptx_intent = bool(matched & {"powerpoint", ".pptx"})
+    translation_intent = "translate" in matched
+
+    if translation_intent and word_intent and not excel_intent and not pptx_intent:
+        translation_tools = {
+            "office_word_read_page",
+            "office_word_create_from_text",
+        }
+        filtered = [
+            t for t in tools
+            if t["function"]["name"] in translation_tools
+        ]
+    elif word_intent and not excel_intent and not pptx_intent:
+        filtered = [
+            t for t in tools
+            if (
+                t["function"]["name"].startswith("office_word_")
+                or t.get("category") in {"workspace", "memory"}
+            )
+        ]
+    elif excel_intent and not word_intent and not pptx_intent:
+        filtered = [
+            t for t in tools
+            if (
+                t["function"]["name"].startswith("office_excel_")
+                or t.get("category") in {"workspace", "memory"}
+            )
+        ]
+    elif pptx_intent and not word_intent and not excel_intent:
+        filtered = [
+            t for t in tools
+            if (
+                t["function"]["name"].startswith("office_pptx_")
+                or t.get("category") in {"workspace", "memory"}
+            )
+        ]
+    else:
+        filtered = [t for t in tools if t.get("category") in needed_categories]
     
     logger.info(f"[OPTIMIZE] Filtered tools: {len(tools)} → {len(filtered)} (categories: {needed_categories})")
     return filtered
@@ -1099,6 +1151,7 @@ async def _shogun_chat_internal(user_msg: str, history: list, svc: AgentService,
             _mn = (model_name or "").lower()
             _NO_TOOL_MODELS = [
                 "deepseek-r1", "deepseek-r2",   # Reasoning models — no function calling
+                "gemma3", "gemma 3",             # Ollama rejects/garbles native calls
                 "phi-2", "phi-3", "phi-4",       # Phi models — limited tool support
                 "tinyllama", "stablelm",          # Very small models
                 "codellama", "starcoder",         # Code-only models
@@ -1288,10 +1341,16 @@ WORKSPACE FILES:
 
 CRITICAL INSTRUCTIONS:
 1. You MUST call tool functions to perform actions. NEVER pretend or narrate that you performed an action.
-2. If asked to read a file, call office_word_read_text. If asked to create a file, call office_word_create.
+2. If asked to read specific Word pages, call office_word_read_pages. Otherwise call office_word_read_text.
 3. Use RELATIVE paths from the workspace root (e.g. "Input/filename.docx", "Output/filename.docx").
 4. Do NOT describe steps you "will" take. Call the first tool NOW.
 5. If you cannot call a tool, say so. NEVER claim you performed an action without calling a tool.
+6. Translation is a language task YOU perform yourself; it does not require a separate translation tool.
+7. For Word translation tasks, process ONE PAGE AT A TIME to keep calls small:
+   a. Call office_word_read_page with page=1.
+   b. Translate that page yourself. The output text MUST be in the requested target language; never copy the English source unchanged.
+   c. Call office_word_create_from_text with append=false for the first page and append=true for each later page.
+   d. Repeat with page=2, page=3, and so on until every requested page is written. Do not reopen the source, use placeholders, or create an intermediate English document.
 """
             logger.info(f"[OPTIMIZE] Using compact system prompt for small model: {model_name}")
         if not _small_model:
@@ -1612,8 +1671,16 @@ BEHAVIOUR:
         _tool_retry_used = False  # only retry once
         _any_tool_executed = False
         _tool_enforcement_retried = False
+        _tool_round = 0
+        _max_tool_rounds = 12
 
         while True:
+            _tool_round += 1
+            if _tool_round > _max_tool_rounds:
+                logger.error("[MISSION] Stopped after %d tool/model rounds.", _max_tool_rounds)
+                yield f"data: {json.dumps({'type': 'error', 'content': 'Mission stopped because the model exceeded the tool-step limit.'})}\n\n"
+                break
+
             assistant_tokens: list[str] = []
             tool_calls_buffer: dict = {}
             _retry_without_tools = False
@@ -1624,6 +1691,10 @@ BEHAVIOUR:
                 "stream": True,
                 "temperature": _temperature,
             }
+            if _prompt_injected_tools:
+                # Text-mode tool calls may contain drafted document content.
+                # Give local models enough output budget to close the JSON call.
+                req_json["max_tokens"] = 4096
             if active_tools:
                 # Strip Shogun-internal fields (risk, category) that LLM APIs reject
                 req_json["tools"] = [
@@ -1749,6 +1820,13 @@ BEHAVIOUR:
                                     
                                     content = delta.get("content") or ""
                                     if content:
+                                        # Prompt-injected models express tool calls as ordinary
+                                        # text. Buffer their complete response so pseudo-call
+                                        # syntax never leaks into the visible chat stream.
+                                        if _prompt_injected_tools:
+                                            assistant_tokens.append(content)
+                                            continue
+
                                         _yield_buffer += content
                                         
                                         # ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Handle <think> blocks ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
@@ -1974,7 +2052,7 @@ BEHAVIOUR:
                                     pass
 
                         # Execute (allow or approved confirm)
-                        yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\\n\\n"
+                        yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                         res_str = await execute_native_tool(func_name, args, db)
                         # -- Prompt injection containment: wrap untrusted external content --
                         from shogun.services.content_wrapper import wrap_tool_result
@@ -2095,6 +2173,15 @@ BEHAVIOUR:
             full_text_clean = _re.sub(r'`{1,3}\s*<?tool_call>?', '<tool_call>', full_text_clean)
             full_text_clean = _re.sub(r'</tool_call>\s*`{1,3}', '</tool_call>', full_text_clean)
             full_text_clean = _re.sub(r'`{1,3}\s*</tool_call>', '</tool_call>', full_text_clean)
+            # Gemma commonly emits ```tool_call ... ``` without XML closing
+            # tags. After normalizing the opening fence above, close the block
+            # at the matching Markdown fence.
+            full_text_clean = _re.sub(
+                r'<tool_call>(.*?)```',
+                r'<tool_call>\1</tool_call>',
+                full_text_clean,
+                flags=_re.DOTALL,
+            )
             
             logger.info(f"[PARSER-DEBUG] After normalization. Has <tool_call>: {chr(60)+chr(116)+chr(111)+chr(111)+chr(108)+chr(95)+chr(99)+chr(97)+chr(108)+chr(108)+chr(62) in full_text_clean}, text length={len(full_text_clean)}, first 200 chars: {full_text_clean[:200]}")
             _valid_tool_names = _active_tool_names if _active_tool_names else []
@@ -2118,7 +2205,7 @@ BEHAVIOUR:
                             _tc_matches.append((_func_name, _m.group(2).strip()))
             
             # 2. If no <tool_call> blocks matched, fall back to matching code blocks and text patterns
-            if not _tc_matches and _valid_tool_names:
+            if not _tc_matches and _valid_tool_names and "<tool_call>" not in full_text_clean:
                 _code_block_pattern = _re.compile(r"```[a-zA-Z0-9]*\s*\n(.*?)\n\s*```", _re.DOTALL)
                 _code_blocks = _code_block_pattern.findall(full_text_clean)
                 
@@ -2265,7 +2352,7 @@ BEHAVIOUR:
                                         yield f"data: {json.dumps({'type': 'toolgate_resolved', 'confirm_id': _confirm_id, 'approved': True})}\n\n"
                                         _log.info(f"[Shogun] Text-mode tool '{func_name}' APPROVED by operator")
                                         # Execute (approved confirm)
-                                        yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\\n\\n"
+                                        yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                                         res_str = await execute_native_tool(func_name, args, db)
                                         from shogun.services.content_wrapper import wrap_tool_result as _wtrc
                                         res_str = _wtrc(func_name, res_str)
@@ -2274,7 +2361,7 @@ BEHAVIOUR:
                                         _log.info(f"[Shogun] Text-mode tool '{func_name}' result: {res_str[:200]}")
                                 else:
                                     # Execute (allow)
-                                    yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\\n\\n"
+                                    yield f"data: {json.dumps({'type': 'action', 'content': f'Executing {func_name}...'})}\n\n"
                                     res_str = await execute_native_tool(func_name, args, db)
                                     _any_tool_executed = True
                                     _text_tool_results.append((func_name, args, res_str))
@@ -2386,6 +2473,18 @@ BEHAVIOUR:
 
             # If no tool calls occurred or we are done, terminate loop
             _tool_required = bool(_active_tool_names) and classification and classification.get("task_type") in ("search", "skill", "agent")
+            if _prompt_injected_tools and full_text_clean:
+                # Tool blocks were buffered rather than streamed. If this is a
+                # genuine final response, show only its human-readable content.
+                _display_text = _re.sub(
+                    r"<tool_call>.*?</tool_call>",
+                    "",
+                    full_text_clean,
+                    flags=_re.DOTALL,
+                ).strip()
+                if _display_text and (not _tool_required or _any_tool_executed):
+                    yield f"data: {json.dumps({'type': 'token', 'content': _display_text})}\n\n"
+
             if _tool_required and not _deduped_tc_matches and not tool_calls_buffer and not _any_tool_executed:
                 logger.warning(f"[Shogun] Mission failed gracefully. Expected tool call but none detected.")
                 yield f"data: {json.dumps({'type': 'error', 'content': 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â No valid tool call detected.'})}\n\n"

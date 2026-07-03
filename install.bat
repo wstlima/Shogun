@@ -73,7 +73,7 @@ if "%VENV_DIR%"=="" (
 :: -- Step 4: Install Python dependencies ------------------------
 echo [4/8] Installing Python dependencies...
 call %VENV_DIR%\Scripts\activate.bat
-pip install . --quiet --disable-pip-version-check
+pip install ".[office]" --quiet --disable-pip-version-check
 if %ERRORLEVEL% neq 0 (
     echo  ERROR: Failed to install Python dependencies.
     pause
