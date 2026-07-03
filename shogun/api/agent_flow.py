@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from pathlib import Path as _Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import select
@@ -52,6 +54,98 @@ async def create_flow(
     """Create a new Agent Flow."""
     record = await svc.create(**body.model_dump())
     return ApiResponse(data=AgentFlowResponse.model_validate(record))
+
+
+# ═══════════════════════════════════════════════════════════════
+# TEMPLATE GALLERY ENDPOINTS (must be before /{flow_id} routes)
+# ═══════════════════════════════════════════════════════════════
+
+_TEMPLATE_CACHE: dict | None = None
+
+
+def _load_templates() -> dict:
+    """Load and cache the template catalog from JSON."""
+    global _TEMPLATE_CACHE
+    if _TEMPLATE_CACHE is not None:
+        return _TEMPLATE_CACHE
+    tpl_path = _Path(__file__).resolve().parent.parent / "data" / "flow_templates.json"
+    if not tpl_path.exists():
+        _TEMPLATE_CACHE = {"version": "1.0", "total_templates": 0, "categories": [], "templates": []}
+        return _TEMPLATE_CACHE
+    _TEMPLATE_CACHE = json.loads(tpl_path.read_text(encoding="utf-8"))
+    return _TEMPLATE_CACHE
+
+
+@router.get("/templates", response_model=ApiResponse)
+async def list_templates():
+    """Return the full template catalog (categories + lightweight template list)."""
+    catalog = _load_templates()
+    # Return lightweight version (without full node/edge data)
+    lightweight = []
+    for t in catalog.get("templates", []):
+        lightweight.append({
+            "id": t["id"],
+            "name": t["name"],
+            "description": t["description"],
+            "category": t["category"],
+            "icon": t["icon"],
+            "difficulty": t["difficulty"],
+            "trigger_type": t["trigger_type"],
+            "node_count": t.get("node_count", len(t.get("nodes", []))),
+        })
+    return ApiResponse(data={
+        "total": catalog.get("total_templates", len(lightweight)),
+        "categories": catalog.get("categories", []),
+        "templates": lightweight,
+    })
+
+
+@router.post("/from-template", response_model=ApiResponse, status_code=201)
+async def create_from_template(
+    body: dict,
+    svc: AgentFlowService = Depends(get_agent_flow_service),
+):
+    """Create a new Agent Flow from a template ID.
+
+    Body: ``{ "template_id": "translate-en-da", "name": "Optional override" }``
+    """
+    template_id = body.get("template_id")
+    if not template_id:
+        raise HTTPException(400, "template_id is required")
+
+    catalog = _load_templates()
+    template = None
+    for t in catalog.get("templates", []):
+        if t["id"] == template_id:
+            template = t
+            break
+
+    if not template:
+        raise HTTPException(404, f"Template not found: {template_id}")
+
+    # Create the flow
+    flow_name = body.get("name") or template["name"]
+    flow = await svc.create(
+        name=flow_name,
+        description=template.get("description", ""),
+        trigger_type=template.get("trigger_type", "manual"),
+        status="draft",
+    )
+
+    # Save the graph (nodes + edges) from the template
+    nodes_data = template.get("nodes", [])
+    edges_data = template.get("edges", [])
+    if nodes_data:
+        saved = await svc.save_flow_graph(
+            flow_id=flow.id,
+            nodes_data=nodes_data,
+            edges_data=edges_data,
+            viewport={"x": 50, "y": 100, "zoom": 0.85},
+        )
+        if saved:
+            flow = saved
+
+    return ApiResponse(data=AgentFlowResponse.model_validate(flow))
 
 
 # ── Get a single flow (with nodes and edges) ────────────────
@@ -302,99 +396,7 @@ async def upload_flow_document(
     })
 
 
-# ═══════════════════════════════════════════════════════════════
-# TEMPLATE GALLERY ENDPOINTS
-# ═══════════════════════════════════════════════════════════════
 
-import json
-from pathlib import Path as _Path
-
-_TEMPLATE_CACHE: dict | None = None
-
-
-def _load_templates() -> dict:
-    """Load and cache the template catalog from JSON."""
-    global _TEMPLATE_CACHE
-    if _TEMPLATE_CACHE is not None:
-        return _TEMPLATE_CACHE
-    tpl_path = _Path(__file__).resolve().parent.parent / "data" / "flow_templates.json"
-    if not tpl_path.exists():
-        _TEMPLATE_CACHE = {"version": "1.0", "total_templates": 0, "categories": [], "templates": []}
-        return _TEMPLATE_CACHE
-    _TEMPLATE_CACHE = json.loads(tpl_path.read_text(encoding="utf-8"))
-    return _TEMPLATE_CACHE
-
-
-@router.get("/templates", response_model=ApiResponse)
-async def list_templates():
-    """Return the full template catalog (categories + lightweight template list)."""
-    catalog = _load_templates()
-    # Return lightweight version (without full node/edge data)
-    lightweight = []
-    for t in catalog.get("templates", []):
-        lightweight.append({
-            "id": t["id"],
-            "name": t["name"],
-            "description": t["description"],
-            "category": t["category"],
-            "icon": t["icon"],
-            "difficulty": t["difficulty"],
-            "trigger_type": t["trigger_type"],
-            "node_count": t.get("node_count", len(t.get("nodes", []))),
-        })
-    return ApiResponse(data={
-        "total": catalog.get("total_templates", len(lightweight)),
-        "categories": catalog.get("categories", []),
-        "templates": lightweight,
-    })
-
-
-@router.post("/from-template", response_model=ApiResponse, status_code=201)
-async def create_from_template(
-    body: dict,
-    svc: AgentFlowService = Depends(get_agent_flow_service),
-):
-    """Create a new Agent Flow from a template ID.
-
-    Body: ``{ "template_id": "translate-en-da", "name": "Optional override" }``
-    """
-    template_id = body.get("template_id")
-    if not template_id:
-        raise HTTPException(400, "template_id is required")
-
-    catalog = _load_templates()
-    template = None
-    for t in catalog.get("templates", []):
-        if t["id"] == template_id:
-            template = t
-            break
-
-    if not template:
-        raise HTTPException(404, f"Template not found: {template_id}")
-
-    # Create the flow
-    flow_name = body.get("name") or template["name"]
-    flow = await svc.create(
-        name=flow_name,
-        description=template.get("description", ""),
-        trigger_type=template.get("trigger_type", "manual"),
-        status="draft",
-    )
-
-    # Save the graph (nodes + edges) from the template
-    nodes_data = template.get("nodes", [])
-    edges_data = template.get("edges", [])
-    if nodes_data:
-        saved = await svc.save_flow_graph(
-            flow_id=flow.id,
-            nodes_data=nodes_data,
-            edges_data=edges_data,
-            viewport={"x": 50, "y": 100, "zoom": 0.85},
-        )
-        if saved:
-            flow = saved
-
-    return ApiResponse(data=AgentFlowResponse.model_validate(flow))
 
 
 # ═══════════════════════════════════════════════════════════════
