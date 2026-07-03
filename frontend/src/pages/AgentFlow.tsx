@@ -438,6 +438,199 @@ const edgeTypes: EdgeTypes = {
 
 
 // ═══════════════════════════════════════════════════════════════
+// OFFICE NODE FIELDS — with folder picker
+// ═══════════════════════════════════════════════════════════════
+
+const READ_ACTIONS = ['excel_read', 'word_read', 'pptx_read'];
+
+function OfficeNodeFields({ config, updateConfig }: { config: Record<string, any>; updateConfig: (k: string, v: any) => void }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [folders, setFolders] = useState<any[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+
+  const action = config.action || 'word_read';
+  const isReadAction = READ_ACTIONS.includes(action);
+  const pathKey = isReadAction ? 'input_path' : 'output_path';
+  const folderLabel = isReadAction ? 'Source Folder' : 'Destination Folder';
+  const folderHint = isReadAction
+    ? 'Where to read the file from'
+    : 'Where to save the output file';
+  const folderPlaceholder = isReadAction ? 'Input/' : 'Output/';
+
+  const openPicker = async () => {
+    setShowPicker(true);
+    setLoadingFolders(true);
+    try {
+      const res = await axios.get('/api/v1/workspace/tree');
+      const tree = res.data?.data || [];
+      // Flatten to just directories
+      const dirs: { path: string; depth: number }[] = [];
+      const walk = (nodes: any[], depth: number) => {
+        for (const n of nodes) {
+          if (n.type === 'directory') {
+            dirs.push({ path: n.path, depth });
+            if (n.children) walk(n.children, depth + 1);
+          }
+        }
+      };
+      walk(tree, 0);
+      setFolders(dirs);
+    } catch {
+      setFolders([]);
+    }
+    setLoadingFolders(false);
+  };
+
+  const selectFolder = (folderPath: string) => {
+    updateConfig(pathKey, folderPath + '/');
+    setShowPicker(false);
+  };
+
+  return (
+    <>
+      {/* Action dropdown */}
+      <div className="space-y-1.5">
+        <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Action</label>
+        <select
+          value={action}
+          onChange={(e) => updateConfig('action', e.target.value)}
+          className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+        >
+          <optgroup label="Excel">
+            <option value="excel_read">Excel &mdash; Read</option>
+            <option value="excel_create">Excel &mdash; Create</option>
+            <option value="excel_write">Excel &mdash; Write</option>
+          </optgroup>
+          <optgroup label="Word">
+            <option value="word_read">Word &mdash; Read</option>
+            <option value="word_create">Word &mdash; Create</option>
+            <option value="word_replace">Word &mdash; Replace Placeholders</option>
+          </optgroup>
+          <optgroup label="PowerPoint">
+            <option value="pptx_read">PowerPoint &mdash; Read</option>
+            <option value="pptx_replace">PowerPoint &mdash; Replace Placeholders</option>
+          </optgroup>
+        </select>
+      </div>
+
+      {/* Single smart folder field */}
+      <div className="space-y-1.5">
+        <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+          <FolderOpen className="w-3 h-3 text-[#10b981]/60" /> {folderLabel}
+        </label>
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={config[pathKey] || ''}
+            onChange={(e) => updateConfig(pathKey, e.target.value)}
+            className="flex-1 bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+            placeholder={folderPlaceholder}
+          />
+          <button
+            onClick={openPicker}
+            className="px-2.5 bg-[#10b981]/10 border border-[#10b981]/30 rounded-lg text-[#10b981] hover:bg-[#10b981]/20 transition-colors"
+            title="Browse workspace folders"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <p className="text-[8px] text-[#7a8899]/60">{folderHint}</p>
+      </div>
+
+      {/* Excel sheet name */}
+      {['excel_read', 'excel_create', 'excel_write'].includes(action) && (
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Sheet Name</label>
+          <input
+            type="text"
+            value={config.sheet_name || ''}
+            onChange={(e) => updateConfig('sheet_name', e.target.value)}
+            className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+            placeholder="Sheet1"
+          />
+        </div>
+      )}
+
+      {/* Word content template */}
+      {action === 'word_create' && (
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Content Template</label>
+          <textarea
+            value={config.content_template || ''}
+            onChange={(e) => updateConfig('content_template', e.target.value)}
+            rows={3}
+            className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none resize-none"
+            placeholder={'Use {{context}} for predecessor data.'}
+          />
+        </div>
+      )}
+
+      <div className="p-2.5 bg-[#10b981]/5 border border-[#10b981]/20 rounded-lg">
+        <p className="text-[8px] text-[#10b981]/80">
+          <strong>Office</strong> &mdash; All paths are relative to the workspace root.
+          Requires Office App Mode enabled in the Katana.
+        </p>
+      </div>
+
+      {/* Folder Picker Modal */}
+      {showPicker && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-[#0a0e1a] border border-[#1a2040] rounded-xl p-5 w-96 max-h-[60vh] shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#c8d0d8] flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-[#10b981]" />
+                Select {folderLabel}
+              </h3>
+              <button
+                onClick={() => setShowPicker(false)}
+                className="p-1 hover:bg-[#1a2040] text-[#7a8899] hover:text-[#c8d0d8] rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-0.5 min-h-[200px]">
+              {loadingFolders ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-[#10b981] animate-spin" />
+                </div>
+              ) : folders.length === 0 ? (
+                <p className="text-xs text-[#7a8899] text-center py-8">No folders found in workspace</p>
+              ) : (
+                <>
+                  {/* Workspace root option */}
+                  <button
+                    onClick={() => selectFolder('')}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[#10b981]/10 transition-colors group"
+                  >
+                    <FolderOpen className="w-4 h-4 text-[#10b981]" />
+                    <span className="text-xs text-[#c8d0d8] font-medium">/ (workspace root)</span>
+                    <span className="ml-auto text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">Select</span>
+                  </button>
+                  {folders.map((f) => (
+                    <button
+                      key={f.path}
+                      onClick={() => selectFolder(f.path)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[#10b981]/10 transition-colors group"
+                      style={{ paddingLeft: `${12 + f.depth * 16}px` }}
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 text-[#f59e0b]/70" />
+                      <span className="text-xs text-[#c8d0d8]">{f.path.split('/').pop()}</span>
+                      <span className="ml-auto text-[9px] text-[#10b981] opacity-0 group-hover:opacity-100 transition-opacity">Select</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 // NODE INSPECTOR PANEL
 // ═══════════════════════════════════════════════════════════════
 
@@ -1525,94 +1718,7 @@ Content-Type: application/json
 
         {/* Office fields */}
         {nodeType === 'office' && (
-          <>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Action</label>
-              <select
-                value={config.action || 'word_read'}
-                onChange={(e) => updateConfig('action', e.target.value)}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-              >
-                <optgroup label="Excel">
-                  <option value="excel_read">Excel &mdash; Read</option>
-                  <option value="excel_create">Excel &mdash; Create</option>
-                  <option value="excel_write">Excel &mdash; Write</option>
-                </optgroup>
-                <optgroup label="Word">
-                  <option value="word_read">Word &mdash; Read</option>
-                  <option value="word_create">Word &mdash; Create</option>
-                  <option value="word_replace">Word &mdash; Replace Placeholders</option>
-                </optgroup>
-                <optgroup label="PowerPoint">
-                  <option value="pptx_read">PowerPoint &mdash; Read</option>
-                  <option value="pptx_replace">PowerPoint &mdash; Replace Placeholders</option>
-                </optgroup>
-              </select>
-            </div>
-
-            {/* Source Folder / Input — always visible */}
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
-                <FolderOpen className="w-3 h-3 text-[#10b981]/60" /> Source Folder / Input File
-              </label>
-              <input
-                type="text"
-                value={config.input_path || ''}
-                onChange={(e) => updateConfig('input_path', e.target.value)}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-                placeholder="Input/report.xlsx"
-              />
-              <p className="text-[8px] text-[#7a8899]/60">Relative to workspace root. e.g. Input/data.xlsx</p>
-            </div>
-
-            {/* Destination Folder / Output — always visible */}
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
-                <FolderOpen className="w-3 h-3 text-[#f59e0b]/60" /> Destination Folder / Output File
-              </label>
-              <input
-                type="text"
-                value={config.output_path || ''}
-                onChange={(e) => updateConfig('output_path', e.target.value)}
-                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-                placeholder="Output/result.xlsx"
-              />
-              <p className="text-[8px] text-[#7a8899]/60">Where to save. e.g. Output/translated.docx</p>
-            </div>
-
-            {['excel_read', 'excel_create', 'excel_write'].includes(config.action || '') && (
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Sheet Name</label>
-                <input
-                  type="text"
-                  value={config.sheet_name || ''}
-                  onChange={(e) => updateConfig('sheet_name', e.target.value)}
-                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-                  placeholder="Sheet1"
-                />
-              </div>
-            )}
-
-            {['word_create'].includes(config.action || '') && (
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Content Template</label>
-                <textarea
-                  value={config.content_template || ''}
-                  onChange={(e) => updateConfig('content_template', e.target.value)}
-                  rows={3}
-                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none resize-none"
-                  placeholder='Leave empty to use predecessor output. Use {{context}} for predecessor data.'
-                />
-              </div>
-            )}
-
-            <div className="p-2.5 bg-[#10b981]/5 border border-[#10b981]/20 rounded-lg">
-              <p className="text-[8px] text-[#10b981]/80">
-                <strong>Office</strong> &mdash; Uses openpyxl, python-docx, and python-pptx adapters.
-                All paths relative to workspace. Requires Office App Mode enabled.
-              </p>
-            </div>
-          </>
+          <OfficeNodeFields config={config} updateConfig={updateConfig} />
         )}
       </div>
     </div>
