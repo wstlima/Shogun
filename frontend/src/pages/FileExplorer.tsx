@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FolderOpen, File, Folder, Trash2, Edit3, Save, X, RefreshCw,
   ChevronRight, ChevronDown, FileText, FileCode, FileSpreadsheet,
   Image, Archive, FolderPlus, FilePlus, HardDrive,
-  AlertTriangle, Check, Search
+  AlertTriangle, Check, Search, Upload
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -137,6 +137,10 @@ export const FileExplorer = () => {
   const [renameName, setRenameName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const dragCounter = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Flash message ─────────────────────────────────────────────
   const flash = useCallback((type: 'success' | 'error', text: string) => {
@@ -284,6 +288,69 @@ export const FileExplorer = () => {
     }
   };
 
+  // ── File Upload (drag & drop + button) ────────────────────────
+  const handleUpload = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    const targetPath = selectedNode?.type === 'directory' ? selectedNode.path : '';
+
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      formData.append('path', targetPath);
+
+      const res = await axios.post('/api/v1/workspace/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data?.success) {
+        const count = res.data.data.uploaded;
+        flash('success', `Uploaded ${count} file${count !== 1 ? 's' : ''}`);
+        if (targetPath) {
+          setExpandedPaths(prev => new Set([...prev, targetPath]));
+        }
+        fetchData();
+      }
+    } catch (err: any) {
+      flash('error', err?.response?.data?.detail || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ── Drag & Drop handlers ──────────────────────────────────────
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (e.dataTransfer.files?.length) {
+      handleUpload(e.dataTransfer.files);
+    }
+  };
+
   // ── Filter tree ───────────────────────────────────────────────
   const filterTree = (nodes: TreeNode[], query: string): TreeNode[] => {
     if (!query) return nodes;
@@ -321,7 +388,37 @@ export const FileExplorer = () => {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className="h-full flex flex-col relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Hidden file input for upload button */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={e => { if (e.target.files) { handleUpload(e.target.files); e.target.value = ''; } }}
+      />
+
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-shogun-bg/90 backdrop-blur-sm flex items-center justify-center border-2 border-dashed border-shogun-blue rounded-xl transition-all">
+          <div className="text-center space-y-3 animate-pulse">
+            <Upload className="w-12 h-12 text-shogun-blue mx-auto" />
+            <h3 className="text-lg font-bold text-shogun-blue">Drop files here</h3>
+            <p className="text-sm text-shogun-subdued">
+              {selectedNode?.type === 'directory'
+                ? <>Upload into <span className="font-mono text-shogun-blue">{selectedNode.path}/</span></>
+                : 'Upload to workspace root'
+              }
+            </p>
+          </div>
+        </div>
+      )}
       {/* Status bar */}
       {statusMsg && (
         <div className={cn(
@@ -345,6 +442,10 @@ export const FileExplorer = () => {
             <button onClick={() => setShowNewDialog('folder')} title="New Folder"
               className="p-1.5 rounded hover:bg-shogun-card text-shogun-subdued hover:text-shogun-gold transition-colors">
               <FolderPlus className="w-4 h-4" />
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} title="Upload Files" disabled={uploading}
+              className="p-1.5 rounded hover:bg-shogun-card text-shogun-subdued hover:text-emerald-400 transition-colors">
+              <Upload className={cn("w-4 h-4", uploading && "animate-bounce")} />
             </button>
             {selectedNode && (
               <>

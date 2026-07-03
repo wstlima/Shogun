@@ -7,6 +7,7 @@ Routes:
   POST   /api/v1/workspace/mkdir         — create directory
   DELETE /api/v1/workspace/delete?path=...— delete file or empty dir
   POST   /api/v1/workspace/rename        — rename/move file or dir
+  POST   /api/v1/workspace/upload        — upload files (multipart)
   GET    /api/v1/workspace/info          — workspace metadata
 """
 
@@ -17,7 +18,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from shogun.config import settings
@@ -269,5 +270,58 @@ async def rename_item(req: RenameRequest):
         "data": {
             "old_path": req.old_path,
             "new_path": req.new_path,
+        },
+    }
+
+
+@router.post("/upload")
+async def upload_files(
+    files: list[UploadFile] = File(...),
+    path: str = Form(default=""),
+):
+    """Upload one or more files into the workspace via multipart form.
+
+    - `files`: The file(s) to upload.
+    - `path`: Relative directory inside the workspace to upload into.
+              Defaults to workspace root.
+    """
+    await _check_posture()
+    root = _get_workspace_root()
+
+    target_dir = _validate_path(root, path) if path.strip() else root
+    if not target_dir.is_dir():
+        raise HTTPException(400, f"Not a directory: {path}")
+
+    results = []
+    for f in files:
+        if not f.filename:
+            continue
+
+        # Validate the final file path
+        safe_name = Path(f.filename).name  # Strip any directory components
+        if not safe_name or safe_name.startswith("."):
+            results.append({"name": f.filename, "status": "rejected", "reason": "Invalid filename"})
+            continue
+
+        dest = target_dir / safe_name
+        # Ensure still inside workspace
+        try:
+            dest.resolve().relative_to(root)
+        except ValueError:
+            results.append({"name": safe_name, "status": "rejected", "reason": "Path escape"})
+            continue
+
+        content = await f.read()
+        dest.write_bytes(content)
+        size = dest.stat().st_size
+        log.info("Workspace upload: %s (%d bytes)", safe_name, size)
+        results.append({"name": safe_name, "status": "uploaded", "size": size})
+
+    return {
+        "success": True,
+        "data": {
+            "path": path or ".",
+            "uploaded": len([r for r in results if r["status"] == "uploaded"]),
+            "files": results,
         },
     }
