@@ -47,6 +47,7 @@ import {
   Crosshair,
   Monitor as MonitorIcon,
   FileSpreadsheet,
+  FolderOpen as FolderOpenIcon,
   Power,
   List,
   Clock,
@@ -75,6 +76,7 @@ export function Guide() {
     { id: 'ref-mado', label: 'Mado', icon: AppWindow, color: 'text-cyan-400' },
     { id: 'ref-ronin', label: 'Ronin', icon: Crosshair, color: 'text-orange-400' },
     { id: 'ref-office', label: 'Office', icon: FileSpreadsheet, color: 'text-green-400' },
+    { id: 'ref-workspace', label: 'Workspace', icon: FolderOpenIcon, color: 'text-amber-400' },
     { id: 'ref-torii', label: 'Torii', icon: Lock, color: 'text-red-400' },
     { id: 'ref-nexus', label: 'Nexus', icon: Globe, color: 'text-indigo-400' },
     { id: 'ref-nexus-gateway', label: 'Nexus Gateway', icon: Link2, color: 'text-indigo-400' },
@@ -1238,6 +1240,118 @@ export function Guide() {
                  <div className="shogun-card space-y-2">
                     <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-green-400" /> Audit Trail</div>
                     <p className="text-xs text-shogun-subdued leading-relaxed">{"Every Office operation emits an office.* event into the dual-write audit chain. Events include application, action, file paths, duration, and status. View them on the Logs page filtered by category: office."}</p>
+                 </div>
+              </section>
+
+             {/* ═══════════════════════════════════════════════════════════════ */}
+             {/* WORKSPACE (FILE EXPLORER) */}
+             {/* ═══════════════════════════════════════════════════════════════ */}
+              <section id="ref-workspace" className="space-y-6 scroll-mt-6">
+                 <div className="flex items-center gap-3 border-b-2 border-amber-400/40 pb-3">
+                    <FolderOpenIcon className="w-6 h-6 text-amber-400" />
+                    <div>
+                       <h4 className="text-xl font-bold uppercase tracking-widest">Workspace &mdash; Agent File System</h4>
+                       <p className="text-xs text-shogun-subdued">A dedicated folder where the Shogun and all Samurai agents have persistent read/write access.</p>
+                    </div>
+                 </div>
+
+                 <div className="shogun-card space-y-3">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Overview</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">{"The Workspace is a single, dedicated directory where the Shogun and all Samurai agents can read, write, and manage files. It serves as the agent\u2019s persistent \u201Cdesk\u201D \u2014 a safe, always-available location to store outputs, share data between agents, and create working documents. The Workspace is disabled only at SHRINE security posture."}</p>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">{"Default location: data/workspace/ inside the Shogun project directory. The path is configurable via environment variable WORKSPACE_PATH."}</p>
+                 </div>
+
+                 <div className="shogun-card bg-amber-500/10 border-amber-500/30 border-l-4 border-l-amber-500 space-y-3">
+                    <h5 className="text-sm font-bold text-amber-400 flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Getting Started</h5>
+                    <ol className="text-xs text-shogun-subdued space-y-2 ml-4 list-decimal">
+                       <li>{"Navigate to Comms (sidebar) and click the Files tab."}</li>
+                       <li>{"The File Explorer shows the workspace tree on the left and a content viewer/editor on the right."}</li>
+                       <li>{"Use the toolbar buttons to create new files, new folders, rename, or delete items."}</li>
+                       <li>{"Click any file to view its content. Click Edit to modify it inline, then Save."}</li>
+                       <li>{"In Mission Mode chat, ask the Shogun to use workspace tools \u2014 it can read, write, list, and manage files directly."}</li>
+                       <li>{"The workspace folder is automatically created on first startup at data/workspace/."}</li>
+                    </ol>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><FolderOpenIcon className="w-4 h-4 text-amber-400" /> File Explorer (Comms &rarr; Files Tab)</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"The File Explorer is a tab inside the Comms page, alongside Chat, Mail, and Calendar. It provides a visual interface for managing workspace files:"}</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>Tree sidebar:</strong> Expandable directory tree with file-type icons (code, spreadsheet, image, archive, text), size labels, and real-time search filter.</li>
+                          <li><strong>Content viewer:</strong> Displays file contents with monospace formatting. Shows file path, extension, and size in the header bar.</li>
+                          <li><strong>Inline editor:</strong> Click Edit to modify any text file directly in the browser. Click Save to write changes back to disk.</li>
+                          <li><strong>Create File:</strong> Click the file+ icon in the toolbar. Enter a filename. The file is created inside the currently selected folder (or workspace root).</li>
+                          <li><strong>Create Folder:</strong> Click the folder+ icon. Enter a folder name. Nested paths are created automatically.</li>
+                          <li><strong>Rename:</strong> Select an item, click the edit icon. Enter the new name and confirm.</li>
+                          <li><strong>Delete:</strong> Select an item, click the trash icon. A confirmation dialog appears. Directories are deleted recursively including all contents.</li>
+                          <li><strong>Grid view:</strong> When a directory is selected, its contents are displayed as a clickable card grid with icons and sizes.</li>
+                          <li><strong>Info footer:</strong> Shows the full workspace path, total file count, directory count, and disk usage in MB.</li>
+                       </ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Terminal className="w-4 h-4 text-amber-400" /> 6 Agent Native Tools</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"In Mission Mode, the Shogun and all Samurai agents have 6 workspace tools injected as native functions. The agent sees the workspace path in its system prompt and can use these tools autonomously:"}</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>workspace_info</strong> <span className="text-green-400">(low risk)</span> \u2014 Returns workspace path, whether access is enabled, total files, total directories, and total size in MB.</li>
+                          <li><strong>workspace_list</strong> <span className="text-green-400">(low risk)</span> \u2014 Lists files and directories at a given relative path. Returns name, type, size (for files), and child count (for dirs).</li>
+                          <li><strong>workspace_read</strong> <span className="text-green-400">(low risk)</span> \u2014 Reads a text file\u2019s content (capped at 5 MB). Returns content, size, and path. Binary files return an error.</li>
+                          <li><strong>workspace_write</strong> <span className="text-yellow-400">(medium risk)</span> \u2014 Creates or overwrites a text file. Parent directories are auto-created. Returns action (created/overwritten) and size.</li>
+                          <li><strong>workspace_mkdir</strong> <span className="text-green-400">(low risk)</span> \u2014 Creates a subdirectory with parents. Returns action (created/already_exists).</li>
+                          <li><strong>workspace_delete</strong> <span className="text-red-400">(high risk)</span> \u2014 Deletes a single file. Cannot delete directories (safety constraint via agent tools; the UI can delete dirs).</li>
+                       </ul>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Shield className="w-4 h-4 text-amber-400" /> Path Validation &amp; Security</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"All workspace operations \u2014 both the File Explorer UI and agent native tools \u2014 enforce strict path validation at every level:"}</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>Boundary enforcement:</strong> Every path is resolved to its absolute form and checked that it remains inside the workspace root. Any escape attempt is blocked.</li>
+                          <li><strong>Traversal blocking:</strong> Paths containing <code className="bg-shogun-card px-1 rounded">..</code> are rejected immediately, before any filesystem operation.</li>
+                          <li><strong>Absolute path blocking:</strong> Only relative paths (from workspace root) are accepted. Paths starting with <code className="bg-shogun-card px-1 rounded">/</code> or <code className="bg-shogun-card px-1 rounded">\</code> are rejected.</li>
+                          <li><strong>UNC path blocking:</strong> Network paths are rejected to prevent lateral movement.</li>
+                          <li><strong>Size guard:</strong> File reads are capped at 5 MB (agent tools) or 10 MB (File Explorer UI) to prevent memory exhaustion.</li>
+                          <li><strong>Root protection:</strong> The workspace root directory itself cannot be deleted.</li>
+                       </ul>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Lock className="w-4 h-4 text-amber-400" /> Security Posture Matrix</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"The workspace is a binary gate: either fully available or completely locked."}</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><strong>SHRINE:</strong> \u274C Workspace completely disabled. No read, no write, no listing. All 6 tools return errors. File Explorer shows an error state with retry button.</li>
+                          <li><strong>GUARDED:</strong> \u2705 Full read/write access. All 6 agent tools available. File Explorer fully functional.</li>
+                          <li><strong>TACTICAL:</strong> \u2705 Full read/write access. All 6 agent tools available.</li>
+                          <li><strong>CAMPAIGN:</strong> \u2705 Full read/write access. All 6 agent tools available.</li>
+                          <li><strong>RONIN:</strong> \u2705 Full read/write access. All 6 agent tools available.</li>
+                       </ul>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Link2 className="w-4 h-4 text-amber-400" /> Office App Mode Alignment</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"The Workspace and Office App Mode share the same folder concept. The four \u201CApproved Folders\u201D in the Katana\u2019s Office tab (input, output, templates, temp) can be left empty to auto-map to the workspace root directory. This means Office file operations and agent workspace tools operate in the same directory by default. Configure custom paths in the Katana \u2192 Office tab if you need separate boundaries for Office automation."}</p>
+                    </div>
+                    <div className="shogun-card space-y-2">
+                       <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-amber-400" /> REST API Endpoints</div>
+                       <p className="text-xs text-shogun-subdued leading-relaxed">{"The File Explorer UI uses a dedicated REST API under /api/v1/workspace/. These endpoints are also available for external integrations and custom tooling:"}</p>
+                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                          <li><code className="bg-shogun-card px-1 rounded">GET /api/v1/workspace/info</code> \u2014 Metadata, path, and disk usage</li>
+                          <li><code className="bg-shogun-card px-1 rounded">GET /api/v1/workspace/tree</code> \u2014 Full recursive directory tree (JSON)</li>
+                          <li><code className="bg-shogun-card px-1 rounded">GET /api/v1/workspace/read?path=</code> \u2014 Read file content as text</li>
+                          <li><code className="bg-shogun-card px-1 rounded">POST /api/v1/workspace/write</code> \u2014 Create or update file (JSON body: path, content)</li>
+                          <li><code className="bg-shogun-card px-1 rounded">POST /api/v1/workspace/mkdir</code> \u2014 Create directory (JSON body: path)</li>
+                          <li><code className="bg-shogun-card px-1 rounded">DELETE /api/v1/workspace/delete?path=</code> \u2014 Delete file or directory</li>
+                          <li><code className="bg-shogun-card px-1 rounded">POST /api/v1/workspace/rename</code> \u2014 Rename/move (JSON body: old_path, new_path)</li>
+                       </ul>
+                    </div>
+                 </div>
+
+                 <div className="shogun-card space-y-2">
+                    <div className="font-bold text-shogun-text flex items-center gap-2"><Activity className="w-4 h-4 text-amber-400" /> System Prompt Integration</div>
+                    <p className="text-xs text-shogun-subdued leading-relaxed">{"When workspace is enabled, the Shogun\u2019s system prompt includes the workspace path and available tools in two places: the ACTIVE SECURITY POSTURE block (\u201CWorkspace: ENABLED \u2014 /path/to/workspace\u201D) and the YOUR CAPABILITIES block (listing all 6 tools by name). This ensures the agent knows where to save files and which tools it can call. At SHRINE, the prompt shows \u201CWorkspace: DISABLED (SHRINE posture)\u201D."}</p>
                  </div>
               </section>
 
