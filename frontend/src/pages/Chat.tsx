@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, ChevronUp, Globe, Mail, Calendar, MessageSquare, Zap, Shield, ShieldAlert, Target, Sparkles, Monitor, MousePointer2, Keyboard, AlertCircle, Camera, Square, Check, XCircle } from 'lucide-react';
+import { Send, Terminal, Bot, User, Trash2, History, X, ChevronDown, ChevronRight, ChevronUp, Globe, Mail, Calendar, MessageSquare, Zap, Shield, ShieldAlert, Target, Sparkles, Monitor, MousePointer2, Keyboard, AlertCircle, Camera, Square, Check, XCircle, FolderOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { MailView } from './MailView';
 import { CalendarView } from './CalendarView';
+import { FileExplorer } from './FileExplorer';
 
 type ChatMode = 'auto' | 'fast' | 'governed' | 'mission';
 
@@ -804,7 +805,7 @@ export const ChatConsole = () => {
 
 export const Chat = () => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'chat' | 'mail' | 'calendar'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'mail' | 'calendar' | 'files'>('chat');
 
   return (
     <div className="flex flex-col w-full min-w-0 h-[calc(100vh-140px)] space-y-4">
@@ -817,9 +818,10 @@ export const Chat = () => {
               {activeTab === 'chat' && t('chat.badge', 'Command Console')}
               {activeTab === 'mail' && t('mail.badge', 'Mail Client')}
               {activeTab === 'calendar' && t('calendar.badge', 'Calendar Board')}
+              {activeTab === 'files' && 'File Explorer'}
             </span>
           </h2>
-          <p className="text-shogun-subdued text-sm mt-1">{t('comms.subtitle', 'Chat Â· Mail Â· Calendar')}</p>
+          <p className="text-shogun-subdued text-sm mt-1">{t('comms.subtitle', 'Chat · Mail · Calendar · Files')}</p>
         </div>
       </div>
 
@@ -828,7 +830,8 @@ export const Chat = () => {
         {([
           { id: 'chat', label: t('chat.tab_chat', 'Chat'), icon: MessageSquare },
           { id: 'mail', label: t('chat.tab_mail', 'Mail'), icon: Mail },
-          { id: 'calendar', label: t('chat.tab_calendar', 'Calendar'), icon: Calendar }
+          { id: 'calendar', label: t('chat.tab_calendar', 'Calendar'), icon: Calendar },
+          { id: 'files', label: 'Files', icon: FolderOpen }
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -852,6 +855,7 @@ export const Chat = () => {
         {activeTab === 'chat' && <ChatConsole />}
         {activeTab === 'mail' && <MailView />}
         {activeTab === 'calendar' && <CalendarView />}
+        {activeTab === 'files' && <FileExplorer />}
       </div>
     </div>
   );

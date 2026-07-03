@@ -192,6 +192,36 @@ async def check_office_access() -> None:
         )
 
 
+# ── Workspace access gate ────────────────────────────────────────────
+
+async def check_workspace_access() -> str:
+    """Check if workspace access is allowed at the current posture tier.
+
+    Returns the resolved workspace path string if access is permitted.
+    Raises HTTP 403 if the posture is SHRINE (workspace disabled).
+    """
+    from shogun.api.security import _get_agent_posture
+    from shogun.config import settings
+
+    posture = await _get_agent_posture()
+    if not posture.get("workspace_enabled", True):
+        tier = posture.get("active_tier", "tactical")
+        log.warning("[PostureGuard] Workspace access blocked (tier=%s)", tier)
+        _emit_block_event(
+            "workspace_disabled",
+            f"Workspace access blocked: disabled at tier {tier.upper()}",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Security posture [{tier.upper()}] does not permit workspace access. "
+                   "Raise the security tier above SHRINE in the Torii to use the workspace.",
+        )
+
+    workspace_dir = settings.workspace_path
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    return str(workspace_dir.resolve())
+
+
 # ── Mado browser access gate ────────────────────────────────────────
 
 async def check_mado_access() -> None:

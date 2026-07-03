@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     mado_path: Path = PROJECT_ROOT / "data" / "mado"
     ronin_path: Path = PROJECT_ROOT / "data" / "ronin"
     office_path: Path = PROJECT_ROOT / "data" / "office"
+    workspace_path: Path = PROJECT_ROOT / "data" / "workspace"
 
     # ── Telegram ─────────────────────────────────────────────
     telegram_bot_token: str | None = None
@@ -100,6 +101,8 @@ class Settings(BaseSettings):
             # Office App Mode directories
             self.office_path,
             self.office_path / "temp",
+            # Agent workspace
+            self.workspace_path,
         ]:
             directory.mkdir(parents=True, exist_ok=True)
 

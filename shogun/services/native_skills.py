@@ -1129,6 +1129,118 @@ NATIVE_TOOLS = [
             },
         },
     },
+    # ── Workspace Tools ──────────────────────────────────────────────
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_info",
+            "description": "Get information about the agent workspace: its absolute path, whether access is enabled at the current security posture, and disk usage summary.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_list",
+            "description": "List files and directories inside the workspace. Optionally provide a relative subdirectory path to list. Returns file names, sizes, and types.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path inside the workspace to list. Use '.' or omit for the workspace root.",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_read",
+            "description": "Read the contents of a text file from the workspace. Provide a relative file path within the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the file inside the workspace.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_write",
+            "description": "Write or create a text file in the workspace. If the file exists, it will be overwritten. Parent directories are created automatically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path for the file inside the workspace.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The text content to write to the file.",
+                    },
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_mkdir",
+            "description": "Create a subdirectory inside the workspace. Parent directories are created automatically if needed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path of the directory to create inside the workspace.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "high",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_delete",
+            "description": "Delete a file from the workspace. Cannot delete directories — only individual files. This action is irreversible.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the file to delete inside the workspace.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
 ]
 
 
@@ -1908,6 +2020,10 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
         elif name.startswith("office_"):
             return await _execute_office_tool(name, args)
 
+        # ── Workspace Tools ──────────────────────────────────────────
+        elif name.startswith("workspace_"):
+            return await _execute_workspace_tool(name, args)
+
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
             
@@ -2310,3 +2426,199 @@ async def _log_office_event(
         )
     except Exception as exc:
         logger.debug("Failed to log office event: %s", exc)
+
+
+# ── Workspace Tool Execution ─────────────────────────────────────────
+
+def _validate_workspace_path(workspace_root: str, relative_path: str) -> str:
+    """Resolve a relative path against the workspace root and validate it.
+
+    Returns the absolute path string if valid.
+    Raises ValueError if the path escapes the workspace boundary.
+    """
+    from pathlib import Path
+
+    root = Path(workspace_root).resolve()
+    # Reject obvious traversal patterns
+    if ".." in relative_path or relative_path.startswith("/") or relative_path.startswith("\\"):
+        raise ValueError(f"Path traversal blocked: '{relative_path}' — paths must be relative and cannot contain '..'")
+
+    # Reject UNC paths
+    if relative_path.startswith("\\\\"):
+        raise ValueError(f"UNC paths are not allowed: '{relative_path}'")
+
+    target = (root / relative_path).resolve()
+
+    # Final containment check
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise ValueError(f"Path escape blocked: '{relative_path}' resolves outside the workspace boundary")
+
+    return str(target)
+
+
+async def _execute_workspace_tool(name: str, args: dict[str, Any]) -> str:
+    """Execute a workspace file-system tool.
+
+    All operations are gated by the posture guard (blocked at SHRINE)
+    and path-validated to stay inside the workspace boundary.
+    """
+    import os
+    from pathlib import Path
+    from shogun.services.posture_guard import check_workspace_access
+
+    try:
+        workspace_root = await check_workspace_access()
+    except Exception as exc:
+        return json.dumps({"status": "error", "message": str(exc.detail if hasattr(exc, 'detail') else exc)})
+
+    try:
+        if name == "workspace_info":
+            root = Path(workspace_root)
+            total_files = sum(1 for _ in root.rglob("*") if _.is_file())
+            total_dirs = sum(1 for _ in root.rglob("*") if _.is_dir())
+            total_size = sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
+            size_mb = round(total_size / (1024 * 1024), 2)
+            return json.dumps({
+                "status": "success",
+                "workspace_path": workspace_root,
+                "enabled": True,
+                "total_files": total_files,
+                "total_directories": total_dirs,
+                "total_size_mb": size_mb,
+                "message": f"Workspace at {workspace_root} — {total_files} files, {total_dirs} directories, {size_mb} MB",
+            })
+
+        elif name == "workspace_list":
+            rel_path = args.get("path", ".").strip() or "."
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            if not target_path.exists():
+                return json.dumps({"status": "error", "message": f"Directory not found: {rel_path}"})
+            if not target_path.is_dir():
+                return json.dumps({"status": "error", "message": f"Not a directory: {rel_path}"})
+
+            entries = []
+            for item in sorted(target_path.iterdir()):
+                entry = {
+                    "name": item.name,
+                    "type": "directory" if item.is_dir() else "file",
+                }
+                if item.is_file():
+                    entry["size_bytes"] = item.stat().st_size
+                elif item.is_dir():
+                    entry["children"] = sum(1 for _ in item.iterdir())
+                entries.append(entry)
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "entries": entries,
+                "count": len(entries),
+            })
+
+        elif name == "workspace_read":
+            rel_path = args.get("path", "").strip()
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            if not target_path.exists():
+                return json.dumps({"status": "error", "message": f"File not found: {rel_path}"})
+            if not target_path.is_file():
+                return json.dumps({"status": "error", "message": f"Not a file: {rel_path}"})
+
+            # Size guard: refuse to read files > 5 MB as text
+            size = target_path.stat().st_size
+            if size > 5 * 1024 * 1024:
+                return json.dumps({"status": "error", "message": f"File too large to read as text: {size} bytes (max 5 MB)"})
+
+            try:
+                content = target_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                return json.dumps({"status": "error", "message": f"Cannot read as text (binary file): {rel_path}"})
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "size_bytes": size,
+                "content": content,
+            })
+
+        elif name == "workspace_write":
+            rel_path = args.get("path", "").strip()
+            content = args.get("content", "")
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            # Create parent directories
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+
+            existed = target_path.exists()
+            target_path.write_text(content, encoding="utf-8")
+            size = target_path.stat().st_size
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "action": "overwritten" if existed else "created",
+                "size_bytes": size,
+                "message": f"{'Overwrote' if existed else 'Created'} {rel_path} ({size} bytes)",
+            })
+
+        elif name == "workspace_mkdir":
+            rel_path = args.get("path", "").strip()
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            existed = target_path.exists()
+            target_path.mkdir(parents=True, exist_ok=True)
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "action": "already_exists" if existed else "created",
+                "message": f"{'Already exists' if existed else 'Created'}: {rel_path}",
+            })
+
+        elif name == "workspace_delete":
+            rel_path = args.get("path", "").strip()
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            if not target_path.exists():
+                return json.dumps({"status": "error", "message": f"File not found: {rel_path}"})
+            if target_path.is_dir():
+                return json.dumps({"status": "error", "message": f"Cannot delete directories — only files: {rel_path}"})
+
+            size = target_path.stat().st_size
+            target_path.unlink()
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "deleted_size_bytes": size,
+                "message": f"Deleted: {rel_path} ({size} bytes)",
+            })
+
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown workspace tool: {name}"})
+
+    except ValueError as exc:
+        return json.dumps({"status": "error", "message": str(exc)})
+    except Exception as exc:
+        logger.error(f"Workspace tool execution failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})

@@ -286,6 +286,10 @@ def create_app() -> FastAPI:
     from shogun.api.office import router as office_router
     app.include_router(office_router, prefix=prefix)
 
+    # Workspace File Explorer
+    from shogun.api.workspace import router as workspace_router
+    app.include_router(workspace_router, prefix=prefix)
+
     app.include_router(nexus_router, prefix=prefix)
 
     # ── Health / Identity Endpoint ───────────────────────────

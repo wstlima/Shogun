@@ -3335,7 +3335,7 @@ export function Katana() {
               {officeConfig && (
                 <div className="shogun-card space-y-4 mb-6">
                   <div className="font-bold text-shogun-text flex items-center gap-2"><FolderOpen className="w-4 h-4 text-shogun-gold" /> Approved Folders</div>
-                  <p className="text-xs text-shogun-subdued">All file operations are restricted to these folders. Files outside these boundaries will be rejected.</p>
+                  <p className="text-xs text-shogun-subdued">All file operations are restricted to these folders. Files outside these boundaries will be rejected. By default, these map to subdirectories inside the <span className="text-shogun-gold font-medium">Agent Workspace</span>.</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {['input', 'output', 'templates', 'temp'].map(folder => (
                       <div key={folder}>
@@ -3344,11 +3344,15 @@ export function Katana() {
                           <Folder className="w-4 h-4 text-shogun-subdued flex-shrink-0" />
                           <input type="text" value={officeConfig.folders?.[folder] || ''}
                             onChange={e => updateOfficeConfig(`folders.${folder}`, e.target.value)}
-                            placeholder={`C:\\Users\\...\\Documents\\Office\\${folder}`}
+                            placeholder={`workspace/${folder}`}
                             className="flex-1 bg-shogun-bg border border-shogun-border rounded-lg px-3 py-2 text-sm text-shogun-text placeholder-shogun-subdued/40 focus:outline-none focus:border-shogun-gold/50 transition-colors font-mono" />
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="bg-shogun-blue/5 border border-shogun-blue/20 rounded-lg p-3 flex items-start gap-2">
+                    <FileText className="w-4 h-4 text-shogun-blue flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-shogun-subdued">Leave paths empty to auto-map to the <span className="text-shogun-blue font-medium">Workspace</span> root folder (data/workspace). The Workspace is shared between Shogun, Samurai, and the File Explorer in Comms.</p>
                   </div>
                 </div>
               )}

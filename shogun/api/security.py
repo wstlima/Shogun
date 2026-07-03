@@ -69,6 +69,8 @@ _DEFAULT_POSTURE = {
     "office_ppt_enabled": True,
     "office_outlook_enabled": True,
     "office_outlook_mode": "draft_only",
+    # Agent Workspace
+    "workspace_enabled": True,
 }
 
 # Constraint values that each tier enforces when selected
@@ -95,6 +97,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_posture": "disabled",
         "ronin_max_sessions": 0,
         "office_enabled": False,
+        "workspace_enabled": False,
     },
     "guarded": {
         "filesystem_mode": "allowlist",
@@ -119,6 +122,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_max_sessions": 0,
         "office_enabled": True,
         "office_outlook_mode": "draft_only",
+        "workspace_enabled": True,
     },
     "tactical": {
         "filesystem_mode": "scoped",
@@ -143,6 +147,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_max_sessions": 0,
         "office_enabled": True,
         "office_outlook_mode": "confirmed_send",
+        "workspace_enabled": True,
     },
     "campaign": {
         "filesystem_mode": "full",
@@ -167,6 +172,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_max_sessions": 0,
         "office_enabled": True,
         "office_outlook_mode": "confirmed_send",
+        "workspace_enabled": True,
     },
     "ronin": {
         "filesystem_mode": "full",
@@ -203,6 +209,7 @@ TIER_CONSTRAINTS: dict[str, dict] = {
         "ronin_environment_policy": "any",
         "office_enabled": True,
         "office_outlook_mode": "confirmed_send",
+        "workspace_enabled": True,
     },
 }
 
