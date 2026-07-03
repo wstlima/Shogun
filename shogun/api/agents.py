@@ -2084,6 +2084,12 @@ BEHAVIOUR:
             # Strip <think>...</think> blocks before parsing tool calls
             import re as _re
             full_text_clean = _re.sub(r"<think>.*?</think>", "", full_text, flags=_re.DOTALL).strip()
+            # Normalize backtick-wrapped tool_call tags (common with Gemma, DeepSeek etc.)
+            # ```tool_call> or ```<tool_call> → <tool_call>
+            # </tool_call>``` or ```</tool_call> → </tool_call>
+            full_text_clean = _re.sub(r'`{1,3}\s*<?tool_call>?', '<tool_call>', full_text_clean)
+            full_text_clean = _re.sub(r'</tool_call>\s*`{1,3}', '</tool_call>', full_text_clean)
+            full_text_clean = _re.sub(r'`{1,3}\s*</tool_call>', '</tool_call>', full_text_clean)
             
             _valid_tool_names = _active_tool_names if _active_tool_names else []
             _tool_names_pattern = "|".join(_valid_tool_names) if _valid_tool_names else "NO_TOOLS"
