@@ -1625,7 +1625,11 @@ BEHAVIOUR:
                 "temperature": _temperature,
             }
             if active_tools:
-                req_json["tools"] = active_tools
+                # Strip Shogun-internal fields (risk, category) that LLM APIs reject
+                req_json["tools"] = [
+                    {"type": t.get("type", "function"), "function": t["function"]}
+                    for t in active_tools
+                ]
 
             # ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Diagnostic: log tool injection status ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
             _tool_names_sent = [t["function"]["name"] for t in active_tools] if active_tools else []
