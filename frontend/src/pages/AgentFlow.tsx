@@ -802,17 +802,22 @@ function NodeInspector({
         {nodeType === 'samurai' && (
           <>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Samurai Agent</label>
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                Linked Fleet Samurai <span className="text-[#d4a017]/70 font-normal normal-case tracking-normal">(Optional)</span>
+              </label>
               <select
                 value={config.agent_id || ''}
                 onChange={(e) => updateConfig('agent_id', e.target.value)}
                 className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#d4a017] transition-colors outline-none cursor-pointer"
               >
-                <option value="">Select agent...</option>
+                <option value="">Use Ephemeral / Ad-Hoc Samurai</option>
                 {agents.map((a: any) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+              <p className="text-[10px] text-[#7a8899] leading-tight">
+                Leave unlinked to spawn a temporary Samurai that won't clutter your Fleet.
+              </p>
             </div>
 
             <div className="space-y-1.5">
