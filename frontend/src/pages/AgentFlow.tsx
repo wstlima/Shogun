@@ -666,7 +666,7 @@ function NodeInspector({
   };
 
   return (
-    <div className="w-[360px] bg-[#050508] border-l border-[#1a2040] h-full flex flex-col overflow-hidden">
+    <div className="w-[420px] bg-[#050508] border-l border-[#1a2040] h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-[#1a2040] flex items-center justify-between">
         <div className="flex items-center gap-2">
