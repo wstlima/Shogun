@@ -2264,7 +2264,13 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             fp = args["file_path"]
             handle = _open_handles.get(fp)
             if not handle:
-                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+                vp_auto = validator.validate(fp, PathPurpose.READ)
+                handle = _open_handles.get(str(vp_auto.resolved_path))
+                if not handle:
+                    from shogun.office.adapters.word_adapter import open_document
+                    handle = open_document(str(vp_auto.resolved_path))
+                    _open_handles[str(vp_auto.resolved_path)] = handle
+                fp = str(vp_auto.resolved_path)
             perm = check_office_permission(OfficeAction.WRITE_CONTENT, "word", tier)
             if not perm.allowed:
                 return json.dumps({"status": "blocked", "message": perm.reason})
@@ -2328,7 +2334,15 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             fp = args["file_path"]
             handle = _open_handles.get(fp)
             if not handle:
-                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+                # Auto-open: resolve path and check if handle exists under absolute path
+                vp = validator.validate(fp, PathPurpose.READ)
+                handle = _open_handles.get(str(vp.resolved_path))
+                if not handle:
+                    # Still not found — auto-open the document
+                    from shogun.office.adapters.word_adapter import open_document
+                    handle = open_document(str(vp.resolved_path))
+                    _open_handles[str(vp.resolved_path)] = handle
+                fp = str(vp.resolved_path)
             from shogun.office.adapters.word_adapter import read_text
             text = read_text(handle)
             await _log_office_event("office.word.read_text", f"Read {len(text)} chars", "word", fp, start_ms=start_ms)
@@ -2338,7 +2352,13 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             fp = args["file_path"]
             handle = _open_handles.get(fp)
             if not handle:
-                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+                vp = validator.validate(fp, PathPurpose.READ)
+                handle = _open_handles.get(str(vp.resolved_path))
+                if not handle:
+                    from shogun.office.adapters.word_adapter import open_document
+                    handle = open_document(str(vp.resolved_path))
+                    _open_handles[str(vp.resolved_path)] = handle
+                fp = str(vp.resolved_path)
             from shogun.office.adapters.word_adapter import read_headings
             headings = read_headings(handle)
             await _log_office_event("office.word.read_headings", f"Read {len(headings)} headings", "word", fp, start_ms=start_ms)
@@ -2348,7 +2368,13 @@ async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:
             fp = args["file_path"]
             handle = _open_handles.get(fp)
             if not handle:
-                return json.dumps({"status": "error", "message": "Document not open. Call office_word_open first."})
+                vp_auto = validator.validate(fp, PathPurpose.READ)
+                handle = _open_handles.get(str(vp_auto.resolved_path))
+                if not handle:
+                    from shogun.office.adapters.word_adapter import open_document
+                    handle = open_document(str(vp_auto.resolved_path))
+                    _open_handles[str(vp_auto.resolved_path)] = handle
+                fp = str(vp_auto.resolved_path)
             perm = check_office_permission(OfficeAction.WRITE_CONTENT, "word", tier)
             if not perm.allowed:
                 return json.dumps({"status": "blocked", "message": perm.reason})

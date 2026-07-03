@@ -2082,6 +2082,7 @@ BEHAVIOUR:
                 continue
 
             # ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ Fallback: parse text-based <tool_call> blocks ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+            logger.info(f"[PARSER-DEBUG] Entering text parser. tool_calls_buffer empty={not tool_calls_buffer}, prompt_injected={_prompt_injected_tools}, model_supports_tools={_model_supports_tools}")
             # Some models (e.g. Gemma4) output tool calls as text instead of
             # using the structured OpenAI format. Parse and execute them.
             full_text = "".join(assistant_tokens) if assistant_tokens else ""
@@ -2095,6 +2096,7 @@ BEHAVIOUR:
             full_text_clean = _re.sub(r'</tool_call>\s*`{1,3}', '</tool_call>', full_text_clean)
             full_text_clean = _re.sub(r'`{1,3}\s*</tool_call>', '</tool_call>', full_text_clean)
             
+            logger.info(f"[PARSER-DEBUG] After normalization. Has <tool_call>: {chr(60)+chr(116)+chr(111)+chr(111)+chr(108)+chr(95)+chr(99)+chr(97)+chr(108)+chr(108)+chr(62) in full_text_clean}, text length={len(full_text_clean)}, first 200 chars: {full_text_clean[:200]}")
             _valid_tool_names = _active_tool_names if _active_tool_names else []
             _tool_names_pattern = "|".join(_valid_tool_names) if _valid_tool_names else "NO_TOOLS"
             
@@ -2142,6 +2144,7 @@ BEHAVIOUR:
                     _seen.add(_key)
                     _deduped_tc_matches.append((_fn, _raw_args))
             
+            logger.info(f"[PARSER-DEBUG] Matches found: {len(_tc_matches)}, Deduped: {len(_deduped_tc_matches) if _deduped_tc_matches else 0}, Valid tool names: {_valid_tool_names[:5]}")
             import logging as _logging
             _log = _logging.getLogger("shogun.agents")
             
