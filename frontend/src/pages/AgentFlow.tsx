@@ -1550,31 +1550,35 @@ Content-Type: application/json
               </select>
             </div>
 
-            {['excel_read', 'excel_write', 'word_read', 'word_replace', 'pptx_read', 'pptx_replace'].includes(config.action || '') && (
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Input Path</label>
-                <input
-                  type="text"
-                  value={config.input_path || ''}
-                  onChange={(e) => updateConfig('input_path', e.target.value)}
-                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-                  placeholder="Input/report.xlsx"
-                />
-              </div>
-            )}
+            {/* Source Folder / Input — always visible */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                <FolderOpen className="w-3 h-3 text-[#10b981]/60" /> Source Folder / Input File
+              </label>
+              <input
+                type="text"
+                value={config.input_path || ''}
+                onChange={(e) => updateConfig('input_path', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+                placeholder="Input/report.xlsx"
+              />
+              <p className="text-[8px] text-[#7a8899]/60">Relative to workspace root. e.g. Input/data.xlsx</p>
+            </div>
 
-            {['excel_create', 'excel_write', 'word_create', 'word_replace', 'pptx_replace'].includes(config.action || '') && (
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Output Path</label>
-                <input
-                  type="text"
-                  value={config.output_path || ''}
-                  onChange={(e) => updateConfig('output_path', e.target.value)}
-                  className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
-                  placeholder="Output/result.xlsx"
-                />
-              </div>
-            )}
+            {/* Destination Folder / Output — always visible */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest flex items-center gap-1">
+                <FolderOpen className="w-3 h-3 text-[#f59e0b]/60" /> Destination Folder / Output File
+              </label>
+              <input
+                type="text"
+                value={config.output_path || ''}
+                onChange={(e) => updateConfig('output_path', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#10b981] transition-colors outline-none"
+                placeholder="Output/result.xlsx"
+              />
+              <p className="text-[8px] text-[#7a8899]/60">Where to save. e.g. Output/translated.docx</p>
+            </div>
 
             {['excel_read', 'excel_create', 'excel_write'].includes(config.action || '') && (
               <div className="space-y-1.5">
