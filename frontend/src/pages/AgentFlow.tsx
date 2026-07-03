@@ -3085,7 +3085,14 @@ export const AgentFlow = () => {
       const res = await axios.post('/api/v1/agent-flows/from-template', { template_id: templateId });
       if (res.data.data) {
         setShowCreateModal(false);
-        setActiveFlow(res.data.data);
+        // Re-fetch the full flow to get nodes/edges (the create response doesn't include them)
+        const flowId = res.data.data.id;
+        const fullRes = await axios.get(`/api/v1/agent-flows/${flowId}`);
+        if (fullRes.data.data) {
+          setActiveFlow(fullRes.data.data);
+        } else {
+          setActiveFlow(res.data.data);
+        }
         fetchFlows();
       }
     } catch (err) {

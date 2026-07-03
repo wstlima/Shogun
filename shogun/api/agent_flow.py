@@ -135,15 +135,23 @@ async def create_from_template(
     # Save the graph (nodes + edges) from the template
     nodes_data = template.get("nodes", [])
     edges_data = template.get("edges", [])
+    import logging
+    _log = logging.getLogger(__name__)
+    _log.info("FROM-TEMPLATE: flow_id=%s, nodes=%d, edges=%d", flow.id, len(nodes_data), len(edges_data))
     if nodes_data:
-        saved = await svc.save_flow_graph(
-            flow_id=flow.id,
-            nodes_data=nodes_data,
-            edges_data=edges_data,
-            viewport={"x": 50, "y": 100, "zoom": 0.85},
-        )
-        if saved:
-            flow = saved
+        try:
+            saved = await svc.save_flow_graph(
+                flow_id=flow.id,
+                nodes_data=nodes_data,
+                edges_data=edges_data,
+                viewport={"x": 50, "y": 100, "zoom": 0.85},
+            )
+            _log.info("FROM-TEMPLATE: save result has %d nodes, %d edges",
+                       len(saved.nodes) if saved else 0, len(saved.edges) if saved else 0)
+            if saved:
+                flow = saved
+        except Exception as exc:
+            _log.error("FROM-TEMPLATE: save_flow_graph FAILED: %s", exc, exc_info=True)
 
     return ApiResponse(data=AgentFlowResponse.model_validate(flow))
 
