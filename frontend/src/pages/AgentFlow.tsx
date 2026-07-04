@@ -250,10 +250,26 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
           </div>
         )}
         {type === 'output' && (
-          <div className="flex items-center gap-1">
-            <span className="text-[8px] font-bold text-[#f97316]/80 uppercase">
-              {config.output_type || 'artifact'}
-            </span>
+          <div className="flex flex-col gap-1.5 w-full">
+            <div className="flex items-center gap-1">
+              <span className="text-[8px] font-bold text-[#f97316]/80 uppercase">
+                {config.output_type || 'artifact'}
+              </span>
+            </div>
+            {data.execution_status === 'completed' && data.execution_output && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new CustomEvent('shogun-view-node-output', {
+                    detail: { label: data.label || 'Output', content: data.execution_output }
+                  }));
+                }}
+                className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-1 bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/20 rounded text-[9px] font-bold uppercase transition-colors"
+              >
+                <Search className="w-3 h-3" />
+                View Result
+              </button>
+            )}
           </div>
         )}
         {type === 'mado_browser' && (
@@ -1886,7 +1902,29 @@ function AgentFlowCanvas({
   const [executing, setExecuting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [runHistory, setRunHistory] = useState<any[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunDetails, setSelectedRunDetails] = useState<any | null>(null);
+  const [loadingRunDetails, setLoadingRunDetails] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Restore latest run state on mount
+  useEffect(() => {
+    const initLatestRun = async () => {
+      try {
+        const resp = await axios.get(`/api/v1/agent-flows/${flow.id}/runs?limit=1`);
+        const latest = resp.data?.data?.[0];
+        if (latest) {
+          setActiveRunId(latest.id);
+          if (latest.status === 'pending' || latest.status === 'running') {
+            setExecuting(true);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    initLatestRun();
+  }, [flow.id]);
 
   // Track changes
   useEffect(() => { setDirty(true); }, [nodes, edges]);
@@ -1910,6 +1948,7 @@ function AgentFlowCanvas({
                 data: {
                   ...n.data,
                   execution_status: ns?.status || null,
+                  execution_output: ns?.output || null,
                 },
               };
             })
@@ -2081,7 +2120,7 @@ function AgentFlowCanvas({
     setRunStatus('pending');
     // Clear previous execution overlays
     setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null } }))
+      nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null, execution_output: null } }))
     );
     try {
       const resp = await axios.post(`/api/v1/agent-flows/${flow.id}/run`);
@@ -2119,6 +2158,31 @@ function AgentFlowCanvas({
     }
   }, [flow.id]);
 
+  const viewRunDetails = async (id: string) => {
+    setSelectedRunId(id);
+    setLoadingRunDetails(true);
+    try {
+      const resp = await axios.get(`/api/v1/agent-flows/runs/${id}`);
+      const run = resp.data?.data;
+      setSelectedRunDetails(run || null);
+      if (run) {
+        setRunStatus(run.status);
+        setNodeStates(run.node_states || {});
+        setNodes((nds) => nds.map((n) => {
+          const ns = run.node_states?.[n.id];
+          return {
+            ...n,
+            data: { ...n.data, execution_status: ns?.status || null, execution_output: ns?.output || null },
+          };
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRunDetails(false);
+    }
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2134,6 +2198,24 @@ function AgentFlowCanvas({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave, onDeleteSelected]);
+
+  useEffect(() => {
+    const handleNodeOutputView = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setSelectedRunId('node-output'); // Use a mock ID
+        setSelectedRunDetails({
+          status: 'completed',
+          trigger_type: 'manual',
+          result_summary: {
+            [customEvent.detail.label]: customEvent.detail.content
+          }
+        });
+      }
+    };
+    window.addEventListener('shogun-view-node-output', handleNodeOutputView);
+    return () => window.removeEventListener('shogun-view-node-output', handleNodeOutputView);
+  }, []);
 
   // Find the actual selected node object for inspector
   const inspectorNode = selectedNode ? nodes.find((n) => n.id === selectedNode.id) || selectedNode : null;
@@ -2296,7 +2378,7 @@ function AgentFlowCanvas({
               )}
               {runStatus !== 'running' && (
                 <button
-                  onClick={() => { setRunStatus(null); setNodeStates({}); setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null } }))); }}
+                  onClick={() => { setRunStatus(null); setNodeStates({}); setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null, execution_output: null } }))); }}
                   className="text-current opacity-50 hover:opacity-100 transition-opacity"
                 >
                   <X className="w-3 h-3" />
@@ -2442,7 +2524,8 @@ function AgentFlowCanvas({
               {runHistory.map((run: any) => (
                 <div
                   key={run.id}
-                  className="p-3 bg-[#0e1225] border border-[#1a2040] rounded-lg hover:border-[#2a3060] transition-colors overflow-hidden"
+                  onClick={() => viewRunDetails(run.id)}
+                  className="p-3 bg-[#0e1225] border border-[#1a2040] rounded-lg hover:border-[#2a3060] transition-colors overflow-hidden cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-2 gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -2482,6 +2565,82 @@ function AgentFlowCanvas({
               ))}
             </div>
           </div>
+
+          {/* Run Details Modal */}
+          {selectedRunId && (
+            <div className="fixed inset-0 flex items-center justify-center p-4 pointer-events-auto" style={{ zIndex: 100000 }}>
+              <div 
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setSelectedRunId(null)}
+              />
+              <div className="relative w-full max-w-4xl max-h-[85vh] bg-[#0a0e1a] border border-[#1a2040] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#1a2040] bg-[#0e1225]">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-sm font-bold text-[#c8d0d8] uppercase tracking-wider">Run Details</h2>
+                    {loadingRunDetails && <Loader2 className="w-4 h-4 text-[#4a8cc7] animate-spin" />}
+                  </div>
+                  <button 
+                    onClick={() => setSelectedRunId(null)}
+                    className="p-2 hover:bg-[#1a2040] text-[#7a8899] hover:text-[#c8d0d8] rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {selectedRunDetails ? (
+                    <>
+                      <div className="flex flex-wrap gap-4 text-[11px] font-bold uppercase tracking-wider text-[#7a8899]">
+                        <span className="bg-[#1a2040] px-2.5 py-1 rounded">Status: <span className={cn(
+                          selectedRunDetails.status === 'completed' ? "text-[#22c55e]" :
+                          selectedRunDetails.status === 'failed' ? "text-[#ef4444]" : "text-[#4a8cc7]"
+                        )}>{selectedRunDetails.status}</span></span>
+                        <span className="bg-[#1a2040] px-2.5 py-1 rounded">Trigger: {selectedRunDetails.trigger_type}</span>
+                        {selectedRunDetails.started_at && selectedRunDetails.completed_at && (
+                          <span className="bg-[#1a2040] px-2.5 py-1 rounded">
+                            Duration: {((new Date(selectedRunDetails.completed_at).getTime() - new Date(selectedRunDetails.started_at).getTime()) / 1000).toFixed(2)}s
+                          </span>
+                        )}
+                      </div>
+
+                      {selectedRunDetails.error_message && (
+                        <div className="p-4 rounded-lg border border-[#ef4444]/20 bg-[#ef4444]/5">
+                          <h3 className="text-xs font-bold text-[#ef4444] uppercase tracking-wider mb-2">Error Details</h3>
+                          <p className="text-sm text-[#ef4444]/90 whitespace-pre-wrap font-mono">{selectedRunDetails.error_message}</p>
+                        </div>
+                      )}
+
+                      {selectedRunDetails.result_summary && Object.keys(selectedRunDetails.result_summary).length > 0 ? (
+                        <div className="space-y-4">
+                          <h3 className="text-xs font-bold text-[#c8d0d8] uppercase tracking-wider border-b border-[#1a2040] pb-2">Output Artifacts & Reports</h3>
+                          {Object.entries(selectedRunDetails.result_summary).map(([label, content]) => (
+                            <div key={label} className="rounded-lg border border-[#2a3060] bg-[#0e1225] overflow-hidden">
+                              <div className="px-4 py-2 bg-[#1a2040]/50 border-b border-[#2a3060]">
+                                <span className="text-xs font-bold text-[#4a8cc7]">{label}</span>
+                              </div>
+                              <div className="p-4 text-sm text-[#c8d0d8] leading-relaxed whitespace-pre-wrap overflow-x-auto">
+                                {String(content)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center border border-dashed border-[#1a2040] rounded-lg">
+                          <p className="text-sm text-[#7a8899]">No output artifacts generated for this run.</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    !loadingRunDetails && (
+                      <div className="py-12 text-center">
+                        <p className="text-sm text-[#7a8899]">Could not load run details.</p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>,
         document.getElementById('portal-root')!
       )}

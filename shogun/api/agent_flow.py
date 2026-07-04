@@ -157,6 +157,18 @@ async def create_from_template(
 
 
 # ── Get a single flow (with nodes and edges) ────────────────
+@router.get("/active-runs", response_model=ApiResponse)
+async def get_active_runs(db: AsyncSession = Depends(get_db)):
+    """Get the count of currently active runs globally."""
+    from shogun.db.models.agent_flow_run import AgentFlowRun
+    from sqlalchemy import select, func
+
+    result = await db.execute(
+        select(func.count(AgentFlowRun.id))
+        .where(AgentFlowRun.status.in_(["pending", "running"]))
+    )
+    count = result.scalar() or 0
+    return ApiResponse(data={"active_runs": count})
 
 
 @router.get("/{flow_id}", response_model=ApiResponse)

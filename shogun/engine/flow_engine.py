@@ -324,7 +324,7 @@ async def _execute_single_node(
     elif node_type == "logic":
         return await _exec_logic(config, predecessor_outputs)
     elif node_type == "output":
-        return await _exec_output(config, context_str, predecessor_outputs)
+        return await _exec_output(config, context_str, predecessor_outputs, run_id, node.label)
     elif node_type == "mado_browser":
         return await _exec_mado_browser(config, context_str)
     elif node_type == "email_send":
@@ -568,9 +568,9 @@ async def _exec_logic(
 
 
 async def _exec_output(
-    config: dict, context_str: str, predecessor_outputs: dict[str, Any]
+    config: dict, context_str: str, predecessor_outputs: dict[str, Any], run_id: uuid.UUID | None = None, node_label: str = "output"
 ) -> str:
-    """Output node — formats and returns the final result."""
+    """Output node — formats and returns the final result, saving it to workspace."""
     output_type = config.get("output_type", "artifact")
     fmt = config.get("format", "markdown")
 
@@ -579,24 +579,53 @@ async def _exec_output(
         str(v) for v in predecessor_outputs.values() if v is not None
     )
 
+    final_content = content
     if fmt == "json":
         import json
         try:
             # Try to parse as JSON, otherwise wrap as JSON
             result = json.loads(content)
-            return json.dumps(result, indent=2)
+            final_content = json.dumps(result, indent=2)
         except (json.JSONDecodeError, TypeError):
-            return json.dumps({
+            final_content = json.dumps({
                 "output_type": output_type,
                 "content": content,
             }, indent=2)
     elif fmt == "plain":
         # Strip markdown formatting
         import re
-        return re.sub(r'[#*_`~\[\]]', '', content)
+        final_content = re.sub(r'[#*_`~\[\]]', '', content)
 
-    # markdown or html — return as-is
-    return content
+    # Save to workspace automatically
+    if run_id:
+        from shogun.config import settings
+        from datetime import datetime
+        import logging
+        
+        log = logging.getLogger("shogun.flow")
+        workspace_dir = settings.workspace_path.resolve() / "output"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_ext = "md" if fmt == "markdown" else "json" if fmt == "json" else "html" if fmt == "html" else "txt"
+        
+        # Sanitize node label for filename
+        import re
+        safe_label = re.sub(r'[^a-zA-Z0-9_-]', '_', node_label).strip('_').lower()
+        if not safe_label:
+            safe_label = "output"
+            
+        short_run_id = str(run_id)[:8]
+        filename = f"report_{safe_label}_{timestamp}_{short_run_id}.{file_ext}"
+        
+        try:
+            target_path = workspace_dir / filename
+            target_path.write_text(final_content, encoding="utf-8")
+            log.info("Saved flow output report to workspace: %s", target_path)
+        except Exception as e:
+            log.error("Failed to save flow output report to workspace: %s", e)
+
+    return final_content
 
 
 async def _exec_mado_browser(config: dict, context_str: str) -> str:

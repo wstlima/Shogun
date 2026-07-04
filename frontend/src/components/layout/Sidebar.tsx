@@ -69,6 +69,22 @@ export const Sidebar = () => {
       .catch(() => {}); // Silently fail if offline
   }, []);
 
+  const [activeRuns, setActiveRuns] = useState(0);
+  useEffect(() => {
+    const fetchActiveRuns = async () => {
+      try {
+        const resp = await fetch('/api/v1/agent-flows/active-runs');
+        const data = await resp.json();
+        setActiveRuns(data?.data?.active_runs || 0);
+      } catch {
+        // ignore
+      }
+    };
+    fetchActiveRuns();
+    const interval = setInterval(fetchActiveRuns, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <aside className="w-64 h-full bg-[#050508] border-r border-shogun-border p-4 flex flex-col gap-6 overflow-y-auto scrollbar-hide relative z-20">
       <div>
@@ -93,6 +109,7 @@ export const Sidebar = () => {
             label={t('nav.samurai', 'Samurai')} 
             subLabel={t('nav.samurai_sub', 'Sub-Agents')} 
             active={location.pathname === '/samurai'}
+            badge={activeRuns > 0 ? `${activeRuns} RUNNING` : null}
             onClick={() => navigate('/samurai')}
           />
           <NavItem 
