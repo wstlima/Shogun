@@ -44,13 +44,17 @@ import {
   Power,
   FolderOpen,
   FileText,
+  AppWindow,
+  Crosshair,
 } from "lucide-react";
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { MicrosoftTeamsAdapterTab } from './katana/MicrosoftTeamsAdapterTab';
+import { Mado } from './Mado';
+import { Ronin } from './Ronin';
 
-type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'teams' | 'mail_calendar' | 'office';
+type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'teams' | 'mail_calendar' | 'office' | 'mado' | 'ronin';
 type RegisterMode = 'quick' | 'manual';
 
 // ── Documentation links for cloud providers ─────────────────────
@@ -1187,7 +1191,7 @@ export function Katana() {
 
       {/* ── Tab bar ────────────────────────────────────────────── */}
       <div className="flex border-b border-shogun-border">
-        {(['providers', 'tools', 'routing', 'telegram', 'teams', 'mail_calendar', 'office'] as TabType[]).map((tab) => (
+        {(['providers', 'tools', 'routing', 'telegram', 'teams', 'mail_calendar', 'office', 'mado', 'ronin'] as TabType[]).map((tab) => (
           <button
             key={tab}
             onClick={() => {
@@ -1197,7 +1201,7 @@ export function Katana() {
               if (tab === 'office' && !officeStatus) fetchOfficeData();
             }}
             className={cn(
-              "px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all relative",
+              "px-6 py-3 text-[10px] font-bold uppercase tracking-widest transition-all relative",
               activeTab === tab ? "text-shogun-blue" : "text-shogun-subdued hover:text-shogun-text"
             )}
           >
@@ -1235,6 +1239,18 @@ export function Katana() {
                 {officeStatus?.enabled && officePosture !== 'shrine' && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
                 )}
+              </span>
+            )}
+            {tab === 'mado'      && (
+              <span className="flex items-center gap-1.5">
+                <AppWindow className="w-3.5 h-3.5" />
+                Mado Browser
+              </span>
+            )}
+            {tab === 'ronin'     && (
+              <span className="flex items-center gap-1.5">
+                <Crosshair className="w-3.5 h-3.5" />
+                Ronin Desktop
               </span>
             )}
             {activeTab === tab && (
@@ -3446,6 +3462,24 @@ export function Katana() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════
+            MADO TAB
+        ════════════════════════════════════════════════════════ */}
+        {activeTab === 'mado' && (
+          <div className="animate-in fade-in duration-300">
+            <Mado />
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════
+            RONIN TAB
+        ════════════════════════════════════════════════════════ */}
+        {activeTab === 'ronin' && (
+          <div className="animate-in fade-in duration-300">
+            <Ronin />
           </div>
         )}
 

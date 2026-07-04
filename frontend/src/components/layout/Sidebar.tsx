@@ -14,9 +14,7 @@ import {
   Network,
   Download,
   HardDrive,
-  AppWindow,
   ShieldCheck,
-  Crosshair,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
@@ -137,20 +135,6 @@ export const Sidebar = () => {
             subLabel={t('nav.bushido_sub', 'Heartbeat')} 
             active={location.pathname === '/bushido'}
             onClick={() => navigate('/bushido')}
-          />
-          <NavItem 
-            icon={AppWindow} 
-            label={t('nav.mado', 'Mado')} 
-            subLabel={t('nav.mado_sub', 'Browser Layer')} 
-            active={location.pathname === '/mado'}
-            onClick={() => navigate('/mado')}
-          />
-          <NavItem 
-            icon={Crosshair} 
-            label={t('nav.ronin', 'Ronin')} 
-            subLabel={t('nav.ronin_sub', 'Desktop Control')} 
-            active={location.pathname === '/ronin'}
-            onClick={() => navigate('/ronin')}
           />
         </nav>
       </div>
