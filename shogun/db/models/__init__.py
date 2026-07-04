@@ -29,6 +29,14 @@ from shogun.db.models.agent_flow_run import AgentFlowRun
 from shogun.db.models.mado_session import MadoSession
 from shogun.db.models.ronin_session import RoninSession
 from shogun.db.models.nexus import ExternalAgentModel, AgentCapabilityModel, NexusTaskModel
+from shogun.db.models.teams import (
+    TeamsApprovalRequest,
+    TeamsCommandLog,
+    TeamsConfig,
+    TeamsConversation,
+    TeamsNotificationRoute,
+    TeamsUserMap,
+)
 
 __all__ = [
     "Operator",
@@ -69,4 +77,10 @@ __all__ = [
     "ExternalAgentModel",
     "AgentCapabilityModel",
     "NexusTaskModel",
+    "TeamsConfig",
+    "TeamsUserMap",
+    "TeamsConversation",
+    "TeamsCommandLog",
+    "TeamsApprovalRequest",
+    "TeamsNotificationRoute",
 ]

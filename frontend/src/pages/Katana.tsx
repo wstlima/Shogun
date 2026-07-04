@@ -48,8 +48,9 @@ import {
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { MicrosoftTeamsAdapterTab } from './katana/MicrosoftTeamsAdapterTab';
 
-type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'mail_calendar' | 'office';
+type TabType = 'providers' | 'tools' | 'routing' | 'telegram' | 'teams' | 'mail_calendar' | 'office';
 type RegisterMode = 'quick' | 'manual';
 
 // ── Documentation links for cloud providers ─────────────────────
@@ -1186,7 +1187,7 @@ export function Katana() {
 
       {/* ── Tab bar ────────────────────────────────────────────── */}
       <div className="flex border-b border-shogun-border">
-        {(['providers', 'tools', 'routing', 'telegram', 'mail_calendar', 'office'] as TabType[]).map((tab) => (
+        {(['providers', 'tools', 'routing', 'telegram', 'teams', 'mail_calendar', 'office'] as TabType[]).map((tab) => (
           <button
             key={tab}
             onClick={() => {
@@ -1210,6 +1211,12 @@ export function Katana() {
                 {tgStatus?.connected && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
                 )}
+              </span>
+            )}
+            {tab === 'teams' && (
+              <span className="flex items-center gap-1.5">
+                <MessageCircle className="w-3.5 h-3.5" />
+                Microsoft Teams
               </span>
             )}
             {tab === 'mail_calendar' && (
@@ -2613,6 +2620,8 @@ export function Katana() {
         )}
 
         {/* ══ TELEGRAM TAB ══════════════════════════════════════════ */}
+        {activeTab === 'teams' && <MicrosoftTeamsAdapterTab />}
+
         {activeTab === 'telegram' && (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">

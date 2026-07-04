@@ -56,6 +56,24 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_allowed_chat_ids: str | None = None
 
+    # Microsoft Teams command channel (secrets are references, not values)
+    teams_adapter_enabled: bool = False
+    teams_deployment_mode: Literal["dev", "bridge", "direct"] = "dev"
+    teams_tenant_mode: Literal["single", "multi"] = "single"
+    teams_allowed_tenant_ids: str = ""
+    teams_bot_app_id: str | None = None
+    teams_bot_client_secret_ref: str | None = None
+    teams_public_messaging_endpoint: str | None = None
+    teams_sso_enabled: bool = False
+    teams_graph_enabled: bool = False
+    teams_proactive_enabled: bool = False
+    teams_manifest_valid_domains: str = ""
+    teams_rate_limit_per_user_per_minute: int = 20
+    teams_rate_limit_per_channel_per_minute: int = 60
+    teams_high_risk_confirmation_ttl_seconds: int = 300
+    shogun_internal_api_url: str = "http://127.0.0.1:8000"
+    shogun_internal_api_key_ref: str | None = None
+
     # ── GitHub (for update checker on private repos) ─────────
     github_token: str | None = None
 

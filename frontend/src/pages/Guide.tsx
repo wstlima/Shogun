@@ -691,7 +691,7 @@ export function Guide() {
                    <Cpu className="w-6 h-6 text-shogun-blue" />
                    <div>
                       <h4 className="text-xl font-bold uppercase tracking-widest">Katana — The System Forge</h4>
-                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has 6 tabs.</p>
+                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has 7 tabs.</p>
                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -734,6 +734,18 @@ export function Guide() {
                    <div className="shogun-card space-y-2 md:col-span-2">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-shogun-blue" /> Telegram Integration</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">At the bottom of the Katana page. Paste a Telegram Bot Token (obtained from @BotFather) and click "Connect" to let your Shogun send and receive messages via Telegram. This allows you to talk to your AI from your phone while away from your computer. The status indicator shows whether the bot is currently running.</p>
+                   </div>
+                   <div className="shogun-card space-y-2 md:col-span-2">
+                      <div className="font-bold text-shogun-text flex items-center gap-2"><MessageSquare className="w-4 h-4 text-shogun-blue" /> Microsoft Teams Adapter</div>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Connect Microsoft Teams as an enterprise command and notification channel for Shogun. Teams is the communication surface; <strong>Katana</strong> manages the channel, while <strong>Gensui</strong> continues to enforce identity, authorization, approvals, policy, and audit. The adapter supports personal chats, group chats, and channel commands when the Shogun bot is directly mentioned.</p>
+                      <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
+                         <li><strong>Overview:</strong> Shows adapter health, tenant and SSO status, recent activity, errors, and active approval requests.</li>
+                         <li><strong>Setup Wizard:</strong> Configures the deployment mode, allowed Microsoft tenants, Bot/App ID, secret reference, public HTTPS messaging endpoint, valid domains, and downloadable Teams app package.</li>
+                         <li><strong>Entra &amp; Roles:</strong> Maps verified Teams and Microsoft Entra identities to Shogun roles. New identities begin as <strong>Viewer</strong> until deliberately promoted.</li>
+                         <li><strong>Security Policy:</strong> Controls available command groups, destructive-command approval flow, approval expiry, and dual approval for fleet shutdown.</li>
+                         <li><strong>Audit &amp; Diagnostics:</strong> Records inbound commands, risk classification, authorization decisions, response outcomes, and correlation IDs. Built-in checks validate the Shogun backend, Microsoft Graph configuration, proactive messaging, and Teams manifest.</li>
+                      </ul>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Commands such as <code>status</code>, <code>agents</code>, <code>run workflow</code>, <code>pause agent</code>, and <code>show pending approvals</code> are classified by risk before dispatch. Critical commands—including Harakiri—never execute directly from a casual Teams message and must pass through Gensui confirmation and the configured approval policy. Production use requires a Microsoft Entra/Azure Bot registration and a public HTTPS Teams Bridge endpoint.</p>
                    </div>
                 </div>
              </section>

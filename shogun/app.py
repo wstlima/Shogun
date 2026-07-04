@@ -252,6 +252,7 @@ def create_app() -> FastAPI:
     from shogun.api.gensui_config import router as gensui_config_router
     from shogun.api.ronin import router as ronin_router
     from shogun.nexus.gateway.external_gateway import router as nexus_router
+    from shogun.api.teams import command_router as katana_command_router, router as teams_router
 
     prefix = "/api/v1"
     app.include_router(system_router, prefix=prefix)
@@ -281,6 +282,8 @@ def create_app() -> FastAPI:
     app.include_router(mado_router, prefix=prefix)
     app.include_router(gensui_config_router, prefix=prefix)
     app.include_router(ronin_router, prefix=prefix)
+    app.include_router(teams_router, prefix=prefix)
+    app.include_router(katana_command_router, prefix=prefix)
 
     # Office App Mode (Katana)
     from shogun.api.office import router as office_router
