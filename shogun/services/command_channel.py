@@ -31,6 +31,7 @@ COMMAND_POLICY = {
     "approve": ("L3", "senior_operator"),
     "reject": ("L3", "senior_operator"),
     "harakiri": ("L4", "admin"),
+    "harakiri_control": ("L4", "admin"),
     "unknown": ("L0", "viewer"),
 }
 
@@ -77,7 +78,11 @@ def parse_command(text: str) -> ParsedCommand:
     name = "unknown"
     args: dict[str, Any] = {}
 
-    if lower == "help" or lower.startswith("help "):
+    if lower in {"++harakiri", "--harakiri"}:
+        name, args = "harakiri_control", {
+            "action": "activate" if lower == "++harakiri" else "reset",
+        }
+    elif lower == "help" or lower.startswith("help "):
         name, args = "help", {"topic": normalized[5:].strip() or None}
     elif lower in {"status", "fleet status"}:
         name = "status"

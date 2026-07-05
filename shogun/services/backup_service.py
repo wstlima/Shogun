@@ -16,7 +16,9 @@ Does NOT back up:
 import json
 import logging
 import shutil
+import sqlite3
 import zipfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -91,6 +93,7 @@ def create_backup(label: Optional[str] = None) -> dict:
     label_suffix = f"_{label}" if label else ""
     filename = f"shogun_backup_{timestamp}{label_suffix}.zip"
     backup_path = backup_dir / filename
+    db_snapshot_path = backup_dir / f".{filename}.db-snapshot"
 
     # Items to back up
     items_to_backup = []
@@ -100,7 +103,14 @@ def create_backup(label: Optional[str] = None) -> dict:
     # 1. Database
     db_file = root / "data" / "shogun.db"
     if db_file.exists():
-        items_to_backup.append(("shogun.db", db_file))
+        try:
+            with closing(sqlite3.connect(str(db_file))) as source_db:
+                with closing(sqlite3.connect(str(db_snapshot_path))) as snapshot_db:
+                    source_db.backup(snapshot_db)
+            items_to_backup.append(("shogun.db", db_snapshot_path))
+        except Exception:
+            db_snapshot_path.unlink(missing_ok=True)
+            raise
 
     # 2. Configs directory
     configs_dir = root / "configs"
@@ -108,7 +118,7 @@ def create_backup(label: Optional[str] = None) -> dict:
         for f in configs_dir.rglob("*"):
             if f.is_file():
                 rel = f.relative_to(root)
-                items_to_backup.append((str(rel), f))
+                items_to_backup.append((rel.as_posix(), f))
 
     # 3. Constitution & Mandate (may be in data/governance/)
     governance_dir = root / "data" / "governance"
@@ -116,7 +126,7 @@ def create_backup(label: Optional[str] = None) -> dict:
         for f in governance_dir.rglob("*"):
             if f.is_file():
                 rel = f.relative_to(root)
-                items_to_backup.append((str(rel), f))
+                items_to_backup.append((rel.as_posix(), f))
 
     # 4. version.json
     version_file = root / "version.json"
@@ -140,11 +150,18 @@ def create_backup(label: Optional[str] = None) -> dict:
             for f in qdrant_dir.rglob("*"):
                 if f.is_file():
                     rel = f.relative_to(root)
-                    items_to_backup.append((str(rel), f))
+                    items_to_backup.append((rel.as_posix(), f))
 
     # Create ZIP
     try:
         with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps({
+                "shogun_version": "1.0.0",
+                "backup_format": "1.0",
+                "backup_type": "installation",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "includes_raw_db": db_file.exists(),
+            }, indent=2))
             for arc_name, file_path in items_to_backup:
                 zf.write(file_path, arc_name)
                 files_count += 1
@@ -177,6 +194,8 @@ def create_backup(label: Optional[str] = None) -> dict:
             "success": False,
             "error": str(e),
         }
+    finally:
+        db_snapshot_path.unlink(missing_ok=True)
 
 
 def _enforce_retention(max_backups: int) -> int:

@@ -55,6 +55,33 @@ async def edit_telegram_message(bot_token: str, chat_id: str, message_id: int, t
 async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
     """Pipe an incoming message into the Shogun AI engine, capturing its SSE streaming output."""
     logger.info(f"[Telegram] Received: '{user_msg[:50]}...' from {chat_id}")
+
+    # Emergency controls must be handled before the kill-switch gate so the
+    # same authorized Telegram user can also reset an active Harakiri.
+    from shogun.services.harakiri_control import (
+        execute_harakiri_control,
+        parse_harakiri_control,
+    )
+    harakiri_action = parse_harakiri_control(user_msg)
+    if harakiri_action:
+        await execute_harakiri_control(
+            harakiri_action,
+            source="telegram",
+            actor=chat_id,
+        )
+        if harakiri_action == "activate":
+            await send_telegram_message(
+                bot_token,
+                chat_id,
+                "⛩️ *HARAKIRI ACTIVATED*\n\nAll agent activity is suspended. Posture is now SHRINE.",
+            )
+        else:
+            await send_telegram_message(
+                bot_token,
+                chat_id,
+                "✅ *HARAKIRI RESET*\n\nThe kill switch is inactive. Posture is now TACTICAL.",
+            )
+        return
     
     # ── Posture enforcement: kill switch gate ──────────────────
     try:
@@ -235,6 +262,22 @@ async def telegram_poller_task():
                 if allowed_ids and chat_id_str not in allowed_ids:
                     logger.warning(f"[Telegram] Blocked unauthorized message from {chat_id_str}")
                     # Optionally notify unauthorized users? Usually better to stay silent.
+                    continue
+
+                # Remote emergency controls require an explicit Telegram
+                # allowlist; an empty list is acceptable for chat discovery,
+                # but never for kill-switch activation or reset.
+                from shogun.services.harakiri_control import parse_harakiri_control
+                if parse_harakiri_control(text) and not allowed_ids:
+                    logger.warning(
+                        "[Telegram] Blocked Harakiri control from %s because no chat allowlist is configured",
+                        chat_id_str,
+                    )
+                    await send_telegram_message(
+                        bot_token,
+                        chat_id_str,
+                        "⚠️ Harakiri control is disabled until this chat ID is added to Telegram's allowed chat IDs.",
+                    )
                     continue
                     
                 if text:

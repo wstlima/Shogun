@@ -212,7 +212,7 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
       )}
       style={{
         background: isRunning
-          ? `linear-gradient(135deg, ${color}24 0%, #0e1225 42%, ${color}12 100%)`
+          ? `linear-gradient(135deg, ${color}0a 0%, #0e1225 42%, ${color}06 100%)`
           : '#0e1225',
         borderColor: isRunning ? color : selected ? color : '#1a2040',
         boxShadow: isRunning
@@ -220,7 +220,7 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
           : selected
             ? `0 0 0 1px ${color}b3, 0 0 20px ${color}55`
             : undefined,
-        filter: isRunning ? `saturate(1.35) brightness(1.12)` : undefined,
+        filter: isRunning ? `saturate(1.08) brightness(1.03)` : undefined,
       }}
     >
       {/* Top accent bar */}
@@ -2073,6 +2073,10 @@ function AgentFlowCanvas({
           style: {
             ...(n.style || {}),
             '--agent-flow-active-color': nodeColors[n.type || ''] || '#d4a017',
+            '--agent-flow-glow-strong': `${nodeColors[n.type || ''] || '#d4a017'}66`,
+            '--agent-flow-glow-medium': `${nodeColors[n.type || ''] || '#d4a017'}3d`,
+            '--agent-flow-glow-soft': `${nodeColors[n.type || ''] || '#d4a017'}1a`,
+            '--agent-flow-glow-faint': `${nodeColors[n.type || ''] || '#d4a017'}12`,
           } as React.CSSProperties,
           data: {
             ...n.data,

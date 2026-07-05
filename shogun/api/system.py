@@ -576,8 +576,9 @@ async def delete_ollama_model(
 
 import io
 import json
-import shutil
+import sqlite3
 import zipfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -588,32 +589,23 @@ from sqlalchemy import inspect, text
 from shogun.db.engine import engine as _engine, async_session_factory
 
 
-# Tables to include in the JSON export (all of them)
-_EXPORT_TABLES: list[str] = [
-    "agents", "personas", "samurai_profiles", "samurai_roles",
-    "model_providers", "model_definitions", "model_routing_profiles",
-    "tool_connectors", "secret_refs", "security_policies",
-    "skill_sources", "skills", "skill_installations",
-    "bushido_jobs", "bushido_recommendations", "bushido_schedules",
-    "missions", "execution_events",
-    "memory_records", "memory_provenance_links",
-    "snapshots", "runtime_sessions",
-    "operators", "kaizen_profiles", "kaizen_revisions",
-    "workspaces", "workspace_peers", "workspace_messages",
-    "alembic_version",
-]
-
 _SHOGUN_VERSION = "1.0.0"
 _DB_PATH = PROJECT_ROOT / "data" / "shogun.db"
 
 
 async def _dump_all_tables() -> dict[str, list[dict]]:
-    """Return a {table_name: [row_dict, ...]} dump of every known table."""
+    """Return a complete {table_name: [row_dict, ...]} database dump."""
     dump: dict[str, list[dict]] = {}
+    async with _engine.connect() as connection:
+        table_names = await connection.run_sync(
+            lambda sync_connection: inspect(sync_connection).get_table_names()
+        )
+
     async with async_session_factory() as session:
-        for table in _EXPORT_TABLES:
+        for table in sorted(t for t in table_names if not t.startswith("sqlite_")):
             try:
-                result = await session.execute(text(f"SELECT * FROM {table}"))
+                quoted_table = '"' + table.replace('"', '""') + '"'
+                result = await session.execute(text(f"SELECT * FROM {quoted_table}"))
                 rows = [dict(row._mapping) for row in result]
                 # Coerce non-JSON-serialisable types to str
                 clean = []
@@ -735,7 +727,7 @@ async def backup_info():
 @router.post("/backup/import")
 async def import_backup(
     file: UploadFile = File(...),
-    restore_mode: str = Form(default="json"),   # "json" | "db"
+    restore_mode: str = Form(default="auto"),   # "auto" | "json" | "db"
     wipe_first: bool = Form(default=True),
 ):
     """Restore a Shogun backup from an uploaded ZIP file.
@@ -758,11 +750,27 @@ async def import_backup(
     names = zf.namelist()
 
     # Load and validate manifest
-    if "manifest.json" not in names:
+    if "manifest.json" not in names and "shogun.db" not in names:
         return ApiResponse(success=False, data={}, meta={"error": "Missing manifest.json — not a valid Shogun backup"})
 
-    manifest = json.loads(zf.read("manifest.json"))
+    if "manifest.json" in names:
+        try:
+            manifest = json.loads(zf.read("manifest.json"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return ApiResponse(success=False, data={}, meta={"error": "Invalid manifest.json"})
+    else:
+        manifest = {
+            "backup_format": "legacy-scheduled",
+            "backup_type": "installation",
+            "includes_raw_db": True,
+        }
     backup_version = manifest.get("backup_format", "unknown")
+    table_files = [n for n in names if n.startswith("tables/") and n.endswith(".json")]
+
+    if restore_mode == "auto":
+        restore_mode = "json" if table_files else "db"
+    if restore_mode not in {"json", "db"}:
+        return ApiResponse(success=False, data={}, meta={"error": "Invalid restore mode"})
 
     if restore_mode == "db":
         # ── Raw DB restore ────────────────────────────────────────────
@@ -770,14 +778,32 @@ async def import_backup(
             return ApiResponse(success=False, data={}, meta={"error": "Backup does not include shogun.db (use restore_mode=json)"})
 
         db_bytes = zf.read("shogun.db")
-        # Write to a temp file first, then atomically move
+        # Validate the incoming database, preserve the current database, then
+        # restore through SQLite's backup API. Replacing an open DB file fails
+        # on Windows and can leave pooled connections pointing at stale data.
         tmp = _DB_PATH.with_suffix(".restore_tmp")
         tmp.write_bytes(db_bytes)
-        # Keep the old DB as a safety backup
-        bak = _DB_PATH.with_name(f"shogun.pre_restore.db")
-        if _DB_PATH.exists():
-            shutil.copy2(_DB_PATH, bak)
-        shutil.move(str(tmp), str(_DB_PATH))
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        bak = _DB_PATH.with_name(f"shogun.pre_restore_{timestamp}.db")
+        try:
+            with closing(sqlite3.connect(str(tmp))) as incoming_db:
+                integrity = incoming_db.execute("PRAGMA integrity_check").fetchone()
+                if not integrity or integrity[0] != "ok":
+                    return ApiResponse(
+                        success=False,
+                        data={},
+                        meta={"error": "The archived shogun.db failed SQLite integrity validation"},
+                    )
+
+                if _DB_PATH.exists():
+                    with closing(sqlite3.connect(str(_DB_PATH))) as current_db:
+                        with closing(sqlite3.connect(str(bak))) as safety_db:
+                            current_db.backup(safety_db)
+
+                with closing(sqlite3.connect(str(_DB_PATH))) as destination_db:
+                    incoming_db.backup(destination_db)
+        finally:
+            tmp.unlink(missing_ok=True)
 
         return ApiResponse(
             success=True,
@@ -790,40 +816,78 @@ async def import_backup(
         )
 
     # ── JSON table-by-table restore ───────────────────────────────────
-    table_files = [n for n in names if n.startswith("tables/") and n.endswith(".json")]
+    if not table_files:
+        return ApiResponse(
+            success=False,
+            data={},
+            meta={"error": "Backup contains no JSON table data; use raw database restore"},
+        )
     restored_tables: dict[str, int] = {}
-    errors: list[str] = {}
+    errors: dict[str, str] = {}
 
-    async with async_session_factory() as session:
-        for tf in table_files:
-            table_name = tf.removeprefix("tables/").removesuffix(".json")
-            rows = json.loads(zf.read(tf))
+    parsed_tables: dict[str, list[dict]] = {}
+    async with _engine.connect() as connection:
+        database_tables = set(await connection.run_sync(
+            lambda sync_connection: inspect(sync_connection).get_table_names()
+        ))
 
-            # Skip empty tables and the alembic_version table
-            if not rows or table_name == "alembic_version":
-                continue
+    for table_file in table_files:
+        table_name = table_file.removeprefix("tables/").removesuffix(".json")
+        if table_name not in database_tables or table_name == "alembic_version":
+            continue
+        try:
+            rows = json.loads(zf.read(table_file))
+            if not isinstance(rows, list):
+                raise ValueError("table payload must be a JSON array")
+            parsed_tables[table_name] = rows
+        except Exception as exc:
+            errors[table_name] = str(exc)
 
-            try:
+    async with _engine.connect() as connection:
+        # Keep the whole clean restore on one connection with relationship
+        # checks temporarily disabled. This allows parent/child tables to be
+        # replaced atomically regardless of archive ordering.
+        await connection.execute(text("PRAGMA foreign_keys=OFF"))
+        await connection.commit()
+        try:
+            async with connection.begin():
                 if wipe_first:
-                    await session.execute(text(f"DELETE FROM {table_name}"))
+                    for table_name in parsed_tables:
+                        quoted_table = '"' + table_name.replace('"', '""') + '"'
+                        await connection.execute(text(f"DELETE FROM {quoted_table}"))
 
-                if rows:
-                    # Build parameterised insert
-                    cols = list(rows[0].keys())
-                    placeholders = ", ".join(f":{c}" for c in cols)
-                    col_list = ", ".join(cols)
-                    stmt = text(f"INSERT OR IGNORE INTO {table_name} ({col_list}) VALUES ({placeholders})")
-                    for row in rows:
-                        await session.execute(stmt, row)
-
-                restored_tables[table_name] = len(rows)
-            except Exception as exc:
-                errors[table_name] = str(exc)
-
-        await session.commit()
+                for table_name, rows in parsed_tables.items():
+                    if not rows:
+                        restored_tables[table_name] = 0
+                        continue
+                    try:
+                        columns = list(rows[0].keys())
+                        quoted_table = '"' + table_name.replace('"', '""') + '"'
+                        column_list = ", ".join(
+                            '"' + column.replace('"', '""') + '"' for column in columns
+                        )
+                        placeholders = ", ".join(
+                            f":value_{index}" for index in range(len(columns))
+                        )
+                        statement = text(
+                            f"INSERT OR IGNORE INTO {quoted_table} "
+                            f"({column_list}) VALUES ({placeholders})"
+                        )
+                        for row in rows:
+                            parameters = {
+                                f"value_{index}": row.get(column)
+                                for index, column in enumerate(columns)
+                            }
+                            await connection.execute(statement, parameters)
+                        restored_tables[table_name] = len(rows)
+                    except Exception as exc:
+                        errors[table_name] = str(exc)
+        finally:
+            await connection.execute(text("PRAGMA foreign_keys=ON"))
+            await connection.commit()
 
     return ApiResponse(
-        success=True,
+        success=not errors,
         data={
             "mode": "json",
             "backup_format": backup_version,

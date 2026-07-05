@@ -269,7 +269,8 @@ class TeamsService:
             )
         else:
             user = await self._resolve_user(envelope)
-            command_enabled = not config.allowed_commands or parsed.name in config.allowed_commands
+            configured_command = "harakiri" if parsed.name == "harakiri_control" else parsed.name
+            command_enabled = not config.allowed_commands or configured_command in config.allowed_commands
             allowed, auth_result = authorize(parsed.name, user.shogun_role, config.destructive_commands_enabled)
             if not command_enabled:
                 allowed, auth_result = False, "command_disabled"
@@ -315,6 +316,28 @@ class TeamsService:
 
     async def _execute_safe(self, envelope: CommandEnvelope, role: str, config: TeamsConfig) -> ResponseEnvelope:
         command = envelope.command_name
+        if command == "harakiri_control":
+            from shogun.services.harakiri_control import execute_harakiri_control
+
+            action = envelope.arguments["action"]
+            await execute_harakiri_control(
+                action,
+                source="microsoft_teams",
+                actor=envelope.user.aad_object_id or envelope.user.teams_user_id,
+            )
+            if action == "activate":
+                return self._response(
+                    envelope,
+                    "HARAKIRI ACTIVATED. All agent activity is suspended and posture is now SHRINE.",
+                    title="Emergency shutdown active",
+                    severity="critical",
+                )
+            return self._response(
+                envelope,
+                "HARAKIRI RESET. The kill switch is inactive and posture is now TACTICAL.",
+                title="Emergency shutdown cleared",
+                severity="success",
+            )
         if command == "unknown":
             return self._response(
                 envelope,

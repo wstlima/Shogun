@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { HardDrive, Plus, Trash2, RotateCcw, Settings, Clock, Archive, ToggleLeft, ToggleRight, Activity, RefreshCw, FileText, ChevronRight, Database, Download, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { HardDrive, Plus, Trash2, RotateCcw, Settings, Clock, Archive, ToggleLeft, ToggleRight, Activity, RefreshCw, FileText, ChevronRight, Database, Upload, Loader2, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface BackupFile {
@@ -30,8 +30,12 @@ export const Backups = () => {
   // Data Management state
   const [stats, setStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [exportPath, setExportPath] = useState('C:\\Shogun_Backups');
+  const [exportPath, setExportPath] = useState('data\\backups');
   const [exportMsg, setExportMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importDragging, setImportDragging] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadBackups = async () => {
     try {
@@ -132,13 +136,60 @@ export const Backups = () => {
       const res = await axios.get('/api/v1/system/backup/export', {
         params: { save_path: exportPath, include_db },
       });
+      if (res.data?.success === false) {
+        throw new Error(res.data?.meta?.error || 'Export failed');
+      }
       const saved = res.data?.data?.saved_to || exportPath;
-      setExportMsg({ type: 'success', text: `Backup saved to ${saved}` });
+      const size = res.data?.data?.size_bytes;
+      const sizeLabel = typeof size === 'number'
+        ? ` (${(size / 1024 / 1024).toFixed(2)} MB)`
+        : '';
+      setExportMsg({ type: 'success', text: `ZIP verified and saved to ${saved}${sizeLabel}` });
       fetchBackupStats();
     } catch (err: any) {
-      const msg = err.response?.data?.meta?.error || err.response?.data?.detail || 'Export failed';
+      const msg = err.response?.data?.meta?.error || err.response?.data?.detail || err.message || 'Export failed';
       setExportMsg({ type: 'error', text: msg });
     } finally { setStatsLoading(false); }
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setImportMsg({ type: 'error', text: 'Please select a Shogun .zip backup.' });
+      return;
+    }
+    if (!confirm(`Import ${file.name}? This will replace the current Shogun state. A restart will be required.`)) {
+      if (importInputRef.current) importInputRef.current.value = '';
+      return;
+    }
+
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('restore_mode', 'auto');
+      form.append('wipe_first', 'true');
+      const res = await axios.post('/api/v1/system/backup/import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data?.success === false) {
+        throw new Error(res.data?.meta?.error || 'Import failed');
+      }
+      const result = res.data?.data || {};
+      const summary = result.mode === 'db'
+        ? `Raw database restored (${result.restored_bytes || 0} bytes).`
+        : `${result.total_rows_restored || 0} rows restored across ${Object.keys(result.restored_tables || {}).length} tables.`;
+      setImportMsg({ type: 'success', text: `${summary} Restart Shogun to complete the import.` });
+      await fetchBackupStats();
+    } catch (err: any) {
+      const msg = err.response?.data?.meta?.error || err.response?.data?.detail || err.message || 'Import failed';
+      setImportMsg({ type: 'error', text: msg });
+    } finally {
+      setImporting(false);
+      setImportDragging(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
   };
 
   useEffect(() => { loadBackups(); loadSettings(); }, []);
@@ -464,16 +515,64 @@ export const Backups = () => {
               )}
             </section>
 
-            <section className="bg-shogun-card border border-dashed border-shogun-border rounded-xl flex flex-col items-center justify-center p-12 text-center group cursor-pointer hover:bg-shogun-blue/[0.02] hover:border-shogun-blue/40 transition-all">
+            <section
+              onClick={() => !importing && importInputRef.current?.click()}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (!importing) setImportDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                if (event.currentTarget === event.target) setImportDragging(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setImportDragging(false);
+                void handleImport(event.dataTransfer.files?.[0]);
+              }}
+              className={`bg-shogun-card border border-dashed rounded-xl flex flex-col items-center justify-center p-12 text-center group transition-all ${
+                importing
+                  ? 'border-shogun-gold/50 cursor-wait'
+                  : importDragging
+                    ? 'border-shogun-blue bg-shogun-blue/10 scale-[1.01] cursor-copy'
+                    : 'border-shogun-border cursor-pointer hover:bg-shogun-blue/[0.02] hover:border-shogun-blue/40'
+              }`}
+            >
               <div className="w-16 h-16 rounded-full bg-shogun-bg border border-shogun-border flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <Download className="w-8 h-8 text-shogun-subdued group-hover:text-shogun-blue transition-colors" />
+                {importing
+                  ? <Loader2 className="w-8 h-8 text-shogun-gold animate-spin" />
+                  : <Upload className="w-8 h-8 text-shogun-subdued group-hover:text-shogun-blue transition-colors" />}
               </div>
-              <h4 className="text-lg font-bold text-shogun-text mb-1">Import Shogun State</h4>
+              <h4 className="text-lg font-bold text-shogun-text mb-1">
+                {importing ? 'Importing Shogun State...' : 'Import Shogun State'}
+              </h4>
               <p className="text-xs text-shogun-subdued max-w-sm">
-                Drag and drop a previously exported <strong>.zip</strong> bundle here to restore your agents, memories, and settings.
+                Drag and drop a previously exported <strong>.zip</strong> bundle here, or click to select it.
+                Scheduled and Data Management backups are both supported.
               </p>
-              <input type="file" className="hidden" accept=".zip" />
+              <input
+                ref={importInputRef}
+                type="file"
+                className="hidden"
+                accept=".zip,application/zip"
+                disabled={importing}
+                onChange={(event) => void handleImport(event.target.files?.[0])}
+              />
             </section>
+
+            {importMsg && (
+              <div className={`p-3 rounded-lg flex items-center gap-3 text-xs font-bold ${
+                importMsg.type === 'success'
+                  ? 'bg-green-500/10 text-green-500 border border-green-500/20'
+                  : 'bg-red-500/10 text-red-500 border border-red-500/20'
+              }`}>
+                {importMsg.type === 'success'
+                  ? <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  : <AlertCircle className="w-4 h-4 shrink-0" />}
+                {importMsg.text}
+              </div>
+            )}
           </div>
         </div>
       )}
