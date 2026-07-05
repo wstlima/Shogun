@@ -69,9 +69,11 @@ class AgentFlowService(BaseService[AgentFlow]):
         if flow is None:
             return None
 
-        # Build a mapping from client-side IDs to new UUIDs
-        # This is needed so edges can reference the correct node UUIDs
+        # Build a mapping from client-side IDs to persisted UUIDs. Existing
+        # React Flow UUIDs must remain stable so live run states can map back
+        # to the cards currently rendered on the canvas.
         node_id_map: dict[str, uuid.UUID] = {}
+        used_node_ids: set[uuid.UUID] = set()
 
         # Delete existing nodes and edges (cascade handles edges via FK)
         for edge in list(flow.edges):
@@ -84,7 +86,13 @@ class AgentFlowService(BaseService[AgentFlow]):
         new_nodes: list[AgentFlowNode] = []
         for nd in nodes_data:
             client_id = nd.get("id") or str(uuid.uuid4())
-            new_id = uuid.uuid4()
+            try:
+                new_id = uuid.UUID(str(client_id))
+            except (ValueError, TypeError, AttributeError):
+                new_id = uuid.uuid4()
+            if new_id in used_node_ids:
+                new_id = uuid.uuid4()
+            used_node_ids.add(new_id)
             node_id_map[client_id] = new_id
 
             node = AgentFlowNode(
@@ -116,8 +124,14 @@ class AgentFlowService(BaseService[AgentFlow]):
                 )
                 continue
 
+            edge_client_id = ed.get("id")
+            try:
+                edge_id = uuid.UUID(str(edge_client_id))
+            except (ValueError, TypeError, AttributeError):
+                edge_id = uuid.uuid4()
+
             edge = AgentFlowEdge(
-                id=uuid.uuid4(),
+                id=edge_id,
                 flow_id=flow_id,
                 source_node_id=source_uuid,
                 target_node_id=target_uuid,

@@ -1,8 +1,8 @@
 {
-  "version": "1.5.1",
+  "version": "1.5.2",
   "name": "Shogun OS",
-  "build": 31,
+  "build": 32,
   "channel": "stable",
-  "released": "2026-06-10T09:55:00Z",
-  "changelog": "Added one-click Docker installation scripts (Gensui-Docker-Install.sh / .bat) for simplified Gensui server deployment with automatic TLS support and secure .env generation."
+  "released": "2026-07-05T09:47:00Z",
+  "changelog": "Updated AgentFlow execution engine to improve empty output handling, ensure reliable output node artifacts, and stabilize React Flow node UUIDs. UI enhancements in AgentFlow and FileExplorer."
 }

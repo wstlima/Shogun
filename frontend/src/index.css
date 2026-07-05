@@ -54,3 +54,39 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #2a3060;
 }
+
+/* AgentFlow execution state is applied to React Flow's outer wrapper. This
+   keeps the active halo visible even when its custom card is memoized. */
+@keyframes agent-flow-active-pulse {
+  0%, 100% {
+    filter:
+      brightness(1.12)
+      saturate(1.2)
+      drop-shadow(0 0 7px var(--agent-flow-active-color))
+      drop-shadow(0 0 18px var(--agent-flow-active-color))
+      drop-shadow(0 0 36px var(--agent-flow-active-color));
+  }
+  50% {
+    filter:
+      brightness(1.28)
+      saturate(1.45)
+      drop-shadow(0 0 12px var(--agent-flow-active-color))
+      drop-shadow(0 0 30px var(--agent-flow-active-color))
+      drop-shadow(0 0 62px var(--agent-flow-active-color));
+  }
+}
+
+.react-flow__node.agent-flow-node-running {
+  z-index: 1000 !important;
+  animation: agent-flow-active-pulse 1.15s ease-in-out infinite;
+}
+
+.react-flow__node.agent-flow-node-running > div {
+  border-color: var(--agent-flow-active-color) !important;
+  box-shadow:
+    inset 0 0 24px color-mix(in srgb, var(--agent-flow-active-color) 24%, transparent),
+    0 0 0 3px var(--agent-flow-active-color),
+    0 0 18px 7px color-mix(in srgb, var(--agent-flow-active-color) 92%, transparent),
+    0 0 46px 18px color-mix(in srgb, var(--agent-flow-active-color) 68%, transparent),
+    0 0 96px 34px color-mix(in srgb, var(--agent-flow-active-color) 38%, transparent) !important;
+}

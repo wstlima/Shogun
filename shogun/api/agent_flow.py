@@ -285,6 +285,46 @@ async def pause_flow(
 # ═══════════════════════════════════════════════════════════════
 
 
+def _run_artifact_files(run) -> list[_Path]:
+    """Return safe workspace artifact paths associated with a run."""
+    from shogun.config import settings
+
+    root = settings.workspace_path.resolve()
+    files: set[_Path] = set()
+
+    for state in (run.node_states or {}).values():
+        relative = state.get("artifact_path") if isinstance(state, dict) else None
+        if not relative:
+            continue
+        target = (root / relative).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            continue
+        files.add(target)
+
+    # Backward compatibility for runs created before artifact paths were stored.
+    legacy_pattern = f"report_*_{str(run.id)[:8]}.*"
+    for folder_name in ("Output", "output"):
+        output_dir = (root / folder_name).resolve()
+        if output_dir.is_dir():
+            files.update(path.resolve() for path in output_dir.glob(legacy_pattern))
+
+    return list(files)
+
+
+def _run_artifact_exists(run) -> bool:
+    return any(path.is_file() for path in _run_artifact_files(run))
+
+
+def _run_has_recorded_artifact(run) -> bool:
+    """Whether this run explicitly recorded an artifact it successfully created."""
+    return any(
+        isinstance(state, dict) and bool(state.get("artifact_path"))
+        for state in (run.node_states or {}).values()
+    )
+
+
 @router.post("/{flow_id}/run", response_model=ApiResponse, status_code=202)
 async def run_flow(
     flow_id: uuid.UUID,
@@ -324,7 +364,40 @@ async def list_flow_runs(
         .order_by(AgentFlowRun.created_at.desc())
         .limit(limit)
     )
-    runs = result.scalars().all()
+    runs = list(result.scalars().all())
+
+    # Keep completed output-backed history synchronized with the workspace.
+    from shogun.db.models.agent_flow import AgentFlowNode
+    output_node_result = await db.execute(
+        select(AgentFlowNode.id)
+        .where(
+            AgentFlowNode.flow_id == flow_id,
+            AgentFlowNode.node_type == "output",
+        )
+        .limit(1)
+    )
+    has_output_node = output_node_result.scalar_one_or_none() is not None
+    stale_runs = [
+        run for run in runs
+        if has_output_node
+        and run.status == "completed"
+        # Only synchronize runs that previously recorded a successful artifact.
+        # A report-write failure must remain visible in History for diagnosis.
+        and _run_has_recorded_artifact(run)
+        and not _run_artifact_exists(run)
+    ]
+    if stale_runs:
+        for stale_run in stale_runs:
+            await db.delete(stale_run)
+        await db.commit()
+        result = await db.execute(
+            select(AgentFlowRun)
+            .where(AgentFlowRun.flow_id == flow_id)
+            .order_by(AgentFlowRun.created_at.desc())
+            .limit(limit)
+        )
+        runs = list(result.scalars().all())
+
     return ApiResponse(
         data=[AgentFlowRunListItem.model_validate(r) for r in runs],
         meta={"total": len(runs)},
@@ -346,6 +419,45 @@ async def get_flow_run(
     if not run:
         raise HTTPException(status_code=404, detail="Flow run not found")
     return ApiResponse(data=AgentFlowRunResponse.model_validate(run))
+
+
+@router.delete("/runs/{run_id}", response_model=ApiResponse)
+async def delete_flow_run(
+    run_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a historical run and its generated workspace artifacts."""
+    from shogun.config import settings
+    from shogun.db.models.agent_flow_run import AgentFlowRun
+
+    result = await db.execute(
+        select(AgentFlowRun).where(AgentFlowRun.id == run_id)
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Flow run not found")
+    if run.status in {"pending", "running"}:
+        raise HTTPException(status_code=409, detail="Active runs cannot be deleted")
+
+    root = settings.workspace_path.resolve()
+    deleted_files: list[str] = []
+    for artifact in _run_artifact_files(run):
+        if not artifact.is_file():
+            continue
+        try:
+            relative = str(artifact.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            continue
+        artifact.unlink()
+        deleted_files.append(relative)
+
+    await db.delete(run)
+    await db.commit()
+    return ApiResponse(data={
+        "deleted": True,
+        "run_id": str(run_id),
+        "deleted_files": deleted_files,
+    })
 
 
 @router.post("/runs/{run_id}/cancel", response_model=ApiResponse)

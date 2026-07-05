@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,11 +92,18 @@ def _build_tree(path: Path, root: Path, max_depth: int = 10, depth: int = 0) -> 
             "path": rel,
             "type": "directory" if item.is_dir() else "file",
         }
+        try:
+            item_stat = item.stat()
+            entry["created_at"] = datetime.fromtimestamp(
+                item_stat.st_ctime
+            ).astimezone().isoformat()
+            entry["modified_at"] = datetime.fromtimestamp(
+                item_stat.st_mtime
+            ).astimezone().isoformat()
+        except OSError:
+            item_stat = None
         if item.is_file():
-            try:
-                entry["size"] = item.stat().st_size
-            except OSError:
-                entry["size"] = 0
+            entry["size"] = item_stat.st_size if item_stat else 0
             entry["extension"] = item.suffix.lstrip(".")
         elif item.is_dir():
             entry["children"] = _build_tree(item, root, max_depth, depth + 1)

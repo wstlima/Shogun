@@ -308,7 +308,12 @@ async def _execute_single_node(
         pred_node = node_map.get(pred_id)
         pred_label = pred_node.label if pred_node else pred_id
         if output is not None:
-            context_parts.append(f"[Output from '{pred_label}']:\n{_truncate(str(output), 4000)}")
+            output_text = str(output)
+            # Final output nodes must receive the complete predecessor result.
+            # Other executable nodes retain a context guard for model calls.
+            if node_type != "output":
+                output_text = _truncate(output_text, 4000)
+            context_parts.append(f"[Output from '{pred_label}']:\n{output_text}")
     context_str = "\n\n".join(context_parts) if context_parts else ""
 
     # Additional context injection from config
@@ -324,7 +329,14 @@ async def _execute_single_node(
     elif node_type == "logic":
         return await _exec_logic(config, predecessor_outputs)
     elif node_type == "output":
-        return await _exec_output(config, context_str, predecessor_outputs, run_id, node.label)
+        return await _exec_output(
+            config,
+            context_str,
+            predecessor_outputs,
+            run_id,
+            node.label,
+            node_id,
+        )
     elif node_type == "mado_browser":
         return await _exec_mado_browser(config, context_str)
     elif node_type == "email_send":
@@ -568,7 +580,12 @@ async def _exec_logic(
 
 
 async def _exec_output(
-    config: dict, context_str: str, predecessor_outputs: dict[str, Any], run_id: uuid.UUID | None = None, node_label: str = "output"
+    config: dict,
+    context_str: str,
+    predecessor_outputs: dict[str, Any],
+    run_id: uuid.UUID | None = None,
+    node_label: str = "output",
+    node_id: str | None = None,
 ) -> str:
     """Output node — formats and returns the final result, saving it to workspace."""
     output_type = config.get("output_type", "artifact")
@@ -596,6 +613,14 @@ async def _exec_output(
         import re
         final_content = re.sub(r'[#*_`~\[\]]', '', content)
 
+    # Never create a misleading zero-byte "successful" report. An empty
+    # predecessor result is still a result that the user needs to understand.
+    if not final_content or not str(final_content).strip():
+        final_content = (
+            "No output was produced by the preceding node. "
+            "Open the run details to check that node's response and configuration."
+        )
+
     # Save to workspace automatically
     if run_id:
         from shogun.config import settings
@@ -620,7 +645,14 @@ async def _exec_output(
         
         try:
             target_path = workspace_dir / filename
-            target_path.write_text(final_content, encoding="utf-8")
+            temporary_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
+            temporary_path.write_text(final_content, encoding="utf-8")
+            temporary_path.replace(target_path)
+            if node_id:
+                artifact_path = str(
+                    target_path.relative_to(settings.workspace_path.resolve())
+                ).replace("\\", "/")
+                await _record_node_artifact(run_id, node_id, artifact_path)
             log.info("Saved flow output report to workspace: %s", target_path)
         except Exception as e:
             log.error("Failed to save flow output report to workspace: %s", e)
@@ -1329,6 +1361,30 @@ def _mark_downstream_skipped(
 # ═══════════════════════════════════════════════════════════════
 
 
+async def _record_node_artifact(
+    run_id: uuid.UUID,
+    node_id: str,
+    artifact_path: str,
+) -> None:
+    """Associate a generated workspace artifact with its run node."""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(AgentFlowRun).where(AgentFlowRun.id == run_id)
+        )
+        run = result.scalar_one_or_none()
+        if not run:
+            return
+
+        states = dict(run.node_states or {})
+        node_state = dict(states.get(node_id, {}))
+        node_state["artifact_path"] = artifact_path
+        states[node_id] = node_state
+        run.node_states = states
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(run, "node_states")
+        await session.commit()
+
+
 async def _update_node_state(
     run_id: uuid.UUID,
     node_id: str,
@@ -1357,9 +1413,9 @@ async def _update_node_state(
             node_state["completed_at"] = now
 
         if output is not None:
-            # Truncate large outputs for storage
-            output_str = str(output)
-            node_state["output"] = output_str[:10000] if len(output_str) > 10000 else output_str
+            # Preserve the complete result so View Result and run history match
+            # the generated artifact exactly.
+            node_state["output"] = str(output)
         if error:
             node_state["error"] = error[:2000]
 
@@ -1408,12 +1464,12 @@ async def _complete_run(
         run.status = "completed"
         run.completed_at = datetime.now(timezone.utc)
 
-        # Truncate result summary values for storage
-        truncated = {}
+        # Preserve final reports in full. This is the authoritative content
+        # shown by View Result and must not differ from the workspace artifact.
+        complete_summary = {}
         for k, v in result_summary.items():
-            v_str = str(v)
-            truncated[k] = v_str[:5000] if len(v_str) > 5000 else v_str
-        run.result_summary = truncated
+            complete_summary[k] = str(v)
+        run.result_summary = complete_summary
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(run, "result_summary")
         await session.commit()

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createContext, useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { DragEvent } from 'react';
 import {
@@ -120,6 +120,31 @@ interface FlowListItem {
   updated_at: string;
 }
 
+interface OutputResultRequest {
+  runId: string | null;
+  label: string;
+  content: string;
+}
+
+interface OutputResultContextValue {
+  view: (request: OutputResultRequest) => void;
+  runId: string | null;
+  nodeStates: Record<string, any>;
+}
+
+const OutputResultViewerContext = createContext<OutputResultContextValue | null>(null);
+
+function parseRunTimestamp(value: string): Date {
+  // SQLite returns UTC datetimes without a timezone suffix. JavaScript treats
+  // those values as local time unless UTC is made explicit.
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
+}
+
+function formatRunTimestamp(value?: string | null): string {
+  return value ? parseRunTimestamp(value).toLocaleString() : '-';
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 // NODE PALETTE — card types available for dragging
@@ -166,10 +191,16 @@ const nodeIcons: Record<string, React.ElementType> = {
   office: FileSpreadsheet,
 };
 
-function FlowNode({ data, selected, type }: { data: Record<string, any>; selected: boolean; type: string }) {
+function FlowNode({ id, data, selected, type }: { id: string; data: Record<string, any>; selected: boolean; type: string }) {
   const color = nodeColors[type] || '#d4a017';
   const Icon = nodeIcons[type] || Users;
   const config: Record<string, any> = data.config || {};
+  const resultContext = useContext(OutputResultViewerContext);
+  const authoritativeState = resultContext?.nodeStates?.[id];
+  const executionStatus = authoritativeState?.status || data.execution_status;
+  const executionOutput = authoritativeState?.output ?? data.execution_output ?? '';
+  const executionRunId = resultContext?.runId || data.execution_run_id || null;
+  const isRunning = executionStatus === 'running';
 
   return (
     <div
@@ -180,13 +211,28 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
           : "shadow-md hover:shadow-lg"
       )}
       style={{
-        background: '#0e1225',
-        borderColor: selected ? color : '#1a2040',
-        ...(selected ? { ringColor: color } : {}),
+        background: isRunning
+          ? `linear-gradient(135deg, ${color}24 0%, #0e1225 42%, ${color}12 100%)`
+          : '#0e1225',
+        borderColor: isRunning ? color : selected ? color : '#1a2040',
+        boxShadow: isRunning
+          ? `inset 0 0 20px ${color}2e, 0 0 0 3px ${color}, 0 0 14px 5px ${color}f2, 0 0 38px 14px ${color}b8, 0 0 82px 28px ${color}73, 0 0 128px 42px ${color}3d`
+          : selected
+            ? `0 0 0 1px ${color}b3, 0 0 20px ${color}55`
+            : undefined,
+        filter: isRunning ? `saturate(1.35) brightness(1.12)` : undefined,
       }}
     >
       {/* Top accent bar */}
-      <div className="h-1 rounded-t-lg" style={{ background: color }} />
+      <div
+        className={cn("rounded-t-lg transition-all duration-300", isRunning ? "h-1.5" : "h-1")}
+        style={{
+          background: color,
+          boxShadow: isRunning
+            ? `0 0 10px 3px ${color}, 0 0 28px 10px ${color}d9, 0 0 52px 18px ${color}80`
+            : undefined,
+        }}
+      />
 
       {/* Header */}
       <div className="px-3 py-2 flex items-center gap-2 border-b" style={{ borderColor: '#1a204060' }}>
@@ -256,15 +302,35 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
                 {config.output_type || 'artifact'}
               </span>
             </div>
-            {data.execution_status === 'completed' && data.execution_output && (
+            {executionStatus === 'completed' && (
               <button
+                data-testid="view-output-result"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onPointerUp={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  resultContext?.view({
+                    runId: executionRunId,
+                    label: data.label || 'Output',
+                    content: executionOutput,
+                  });
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.dispatchEvent(new CustomEvent('shogun-view-node-output', {
-                    detail: { label: data.label || 'Output', content: data.execution_output }
-                  }));
+                  // Keyboard-triggered clicks do not have a pointer event.
+                  if (e.detail === 0) {
+                    resultContext?.view({
+                      runId: executionRunId,
+                      label: data.label || 'Output',
+                      content: executionOutput,
+                    });
+                  }
                 }}
-                className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-1 bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/20 rounded text-[9px] font-bold uppercase transition-colors"
+                type="button"
+                className="nodrag nopan mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-1 bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/20 rounded text-[9px] font-bold uppercase transition-colors"
               >
                 <Search className="w-3 h-3" />
                 View Result
@@ -357,24 +423,30 @@ function FlowNode({ data, selected, type }: { data: Record<string, any>; selecte
       )}
 
       {/* Execution status overlay */}
-      {data.execution_status && data.execution_status !== 'pending' && (
+      {executionStatus && executionStatus !== 'pending' && (
         <div className="absolute -top-1 -right-1 z-10">
-          {data.execution_status === 'running' && (
-            <div className="w-5 h-5 rounded-full bg-[#4a8cc7] flex items-center justify-center animate-pulse shadow-[0_0_8px_rgba(74,140,199,0.5)]">
+          {executionStatus === 'running' && (
+            <div
+              className="w-6 h-6 rounded-full flex items-center justify-center animate-pulse"
+              style={{
+                background: color,
+                boxShadow: `0 0 10px ${color}, 0 0 22px ${color}cc`,
+              }}
+            >
               <Loader2 className="w-3 h-3 text-white animate-spin" />
             </div>
           )}
-          {data.execution_status === 'completed' && (
+          {executionStatus === 'completed' && (
             <div className="w-5 h-5 rounded-full bg-[#22c55e] flex items-center justify-center shadow-[0_0_8px_rgba(34,197,94,0.4)]">
               <CheckCircle2 className="w-3 h-3 text-white" />
             </div>
           )}
-          {data.execution_status === 'failed' && (
+          {executionStatus === 'failed' && (
             <div className="w-5 h-5 rounded-full bg-[#ef4444] flex items-center justify-center shadow-[0_0_8px_rgba(239,68,68,0.4)]">
               <XCircle className="w-3 h-3 text-white" />
             </div>
           )}
-          {data.execution_status === 'skipped' && (
+          {executionStatus === 'skipped' && (
             <div className="w-5 h-5 rounded-full bg-[#7a8899] flex items-center justify-center">
               <AlertTriangle className="w-3 h-3 text-white" />
             </div>
@@ -1899,13 +1971,119 @@ function AgentFlowCanvas({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [nodeStates, setNodeStates] = useState<Record<string, any>>({});
+  const [displayedRunId, setDisplayedRunId] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [runHistory, setRunHistory] = useState<any[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedRunDetails, setSelectedRunDetails] = useState<any | null>(null);
   const [loadingRunDetails, setLoadingRunDetails] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadRunResult = useCallback(async (
+    runId: string,
+    fallback?: { label: string; content: string },
+  ) => {
+    setSelectedRunId(runId);
+    setLoadingRunDetails(true);
+    try {
+      const resp = await axios.get(`/api/v1/agent-flows/runs/${runId}`);
+      const run = resp.data?.data || null;
+      setSelectedRunDetails(run);
+      return run;
+    } catch (err) {
+      console.error(err);
+      setSelectedRunDetails(fallback ? {
+        status: 'completed',
+        trigger_type: 'manual',
+        result_summary: { [fallback.label]: fallback.content },
+      } : null);
+      return null;
+    } finally {
+      setLoadingRunDetails(false);
+    }
+  }, []);
+
+  const handleViewOutputResult = useCallback((request: OutputResultRequest) => {
+    if (request.runId) {
+      void loadRunResult(request.runId, {
+        label: request.label,
+        content: request.content,
+      });
+      return;
+    }
+    setSelectedRunId('node-output');
+    setSelectedRunDetails({
+      status: 'completed',
+      trigger_type: 'manual',
+      result_summary: { [request.label]: request.content },
+    });
+  }, [loadRunResult]);
+
+  const outputResultContext = useMemo<OutputResultContextValue>(() => ({
+    view: handleViewOutputResult,
+    runId: displayedRunId,
+    nodeStates,
+  }), [displayedRunId, handleViewOutputResult, nodeStates]);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const resp = await axios.get(`/api/v1/agent-flows/${flow.id}/runs?limit=20`);
+      setRunHistory(resp.data?.data || []);
+    } catch {
+      // ignore
+    }
+  }, [flow.id]);
+
+  const hydrateRunState = useCallback((run: any) => {
+    const normalizedStates = { ...(run.node_states || {}) };
+    if (run.status === 'completed') {
+      (flow.nodes || []).forEach((node) => {
+        if (node.node_type !== 'output') return;
+        const label = node.label || '';
+        const summaryOutput = run.result_summary?.[label];
+        const state = normalizedStates[node.id] || {};
+        normalizedStates[node.id] = {
+          ...state,
+          // A completed flow has finalized its output. Older runs could leave
+          // this state pending even though result_summary was committed.
+          status: 'completed',
+          output: state.output ?? summaryOutput ??
+            'The run completed, but no output text was returned.',
+        };
+      });
+    }
+    setRunStatus(run.status);
+    setNodeStates(normalizedStates);
+    setDisplayedRunId(run.id || null);
+    setNodes((nds) =>
+      nds.map((n) => {
+        const nodeState = normalizedStates[n.id];
+        const nodeLabel = typeof n.data?.label === 'string' ? n.data.label : '';
+        const summaryOutput = n.type === 'output'
+          ? run.result_summary?.[nodeLabel]
+          : undefined;
+        const output = nodeState?.output ?? summaryOutput ?? null;
+        return {
+          ...n,
+          className: nodeState?.status === 'running'
+            ? 'agent-flow-node-running'
+            : undefined,
+          style: {
+            ...(n.style || {}),
+            '--agent-flow-active-color': nodeColors[n.type || ''] || '#d4a017',
+          } as React.CSSProperties,
+          data: {
+            ...n.data,
+            execution_status: nodeState?.status || null,
+            execution_output: output,
+            execution_run_id: run.id || null,
+          },
+        };
+      })
+    );
+  }, [flow.nodes, setNodes]);
 
   // Restore latest run state on mount
   useEffect(() => {
@@ -1914,8 +2092,11 @@ function AgentFlowCanvas({
         const resp = await axios.get(`/api/v1/agent-flows/${flow.id}/runs?limit=1`);
         const latest = resp.data?.data?.[0];
         if (latest) {
-          setActiveRunId(latest.id);
+          const detailResp = await axios.get(`/api/v1/agent-flows/runs/${latest.id}`);
+          const latestRun = detailResp.data?.data;
+          if (latestRun) hydrateRunState(latestRun);
           if (latest.status === 'pending' || latest.status === 'running') {
+            setActiveRunId(latest.id);
             setExecuting(true);
           }
         }
@@ -1924,7 +2105,7 @@ function AgentFlowCanvas({
       }
     };
     initLatestRun();
-  }, [flow.id]);
+  }, [flow.id, hydrateRunState]);
 
   // Track changes
   useEffect(() => { setDirty(true); }, [nodes, edges]);
@@ -1937,25 +2118,11 @@ function AgentFlowCanvas({
         const resp = await axios.get(`/api/v1/agent-flows/runs/${activeRunId}`);
         const run = resp.data?.data;
         if (run) {
-          setRunStatus(run.status);
-          setNodeStates(run.node_states || {});
-          // Apply node status overlays
-          setNodes((nds) =>
-            nds.map((n) => {
-              const ns = run.node_states?.[n.id];
-              return {
-                ...n,
-                data: {
-                  ...n.data,
-                  execution_status: ns?.status || null,
-                  execution_output: ns?.output || null,
-                },
-              };
-            })
-          );
+          hydrateRunState(run);
           if (['completed', 'failed', 'cancelled'].includes(run.status)) {
             setActiveRunId(null);
             setExecuting(false);
+            void fetchHistory();
             if (pollRef.current) clearInterval(pollRef.current);
           }
         }
@@ -1968,7 +2135,7 @@ function AgentFlowCanvas({
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [activeRunId, setNodes]);
+  }, [activeRunId, fetchHistory, hydrateRunState]);
 
 
   // Handle new connections
@@ -2017,7 +2184,7 @@ function AgentFlowCanvas({
 
       const paletteItem = NODE_PALETTE.find((p) => p.type === nodeType);
       const newNode: Node = {
-        id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: crypto.randomUUID(),
         type: nodeType,
         position,
         data: {
@@ -2118,9 +2285,19 @@ function AgentFlowCanvas({
     if (dirty) await handleSave();
     setExecuting(true);
     setRunStatus('pending');
+    setDisplayedRunId(null);
     // Clear previous execution overlays
     setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null, execution_output: null } }))
+      nds.map((n) => ({
+        ...n,
+        className: undefined,
+        data: {
+          ...n.data,
+          execution_status: null,
+          execution_output: null,
+          execution_run_id: null,
+        },
+      }))
     );
     try {
       const resp = await axios.post(`/api/v1/agent-flows/${flow.id}/run`);
@@ -2149,39 +2326,51 @@ function AgentFlowCanvas({
   }, [activeRunId]);
 
   // ── Fetch run history ────────────────────────────────────
-  const fetchHistory = useCallback(async () => {
-    try {
-      const resp = await axios.get(`/api/v1/agent-flows/${flow.id}/runs?limit=20`);
-      setRunHistory(resp.data?.data || []);
-    } catch {
-      // ignore
-    }
-  }, [flow.id]);
+  useEffect(() => {
+    if (!showHistory) return;
+    void fetchHistory();
+    const refreshTimer = window.setInterval(() => {
+      void fetchHistory();
+    }, 3000);
+    return () => window.clearInterval(refreshTimer);
+  }, [fetchHistory, showHistory]);
 
-  const viewRunDetails = async (id: string) => {
-    setSelectedRunId(id);
-    setLoadingRunDetails(true);
+  const deleteRun = useCallback(async (id: string) => {
+    if (!window.confirm('Delete this run and its generated Output file?')) return;
+    setDeletingRunId(id);
     try {
-      const resp = await axios.get(`/api/v1/agent-flows/runs/${id}`);
-      const run = resp.data?.data;
-      setSelectedRunDetails(run || null);
-      if (run) {
-        setRunStatus(run.status);
-        setNodeStates(run.node_states || {});
-        setNodes((nds) => nds.map((n) => {
-          const ns = run.node_states?.[n.id];
-          return {
-            ...n,
-            data: { ...n.data, execution_status: ns?.status || null, execution_output: ns?.output || null },
-          };
-        }));
+      await axios.delete(`/api/v1/agent-flows/runs/${id}`);
+      setRunHistory((runs) => runs.filter((run) => run.id !== id));
+      if (displayedRunId === id || nodes.some((node) => node.data?.execution_run_id === id)) {
+        setRunStatus(null);
+        setNodeStates({});
+        setDisplayedRunId(null);
+        setNodes((currentNodes) => currentNodes.map((node) => ({
+          ...node,
+          className: undefined,
+          data: {
+            ...node.data,
+            execution_status: null,
+            execution_output: null,
+            execution_run_id: null,
+          },
+        })));
+      }
+      if (selectedRunId === id) {
+        setSelectedRunId(null);
+        setSelectedRunDetails(null);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to delete flow run:', err);
     } finally {
-      setLoadingRunDetails(false);
+      setDeletingRunId(null);
     }
-  };
+  }, [displayedRunId, nodes, selectedRunId, setNodes]);
+
+  const viewRunDetails = useCallback(async (id: string) => {
+    const run = await loadRunResult(id);
+    if (run) hydrateRunState(run);
+  }, [hydrateRunState, loadRunResult]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -2198,24 +2387,6 @@ function AgentFlowCanvas({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave, onDeleteSelected]);
-
-  useEffect(() => {
-    const handleNodeOutputView = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (customEvent.detail) {
-        setSelectedRunId('node-output'); // Use a mock ID
-        setSelectedRunDetails({
-          status: 'completed',
-          trigger_type: 'manual',
-          result_summary: {
-            [customEvent.detail.label]: customEvent.detail.content
-          }
-        });
-      }
-    };
-    window.addEventListener('shogun-view-node-output', handleNodeOutputView);
-    return () => window.removeEventListener('shogun-view-node-output', handleNodeOutputView);
-  }, []);
 
   // Find the actual selected node object for inspector
   const inspectorNode = selectedNode ? nodes.find((n) => n.id === selectedNode.id) || selectedNode : null;
@@ -2378,7 +2549,7 @@ function AgentFlowCanvas({
               )}
               {runStatus !== 'running' && (
                 <button
-                  onClick={() => { setRunStatus(null); setNodeStates({}); setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, execution_status: null, execution_output: null } }))); }}
+                  onClick={() => { setRunStatus(null); setNodeStates({}); setDisplayedRunId(null); setNodes((nds) => nds.map((n) => ({ ...n, className: undefined, data: { ...n.data, execution_status: null, execution_output: null, execution_run_id: null } }))); }}
                   className="text-current opacity-50 hover:opacity-100 transition-opacity"
                 >
                   <X className="w-3 h-3" />
@@ -2390,26 +2561,27 @@ function AgentFlowCanvas({
 
         {/* React Flow Canvas */}
         <div ref={reactFlowWrapper} className="flex-1">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            defaultViewport={flow.viewport}
-            fitView={!flow.nodes?.length ? false : true}
-            snapToGrid
-            snapGrid={[16, 16]}
-            deleteKeyCode={null}
-            proOptions={{ hideAttribution: true }}
-            style={{ background: '#060810' }}
-          >
+          <OutputResultViewerContext.Provider value={outputResultContext}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              defaultViewport={flow.viewport}
+              fitView={!flow.nodes?.length ? false : true}
+              snapToGrid
+              snapGrid={[16, 16]}
+              deleteKeyCode={null}
+              proOptions={{ hideAttribution: true }}
+              style={{ background: '#060810' }}
+            >
             <Controls
               position="bottom-left"
               style={{ display: 'flex', gap: 2 }}
@@ -2445,7 +2617,8 @@ function AgentFlowCanvas({
                 </div>
               </Panel>
             )}
-          </ReactFlow>
+            </ReactFlow>
+          </OutputResultViewerContext.Provider>
         </div>
       </div>
 
@@ -2462,8 +2635,10 @@ function AgentFlowCanvas({
       )}
 
       {/* Run History Panel — rendered into #portal-root (outside React #root) */}
-      {showHistory && createPortal(
+      {createPortal(
         <>
+          {showHistory && (
+            <>
           {/* Backdrop — click to close */}
           <div
             style={{
@@ -2544,15 +2719,31 @@ function AgentFlowCanvas({
                         {run.status}
                       </span>
                     </div>
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#7a8899]/60 bg-[#7a8899]/10 px-1.5 py-0.5 rounded shrink-0 truncate max-w-[80px]">
-                      {run.trigger_type}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#7a8899]/60 bg-[#7a8899]/10 px-1.5 py-0.5 rounded truncate max-w-[80px]">
+                        {run.trigger_type}
+                      </span>
+                      <button
+                        type="button"
+                        title="Delete run and Output file"
+                        disabled={deletingRunId === run.id || run.status === 'running' || run.status === 'pending'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void deleteRun(run.id);
+                        }}
+                        className="p-1 rounded text-[#7a8899]/60 hover:text-[#ef4444] hover:bg-[#ef4444]/10 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      >
+                        {deletingRunId === run.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Trash2 className="w-3 h-3" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-[9px] text-[#7a8899]">
-                    <span>{run.created_at ? new Date(run.created_at).toLocaleString() : '-'}</span>
+                    <span>{formatRunTimestamp(run.created_at)}</span>
                     {run.started_at && run.completed_at && (
                       <span className="text-[#d4a017]/70">
-                        {((new Date(run.completed_at).getTime() - new Date(run.started_at).getTime()) / 1000).toFixed(1)}s
+                        {((parseRunTimestamp(run.completed_at).getTime() - parseRunTimestamp(run.started_at).getTime()) / 1000).toFixed(1)}s
                       </span>
                     )}
                   </div>
@@ -2565,6 +2756,9 @@ function AgentFlowCanvas({
               ))}
             </div>
           </div>
+
+            </>
+          )}
 
           {/* Run Details Modal */}
           {selectedRunId && (
@@ -2598,7 +2792,7 @@ function AgentFlowCanvas({
                         <span className="bg-[#1a2040] px-2.5 py-1 rounded">Trigger: {selectedRunDetails.trigger_type}</span>
                         {selectedRunDetails.started_at && selectedRunDetails.completed_at && (
                           <span className="bg-[#1a2040] px-2.5 py-1 rounded">
-                            Duration: {((new Date(selectedRunDetails.completed_at).getTime() - new Date(selectedRunDetails.started_at).getTime()) / 1000).toFixed(2)}s
+                            Duration: {((parseRunTimestamp(selectedRunDetails.completed_at).getTime() - parseRunTimestamp(selectedRunDetails.started_at).getTime()) / 1000).toFixed(2)}s
                           </span>
                         )}
                       </div>

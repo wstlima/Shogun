@@ -16,6 +16,8 @@ interface TreeNode {
   type: 'file' | 'directory';
   size?: number;
   extension?: string;
+  created_at?: string;
+  modified_at?: string;
   children?: TreeNode[];
 }
 
@@ -49,6 +51,18 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatTimestamp(value?: string): string {
+  if (!value) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value));
 }
 
 // ── Tree Item Component ─────────────────────────────────────────────
@@ -88,7 +102,17 @@ function TreeItem({
           <span className="w-3 h-3 flex-shrink-0" />
         )}
         <Icon className={cn("w-4 h-4 flex-shrink-0", isDir ? "text-shogun-gold" : "text-shogun-subdued")} />
-        <span className="truncate flex-1 text-left">{node.name}</span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block truncate">{node.name}</span>
+          {!isDir && (
+            <span
+              className="block truncate text-[9px] leading-3 text-shogun-subdued/60 font-mono"
+              title={`Created ${formatTimestamp(node.created_at)}`}
+            >
+              Created {formatTimestamp(node.created_at)}
+            </span>
+          )}
+        </span>
         {!isDir && node.size !== undefined && (
           <span className="text-[10px] text-shogun-subdued/60 font-mono flex-shrink-0">{formatSize(node.size)}</span>
         )}
@@ -534,6 +558,14 @@ export const FileExplorer = () => {
                     {selectedNode.size !== undefined && (
                       <span className="text-[10px] text-shogun-subdued font-mono">{formatSize(selectedNode.size)}</span>
                     )}
+                    <span
+                      className="text-[10px] text-shogun-subdued font-mono"
+                      title={selectedNode.modified_at
+                        ? `Modified ${formatTimestamp(selectedNode.modified_at)}`
+                        : undefined}
+                    >
+                      Created {formatTimestamp(selectedNode.created_at)}
+                    </span>
                     <div className="flex-1" />
                     {!isBinary && (
                       isEditing ? (
@@ -617,14 +649,20 @@ export const FileExplorer = () => {
                             <button
                               key={child.path}
                               onClick={() => handleSelect(child)}
-                              className="flex items-center gap-2 p-3 rounded-lg bg-shogun-card hover:bg-shogun-card/80 border border-shogun-border hover:border-shogun-blue/30 transition-all text-left group"
+                              className="flex items-start gap-2 p-3 rounded-lg bg-shogun-card hover:bg-shogun-card/80 border border-shogun-border hover:border-shogun-blue/30 transition-all text-left group"
                             >
-                              <Icon className={cn("w-5 h-5 flex-shrink-0", child.type === 'directory' ? "text-shogun-gold" : "text-shogun-subdued")} />
-                              <div className="min-w-0">
+                              <Icon className={cn("w-5 h-5 mt-0.5 flex-shrink-0", child.type === 'directory' ? "text-shogun-gold" : "text-shogun-subdued")} />
+                              <div className="min-w-0 flex-1">
                                 <div className="text-xs font-medium text-shogun-text truncate group-hover:text-shogun-blue transition-colors">{child.name}</div>
                                 {child.type === 'file' && child.size !== undefined && (
                                   <div className="text-[10px] text-shogun-subdued">{formatSize(child.size)}</div>
                                 )}
+                                <div
+                                  className="mt-1 text-[9px] leading-3 text-shogun-subdued/60 font-mono truncate"
+                                  title={`Created ${formatTimestamp(child.created_at)}`}
+                                >
+                                  Created {formatTimestamp(child.created_at)}
+                                </div>
                               </div>
                             </button>
                           );

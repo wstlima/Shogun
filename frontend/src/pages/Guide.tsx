@@ -69,6 +69,8 @@ export function Guide() {
     { id: 'ref-profile', label: 'Shogun Profile', icon: Cpu, color: 'text-shogun-gold' },
     { id: 'ref-samurai', label: 'Samurai Network', icon: Users, color: 'text-shogun-gold' },
     { id: 'ref-katana', label: 'Katana', icon: Sword, color: 'text-shogun-blue' },
+    { id: 'ref-telegram', label: 'Telegram Setup', icon: MessageSquare, color: 'text-sky-400' },
+    { id: 'ref-teams', label: 'Teams Setup', icon: Users, color: 'text-indigo-400' },
     { id: 'ref-archives', label: 'Archives', icon: Database, color: 'text-shogun-gold' },
     { id: 'ref-dojo', label: 'Dojo', icon: Flame, color: 'text-shogun-gold' },
     { id: 'ref-kaizen', label: 'Kaizen', icon: ShieldCheck, color: 'text-shogun-gold' },
@@ -181,6 +183,136 @@ export function Guide() {
                    <div className="p-4 bg-shogun-bg border border-shogun-border rounded-xl">
                       <div className="text-green-500 font-bold text-lg mb-1">3. Start Chatting</div>
                       <p className="text-xs text-shogun-subdued">Open <strong>Tenshu</strong> or the global chat. Your Shogun is now ready to assist, research, and execute.</p>
+                   </div>
+                </div>
+
+                <div id="ref-telegram" className="shogun-card space-y-6 scroll-mt-6 border-sky-400/20">
+                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div>
+                         <div className="font-bold text-shogun-text flex items-center gap-2 text-base">
+                            <MessageSquare className="w-5 h-5 text-sky-400" /> Telegram — Complete Beginner Setup
+                         </div>
+                         <p className="text-xs text-shogun-subdued mt-1">Use Telegram on your phone or computer to talk directly to your Shogun.</p>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-sky-400 bg-sky-400/10 border border-sky-400/20 px-2.5 py-1 rounded-full w-fit">About 10–15 minutes</span>
+                   </div>
+
+                   <div className="p-4 rounded-lg border border-sky-400/20 bg-sky-400/5">
+                      <p className="text-xs text-shogun-text font-bold">The easiest supported choice</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-1">
+                         Choose <strong>Polling</strong>. It works while Shogun is running and does not require a public website or router changes.
+                         Although the screen also shows a Webhook option, the listener in this release operates by polling. Use Webhook only if an administrator has supplied a separate compatible webhook receiver.
+                      </p>
+                   </div>
+
+                   <div>
+                      <h5 className="text-sm font-bold text-shogun-text mb-3">Before you begin</h5>
+                      <div className="grid sm:grid-cols-3 gap-3">
+                         {[
+                            ['Telegram account', 'Install Telegram and sign in on your phone or computer.'],
+                            ['Running Shogun', 'Shogun must remain open and have internet access to receive messages.'],
+                            ['Private test first', 'Connect a private one-to-one chat before trying a Telegram group.'],
+                         ].map(([title, text]) => (
+                            <div key={title} className="p-3 rounded-lg bg-shogun-bg border border-shogun-border">
+                               <p className="text-xs font-bold text-shogun-text">{title}</p>
+                               <p className="text-[11px] text-shogun-subdued leading-relaxed mt-1">{text}</p>
+                            </div>
+                         ))}
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part A — Create your Telegram bot</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>
+                            Open the official <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-bold">@BotFather</a> chat.
+                            Check the username carefully: it must be exactly <code>@BotFather</code> and should show Telegram's verification mark.
+                         </li>
+                         <li>Press <strong>Start</strong>, or type <code>/start</code>. Then type <code>/newbot</code>.</li>
+                         <li>BotFather asks for a display name. This is the friendly name people see, for example <code>My Shogun</code>.</li>
+                         <li>
+                            Choose a unique username. Telegram requires 5–32 Latin letters, numbers, or underscores, and the username must end in <code>bot</code>,
+                            for example <code>northwind_shogun_bot</code>.
+                         </li>
+                         <li>
+                            BotFather returns a long token containing numbers, a colon, and letters. Copy the entire token. Treat it exactly like a password:
+                            anyone who has it can control the bot. Never paste it into email, screenshots, tickets, or chat messages.
+                         </li>
+                      </ol>
+                      <a href="https://core.telegram.org/bots/features#botfather" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline">
+                         <ExternalLink className="w-3 h-3" /> Official Telegram BotFather instructions
+                      </a>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part B — Connect the bot to Shogun</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>In Shogun, open <strong>The Katana → Telegram</strong>.</li>
+                         <li>Paste the token into <strong>Bot Token</strong>. Leave the eye icon closed unless you need to check what you pasted.</li>
+                         <li>Select <strong>Polling</strong>.</li>
+                         <li>
+                            For this first connection, leave <strong>Allowed Chat IDs</strong> empty. This temporary step lets Shogun discover your ID.
+                            Do not leave it empty permanently, because an empty list allows every Telegram chat that can reach the bot.
+                         </li>
+                         <li>Click <strong>Connect Bot</strong>. Success is shown as a green <strong>Connected</strong> badge and the bot's username.</li>
+                      </ol>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part C — Find and save your Chat ID safely</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>Return to Telegram and open the new bot using the link from BotFather or by searching for its username.</li>
+                         <li>Press <strong>Start</strong> and send a simple message such as <code>Hello</code>. A bot cannot begin a private conversation until you contact it first.</li>
+                         <li>Return to <strong>Katana → Telegram</strong> and click <strong>Auto-detect Chat ID</strong>. Your personal Chat ID should appear in both the test field and the Allowed Chat IDs field.</li>
+                         <li>
+                            <strong>Important:</strong> auto-detect fills the form but does not save the whitelist by itself. Paste the same bot token into <strong>Bot Token</strong> again,
+                            confirm Polling is selected, and click <strong>Update Connection</strong>. This second save makes the whitelist permanent.
+                         </li>
+                         <li>Enter the detected ID under <strong>Test Connection</strong> and click <strong>Send Test</strong>. Telegram should receive “Shogun Test Message.”</li>
+                         <li>Send <code>Hello Shogun</code> to the bot. A normal AI reply confirms that both incoming and outgoing communication work.</li>
+                      </ol>
+                   </div>
+
+                   <div className="grid md:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-lg bg-shogun-bg border border-shogun-border space-y-3">
+                         <h5 className="text-xs font-bold text-shogun-text">Optional: use the bot in a group</h5>
+                         <ol className="text-[11px] text-shogun-subdued space-y-2 ml-4 list-decimal leading-relaxed">
+                            <li>Add the bot to the Telegram group.</li>
+                            <li>Send a command addressed to it, such as <code>/start@your_bot_name</code>, or reply directly to one of its messages.</li>
+                            <li>Click <strong>Auto-detect Chat ID</strong> again. Group IDs are normally negative numbers.</li>
+                            <li>Add that negative ID to Allowed Chat IDs, paste the token again, and click <strong>Update Connection</strong>.</li>
+                         </ol>
+                         <p className="text-[10px] text-shogun-subdued leading-relaxed">
+                            Telegram Privacy Mode is enabled for group bots by default. The bot normally sees commands, direct mentions, and replies—not every group message.
+                            This is the safer default. If an administrator disables Privacy Mode in BotFather, remove and re-add the bot to the group afterward.
+                         </p>
+                      </div>
+                      <div className="p-4 rounded-lg bg-shogun-bg border border-shogun-border space-y-3">
+                         <h5 className="text-xs font-bold text-shogun-text">Security checklist</h5>
+                         <ul className="text-[11px] text-shogun-subdued space-y-2 ml-4 list-disc leading-relaxed">
+                            <li>Keep at least one Allowed Chat ID saved.</li>
+                            <li>Use a separate bot for testing and production.</li>
+                            <li>Only run one Shogun instance with a given token; two pollers can compete for the same messages.</li>
+                            <li>If the token is exposed, regenerate or revoke it in BotFather, then reconnect Shogun with the replacement.</li>
+                            <li>Disconnect the bot in Katana when remote access is no longer needed.</li>
+                         </ul>
+                      </div>
+                   </div>
+
+                   <div className="space-y-3">
+                      <h5 className="text-sm font-bold text-shogun-text">Telegram troubleshooting</h5>
+                      <div className="overflow-x-auto rounded-lg border border-shogun-border">
+                         <table className="w-full text-[11px]">
+                            <thead><tr className="text-left bg-shogun-bg text-shogun-subdued"><th className="p-3">What you see</th><th className="p-3">What to do</th></tr></thead>
+                            <tbody className="divide-y divide-shogun-border text-shogun-subdued">
+                               <tr><td className="p-3 font-bold text-shogun-text">Invalid token or HTTP 401</td><td className="p-3">Copy the complete token from BotFather again. A revoked token automatically disconnects the listener.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Auto-detect finds nothing</td><td className="p-3">Send a fresh message directly to the bot, wait a few seconds, then retry. Confirm no other application is consuming updates for the same token.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Test works, but your messages are ignored</td><td className="p-3">Check that your exact Chat ID is in Allowed Chat IDs and that you completed the second Update Connection save.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Group messages are ignored</td><td className="p-3">Mention the bot, use a command, or reply to it. Check the negative group ID and Telegram Privacy Mode.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Replies stop when the computer sleeps</td><td className="p-3">Keep Shogun running on an awake, internet-connected computer or server. Polling is performed by Shogun itself.</td></tr>
+                            </tbody>
+                         </table>
+                      </div>
                    </div>
                 </div>
              </section>
@@ -691,7 +823,7 @@ export function Guide() {
                    <Cpu className="w-6 h-6 text-shogun-blue" />
                    <div>
                       <h4 className="text-xl font-bold uppercase tracking-widest">Katana — The System Forge</h4>
-                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has 7 tabs.</p>
+                      <p className="text-xs text-shogun-subdued">Where you plug in AI "brains", connect tools, and set up routing rules. Has nine tabs.</p>
                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -731,11 +863,53 @@ export function Guide() {
                       </ul>
                       <p className="text-xs text-shogun-subdued leading-relaxed">The tab shows <strong>connection status</strong>, account details, and permission toggles for read, send, and calendar access. All mail activity is logged in the immutable audit chain.</p>
                    </div>
-                   <div className="shogun-card space-y-2 md:col-span-2">
+                   <div id="ref-telegram" className="shogun-card space-y-5 md:col-span-2 scroll-mt-6 border-sky-400/20">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><Globe className="w-4 h-4 text-shogun-blue" /> Telegram Integration</div>
-                      <p className="text-xs text-shogun-subdued leading-relaxed">At the bottom of the Katana page. Paste a Telegram Bot Token (obtained from @BotFather) and click "Connect" to let your Shogun send and receive messages via Telegram. This allows you to talk to your AI from your phone while away from your computer. The status indicator shows whether the bot is currently running.</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">Connect a private Telegram bot so you can talk to Shogun from your phone. A first-time personal setup normally takes 10–15 minutes.</p>
+                      <div className="p-3 rounded-lg border border-sky-400/20 bg-sky-400/5 text-xs text-shogun-subdued leading-relaxed">
+                         <strong className="text-shogun-text">Choose Polling.</strong> It is the working listener in this release and needs no public URL.
+                         Keep Webhook for administrator-managed custom deployments.
+                      </div>
+                      <ol className="text-xs text-shogun-subdued space-y-2 ml-5 list-decimal leading-relaxed">
+                         <li>In Telegram, open the verified <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">@BotFather</a> account and send <code>/newbot</code>.</li>
+                         <li>Choose a display name, then a unique username ending in <code>bot</code>. Copy the token BotFather returns and protect it like a password.</li>
+                         <li>Open <strong>Katana → Telegram</strong>, paste the token, select Polling, temporarily leave Allowed Chat IDs empty, and click <strong>Connect Bot</strong>.</li>
+                         <li>Open your new bot in Telegram, press Start, and send <code>Hello</code>. Bots cannot initiate private conversations.</li>
+                         <li>Back in Katana, click <strong>Auto-detect Chat ID</strong>. The detected ID is placed in the test and whitelist fields.</li>
+                         <li>
+                            Paste the token again and click <strong>Update Connection</strong>. This second save is essential: auto-detect changes the form,
+                            but the Allowed Chat IDs whitelist is not permanent until the connection is updated.
+                         </li>
+                         <li>Click <strong>Send Test</strong>, then send <code>Hello Shogun</code> from Telegram. Receiving both replies completes the private-chat setup.</li>
+                      </ol>
+                      <div className="grid md:grid-cols-2 gap-4">
+                         <div className="p-3 rounded-lg bg-shogun-bg border border-shogun-border">
+                            <p className="text-xs font-bold text-shogun-text mb-2">Adding a group</p>
+                            <p className="text-[11px] text-shogun-subdued leading-relaxed">
+                               Add the bot, send a direct command or mention, then auto-detect again. A group ID is normally negative.
+                               Add it to Allowed Chat IDs, paste the token again, and Update Connection. Telegram Privacy Mode normally limits the bot to commands, mentions, and replies.
+                            </p>
+                         </div>
+                         <div className="p-3 rounded-lg bg-shogun-bg border border-shogun-border">
+                            <p className="text-xs font-bold text-shogun-text mb-2">Safety rules</p>
+                            <ul className="text-[11px] text-shogun-subdued ml-4 list-disc space-y-1">
+                               <li>Never leave Allowed Chat IDs empty after discovery.</li>
+                               <li>Run only one Shogun poller per token.</li>
+                               <li>Regenerate an exposed token in BotFather immediately.</li>
+                               <li>Shogun must stay awake, running, and online.</li>
+                            </ul>
+                         </div>
+                      </div>
+                      <p className="text-[11px] text-shogun-subdued leading-relaxed">
+                         <strong className="text-shogun-text">If auto-detect finds nothing:</strong> send a fresh direct message to the bot, wait a few seconds, and retry.
+                         If Send Test works but normal messages are ignored, verify the exact Chat ID and repeat the second Update Connection save.
+                         See the expanded Telegram setup and troubleshooting walkthrough in the Onboarding tab.
+                      </p>
+                      <a href="https://core.telegram.org/bots/features" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline">
+                         <ExternalLink className="w-3 h-3" /> Official Telegram bot and Privacy Mode reference
+                      </a>
                    </div>
-                   <div className="shogun-card space-y-2 md:col-span-2">
+                   <div id="ref-teams" className="shogun-card space-y-2 md:col-span-2 scroll-mt-6">
                       <div className="font-bold text-shogun-text flex items-center gap-2"><MessageSquare className="w-4 h-4 text-shogun-blue" /> Microsoft Teams Adapter</div>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Connect Microsoft Teams as an enterprise command and notification channel for Shogun. Teams is the communication surface; <strong>Katana</strong> manages the channel, while <strong>Gensui</strong> continues to enforce identity, authorization, approvals, policy, and audit. The adapter supports personal chats, group chats, and channel commands when the Shogun bot is directly mentioned.</p>
                       <ul className="text-xs text-shogun-subdued space-y-1 ml-4 list-disc">
@@ -746,6 +920,210 @@ export function Guide() {
                          <li><strong>Audit &amp; Diagnostics:</strong> Records inbound commands, risk classification, authorization decisions, response outcomes, and correlation IDs. Built-in checks validate the Shogun backend, Microsoft Graph configuration, proactive messaging, and Teams manifest.</li>
                       </ul>
                       <p className="text-xs text-shogun-subdued leading-relaxed">Commands such as <code>status</code>, <code>agents</code>, <code>run workflow</code>, <code>pause agent</code>, and <code>show pending approvals</code> are classified by risk before dispatch. Critical commands—including Harakiri—never execute directly from a casual Teams message and must pass through Gensui confirmation and the configured approval policy. Production use requires a Microsoft Entra/Azure Bot registration and a public HTTPS Teams Bridge endpoint.</p>
+                   </div>
+                </div>
+
+                <div className="shogun-card space-y-6 border-indigo-400/20">
+                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div>
+                         <div className="font-bold text-shogun-text flex items-center gap-2 text-base">
+                            <Users className="w-5 h-5 text-indigo-400" /> Microsoft Teams — Step-by-Step Connection Guide
+                         </div>
+                         <p className="text-xs text-shogun-subdued mt-1">A complete path from an empty Microsoft tenant to a working Shogun personal chat and channel mention.</p>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 bg-indigo-400/10 border border-indigo-400/20 px-2.5 py-1 rounded-full w-fit">Administrator-assisted setup</span>
+                   </div>
+
+                   <div className="p-4 rounded-lg border border-amber-400/20 bg-amber-400/5">
+                      <p className="text-xs text-amber-300 font-bold flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Non-technical reality check</p>
+                      <p className="text-xs text-shogun-subdued leading-relaxed mt-2">
+                         Teams is an enterprise deployment, not a one-token connection. Most organizations require a <strong>Microsoft 365/Teams administrator</strong>,
+                         an <strong>Azure or Entra administrator</strong>, and the person who operates the Shogun server. The simplest safe pilot is
+                         <strong> Single tenant + Customer-hosted Teams Bridge + personal chat</strong>. Leave SSO, Microsoft Graph, and proactive messaging off until basic chat works.
+                      </p>
+                   </div>
+
+                   <div>
+                      <h5 className="text-sm font-bold text-shogun-text mb-3">What must be ready</h5>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                         {[
+                            ['Microsoft 365 tenant', 'A work or school tenant with Microsoft Teams.'],
+                            ['Azure subscription', 'Permission to create an Entra app registration and Azure Bot resource.'],
+                            ['Public HTTPS address', 'A stable internet address for the Teams Bridge, or a secure tunnel for a pilot.'],
+                            ['Shogun server access', 'Permission to start the included bridge and set protected environment values.'],
+                         ].map(([title, text]) => (
+                            <div key={title} className="p-3 rounded-lg bg-shogun-bg border border-shogun-border">
+                               <p className="text-xs font-bold text-shogun-text">{title}</p>
+                               <p className="text-[11px] text-shogun-subdued leading-relaxed mt-1">{text}</p>
+                            </div>
+                         ))}
+                      </div>
+                   </div>
+
+                   <div className="p-4 rounded-lg bg-indigo-400/5 border border-indigo-400/20">
+                      <h5 className="text-xs font-bold text-shogun-text">Administrator handoff checklist</h5>
+                      <p className="text-[11px] text-shogun-subdued mt-1">If someone else manages Microsoft 365, give that person this exact list:</p>
+                      <ul className="text-[11px] text-shogun-subdued leading-relaxed mt-2 ml-4 list-disc space-y-1.5">
+                         <li>Create a <strong>single-tenant Microsoft Entra app registration</strong> for Shogun.</li>
+                         <li>Create an <strong>Azure Bot</strong> using that existing app registration and enable its Microsoft Teams channel.</li>
+                         <li>Provide the <strong>Directory (tenant) ID</strong> and <strong>Application (client) ID</strong>.</li>
+                         <li>Store the client secret or certificate in the approved secret store; do not send it by email or Teams chat.</li>
+                         <li>Permit the Shogun custom Teams app for pilot users, or upload it to the organization's app catalog.</li>
+                         <li>Provide a public HTTPS hostname that routes to the Shogun Teams Bridge on port <code>3978</code>.</li>
+                      </ul>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part A — Register Shogun in Microsoft Entra</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>Sign in to the <a href="https://portal.azure.com" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline font-bold">Azure portal</a> with the administrator account.</li>
+                         <li>Open <strong>Microsoft Entra ID → App registrations → New registration</strong>.</li>
+                         <li>Enter a recognizable name such as <code>Shogun Teams Bot</code>.</li>
+                         <li>Select <strong>Accounts in this organizational directory only</strong> for a single-tenant deployment, then select <strong>Register</strong>.</li>
+                         <li>On Overview, copy <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong>. Keep the labels with the values so they are not confused.</li>
+                         <li>
+                            For a pilot using a client secret, open <strong>Certificates &amp; secrets → Client secrets → New client secret</strong>.
+                            Copy the secret <strong>Value</strong> immediately; it is displayed only once. Store it in an approved secret manager.
+                            For production, Microsoft recommends a managed identity, federated credential, or certificate instead of a long-lived client secret.
+                         </li>
+                      </ol>
+                      <a href="https://learn.microsoft.com/en-us/microsoft-365/agents-sdk/azure-bot-authentication-for-javascript" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline">
+                         <ExternalLink className="w-3 h-3" /> Official Microsoft authentication options
+                      </a>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part B — Create and configure the Azure Bot</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>In the Azure portal, select <strong>Create a resource</strong>, search for <strong>Azure Bot</strong>, and select <strong>Create</strong>.</li>
+                         <li>Choose the subscription and resource group, enter a unique bot handle, and select <strong>Single Tenant</strong>.</li>
+                         <li>For Microsoft App ID, choose <strong>Use existing app registration</strong> and enter the Application (client) ID from Part A.</li>
+                         <li>After deployment, open the Azure Bot resource. Under <strong>Settings → Configuration</strong>, set Messaging endpoint to <code>https://YOUR-BRIDGE-HOST/api/messages</code>, then apply the change.</li>
+                         <li>Under <strong>Settings → Channels</strong>, add or enable the <strong>Microsoft Teams</strong> channel.</li>
+                      </ol>
+                      <a href="https://learn.microsoft.com/en-us/microsoftteams/platform/teams-sdk/teams/azure-configuration" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline">
+                         <ExternalLink className="w-3 h-3" /> Official Azure Bot and Teams channel instructions
+                      </a>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part C — Start the included Teams Bridge</h5>
+                      <p className="text-xs text-shogun-subdued leading-relaxed">
+                         The bridge is the Microsoft-facing service in <code>bridge/teams</code>. Teams sends messages to the bridge; the bridge validates and normalizes them,
+                         then sends governed commands to Shogun. The bridge requires <strong>Node.js 22 or newer</strong>.
+                      </p>
+                      <div className="grid md:grid-cols-2 gap-4">
+                         <div className="p-4 rounded-lg bg-[#050508] border border-shogun-border">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-shogun-subdued mb-2">Bridge environment values</p>
+                            <pre className="text-[10px] text-indigo-300 whitespace-pre-wrap overflow-x-auto">{`tenantId=<Directory tenant ID>
+clientId=<Application client ID>
+clientSecret=<secret Value for pilot only>
+SHOGUN_INTERNAL_API_URL=http://<shogun-host>:8000
+SHOGUN_INTERNAL_API_KEY=<one long random shared key>`}</pre>
+                         </div>
+                         <div className="p-4 rounded-lg bg-[#050508] border border-shogun-border">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-shogun-subdued mb-2">Install and start</p>
+                            <pre className="text-[10px] text-indigo-300 whitespace-pre-wrap overflow-x-auto">{`cd bridge/teams
+npm install
+npm run build
+npm start`}</pre>
+                         </div>
+                      </div>
+                      <ul className="text-xs text-shogun-subdued space-y-2 ml-4 list-disc leading-relaxed">
+                         <li>Set the same <code>SHOGUN_INTERNAL_API_KEY</code> in the operating-system environment for both Shogun and the bridge, then restart both. Do not commit this key to source control.</li>
+                         <li><code>SHOGUN_INTERNAL_API_URL</code> must be an address the bridge can reach. If both run on one computer, <code>http://127.0.0.1:8000</code> is normally correct.</li>
+                         <li>The bridge listens on port <code>3978</code>. Put it behind a public HTTPS reverse proxy or a controlled development tunnel.</li>
+                         <li>Open <code>https://YOUR-BRIDGE-HOST/api/teams/health</code>. A JSON response with status <code>ok</code> confirms the bridge is reachable.</li>
+                      </ul>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part D — Complete Katana's Setup Wizard</h5>
+                      <p className="text-xs text-shogun-subdued">Open <strong>The Katana → Microsoft Teams → Setup Wizard</strong> and use these values:</p>
+                      <div className="overflow-x-auto rounded-lg border border-shogun-border">
+                         <table className="w-full text-[11px]">
+                            <thead><tr className="text-left bg-shogun-bg text-shogun-subdued"><th className="p-3">Katana field</th><th className="p-3">Recommended value</th></tr></thead>
+                            <tbody className="divide-y divide-shogun-border text-shogun-subdued">
+                               <tr><td className="p-3 font-bold text-shogun-text">Deployment mode</td><td className="p-3"><strong>Customer-hosted Teams Bridge</strong> for production; Local development + tunnel for a pilot.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Tenant mode</td><td className="p-3"><strong>Single tenant</strong>.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Allowed tenant IDs</td><td className="p-3">The Directory (tenant) ID from Entra. Enter one ID per line.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Bot / App ID</td><td className="p-3">The Application (client) ID from Entra.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Bot display name</td><td className="p-3">A friendly name such as <code>Shogun</code>.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Secret reference</td><td className="p-3">A reference such as <code>vault://teams/bot-client-secret</code>, never the secret value. The actual credential is injected into the bridge runtime.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Public messaging endpoint</td><td className="p-3"><code>https://YOUR-BRIDGE-HOST/api/messages</code> — exactly the same URL configured on the Azure Bot.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Valid domains</td><td className="p-3">Hostname only, for example <code>teams-bridge.example.com</code>. Do not include <code>https://</code> or a path.</td></tr>
+                            </tbody>
+                         </table>
+                      </div>
+                      <ol className="text-xs text-shogun-subdued space-y-2 ml-5 list-decimal leading-relaxed">
+                         <li>Click <strong>Save configuration</strong>.</li>
+                         <li>Keep SSO, Microsoft Graph, and Proactive messaging disabled for the first test.</li>
+                         <li>Under Security Policy, keep destructive commands disabled and dual approval enabled.</li>
+                         <li>Click <strong>Enable adapter</strong>. Overview should become Production ready or show a specific missing item.</li>
+                      </ol>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part E — Generate and install the Teams app</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>Click <strong>Generate Teams app package</strong>. Shogun downloads <code>shogun-teams-app.zip</code>. Do not unzip it.</li>
+                         <li>For a personal pilot, open Teams and choose <strong>Apps → Manage your apps → Upload an app → Upload a custom app</strong>. Select the ZIP, then choose <strong>Add</strong> and <strong>Open</strong>.</li>
+                         <li>
+                            If Upload a custom app is missing, a Teams administrator must allow it or upload the ZIP centrally at
+                            <a href="https://admin.teams.microsoft.com" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline"> Teams admin center</a> under <strong>Teams apps → Manage apps → Upload new app</strong>.
+                         </li>
+                         <li>For a team or channel, install the app in that team too. In channel messages, directly mention <code>@Shogun</code> before the command.</li>
+                      </ol>
+                      <div className="flex flex-wrap gap-4">
+                         <a href="https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/deploy-and-publish/apps-upload" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline">
+                            <ExternalLink className="w-3 h-3" /> Upload a custom app in Teams
+                         </a>
+                         <a href="https://learn.microsoft.com/en-us/microsoftteams/teams-custom-app-policies-and-settings" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline">
+                            <ExternalLink className="w-3 h-3" /> Teams administrator app policies
+                         </a>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <h5 className="text-sm font-bold text-shogun-text">Part F — Test in the right order</h5>
+                      <ol className="text-xs text-shogun-subdued space-y-3 ml-5 list-decimal leading-relaxed">
+                         <li>Open a personal chat with the installed Shogun app. The welcome message should say Shogun is connected.</li>
+                         <li>Send <code>help</code>, then <code>status</code>. These are safe first commands for a new Viewer identity.</li>
+                         <li>Open <strong>Katana → Microsoft Teams → Entra &amp; Roles</strong>. Your identity should appear after the first message.</li>
+                         <li>Open <strong>Audit Log</strong>. The commands should have timestamps, authorization results, and correlation IDs.</li>
+                         <li>Under <strong>Diagnostics</strong>, run Shogun backend and Teams manifest. Test Graph and proactive messaging only after configuring those features.</li>
+                         <li>Finally test a channel with <code>@Shogun status</code>. A plain <code>status</code> without the mention may be ignored.</li>
+                      </ol>
+                   </div>
+
+                   <div className="space-y-3">
+                      <h5 className="text-sm font-bold text-shogun-text">Teams troubleshooting</h5>
+                      <div className="overflow-x-auto rounded-lg border border-shogun-border">
+                         <table className="w-full text-[11px]">
+                            <thead><tr className="text-left bg-shogun-bg text-shogun-subdued"><th className="p-3">What you see</th><th className="p-3">What to check</th></tr></thead>
+                            <tbody className="divide-y divide-shogun-border text-shogun-subdued">
+                               <tr><td className="p-3 font-bold text-shogun-text">The app cannot be uploaded</td><td className="p-3">Ask the Teams administrator to enable custom app upload or upload the ZIP in Teams admin center. Regenerate the ZIP after changing App ID, valid domains, or SSO.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Bot sends no reply</td><td className="p-3">Check bridge health, confirm Azure Bot uses the exact <code>/api/messages</code> HTTPS endpoint, and confirm the Teams channel is enabled.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">“Shogun is unreachable”</td><td className="p-3">The bridge is online but cannot reach Shogun. Check the internal API URL, network/firewall access, and that both processes use the same internal API key.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Unauthorized or silent command</td><td className="p-3">Compare the tenant with Allowed tenant IDs. In a channel, mention the bot and ensure the app is installed in that team.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Only safe commands work</td><td className="p-3">This is expected for new Viewer identities. An administrator must deliberately assign a higher Shogun role and command policy.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Authentication stopped later</td><td className="p-3">The client secret may have expired. Replace it in the bridge's secret store, restart the bridge, and retire the old secret.</td></tr>
+                               <tr><td className="p-3 font-bold text-shogun-text">Proactive messages disappear after restart</td><td className="p-3">The included bridge uses in-memory storage for development. Production needs Azure Blob or Cosmos-backed Agents SDK storage, and the user must contact the bot once first.</td></tr>
+                            </tbody>
+                         </table>
+                      </div>
+                   </div>
+
+                   <div className="p-4 rounded-lg border border-green-400/20 bg-green-400/5">
+                      <h5 className="text-xs font-bold text-green-400">Setup is complete when all six statements are true</h5>
+                      <ul className="text-[11px] text-shogun-subdued mt-2 ml-4 list-disc space-y-1.5">
+                         <li>The bridge health URL returns status <code>ok</code>.</li>
+                         <li>Katana Overview reports the adapter as ready with the correct tenant.</li>
+                         <li>The Teams app installs without a manifest error.</li>
+                         <li><code>help</code> and <code>status</code> receive replies in a personal chat.</li>
+                         <li>The user appears under Entra &amp; Roles and the command appears in Audit Log.</li>
+                         <li><code>@Shogun status</code> works in every team/channel where the app was intentionally installed.</li>
+                      </ul>
                    </div>
                 </div>
              </section>
