@@ -110,6 +110,14 @@ class ChannelService:
         bushido = await _get_agent_bushido()
         bushido[_TELEGRAM_KEY] = cfg
         await _save_agent_bushido(bushido)
+
+        # Invalidate the poller's config cache so it picks up the new token immediately
+        try:
+            from shogun.services.telegram_poller import invalidate_telegram_config_cache
+            invalidate_telegram_config_cache()
+        except ImportError:
+            pass
+
         return {k: v for k, v in cfg.items() if k != "bot_token"}  # never expose token in response
 
     # ── Test message ──────────────────────────────────────────────────
@@ -187,4 +195,12 @@ class ChannelService:
         bushido = await _get_agent_bushido()
         bushido.pop(_TELEGRAM_KEY, None)
         await _save_agent_bushido(bushido)
+
+        # Invalidate the poller's config cache so it stops polling immediately
+        try:
+            from shogun.services.telegram_poller import invalidate_telegram_config_cache
+            invalidate_telegram_config_cache()
+        except ImportError:
+            pass
+
         return {"disconnected": True}

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 import traceback
 import httpx
 from datetime import datetime, timezone
@@ -10,10 +11,66 @@ from datetime import datetime, timezone
 from shogun.db.engine import async_session_factory
 from shogun.db.models.agent import Agent
 from shogun.services.agent_service import AgentService
-from shogun.api.agents import _shogun_chat_internal
+from shogun.api.agents import _shogun_chat_internal, _classify_chat_mode
 from shogun.services.channel_service import _TELEGRAM_KEY, _get_agent_bushido
 
 logger = logging.getLogger("shogun.telegram_poller")
+
+# ── Persistent httpx client (connection pooling, avoids TLS handshake per call) ──
+_tg_client: httpx.AsyncClient | None = None
+
+
+def _get_tg_client() -> httpx.AsyncClient:
+    """Return (and lazily create) a long-lived httpx client for Telegram API calls."""
+    global _tg_client
+    if _tg_client is None or _tg_client.is_closed:
+        _tg_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5, read=40, write=10, pool=5),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=5),
+            http2=False,
+        )
+    return _tg_client
+
+
+# ── Telegram config cache (avoid DB hit every poll cycle) ──────────────────
+_tg_config_cache: dict = {"data": None, "ts": 0.0}
+_TG_CONFIG_TTL = 60  # seconds
+
+
+async def _get_cached_telegram_config() -> tuple[dict, dict]:
+    """Return (bushido_settings, telegram_config) with 60s caching.
+
+    Returns ({}, {}) when no config is available.
+    """
+    now = time.monotonic()
+    if now - _tg_config_cache["ts"] < _TG_CONFIG_TTL and _tg_config_cache["data"] is not None:
+        bushido = _tg_config_cache["data"]
+        return bushido, bushido.get(_TELEGRAM_KEY, {})
+
+    bushido = await _get_agent_bushido()
+    _tg_config_cache["data"] = bushido or {}
+    _tg_config_cache["ts"] = now
+    cfg = (bushido or {}).get(_TELEGRAM_KEY, {})
+    return bushido or {}, cfg
+
+
+def invalidate_telegram_config_cache():
+    """Force a config refresh on the next poll cycle (e.g. after connect/disconnect)."""
+    _tg_config_cache["ts"] = 0.0
+
+
+# ── Telegram API helpers (use persistent client) ──────────────────────────
+
+
+async def send_chat_action(bot_token: str, chat_id: str, action: str = "typing"):
+    """Send a chat action indicator (e.g. 'typing...') — instant user feedback."""
+    url = f"https://api.telegram.org/bot{bot_token}/sendChatAction"
+    try:
+        client = _get_tg_client()
+        await client.post(url, json={"chat_id": chat_id, "action": action})
+    except Exception:
+        pass  # Non-critical — best effort
+
 
 async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> int | None:
     """Push a textual response back to the Telegram client. Returns message_id if successful."""
@@ -24,37 +81,55 @@ async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> int 
         "parse_mode": "Markdown"
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(url, json=payload)
-            if resp.is_success:
-                return resp.json().get("result", {}).get("message_id")
-            logger.error(f"Failed to send Telegram message: {resp.text}")
+        client = _get_tg_client()
+        resp = await client.post(url, json=payload)
+        if resp.is_success:
+            return resp.json().get("result", {}).get("message_id")
+        logger.error(f"Failed to send Telegram message: {resp.text}")
     except Exception as e:
         logger.error(f"Network error sending to Telegram: {e}")
     return None
 
-async def edit_telegram_message(bot_token: str, chat_id: str, message_id: int, text: str):
-    """Update an existing Telegram message with new content."""
+
+async def edit_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    message_id: int,
+    text: str,
+    *,
+    use_markdown: bool = True,
+):
+    """Update an existing Telegram message with new content.
+
+    Set ``use_markdown=False`` for intermediate streaming edits where the
+    markdown may be incomplete (unclosed ``*``, ``_``, etc.), which would
+    cause Telegram to reject the edit.
+    """
     url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
-    payload = {
+    payload: dict = {
         "chat_id": chat_id,
         "message_id": message_id,
         "text": text,
-        "parse_mode": "Markdown"
     }
+    if use_markdown:
+        payload["parse_mode"] = "Markdown"
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(url, json=payload)
-            if not resp.is_success:
-                # Often occurs if content is identical, skip error logging for that
-                if "message is not modified" not in resp.text:
-                    logger.debug(f"Note: Failed to edit Telegram message: {resp.text}")
+        client = _get_tg_client()
+        resp = await client.post(url, json=payload)
+        if not resp.is_success:
+            # Often occurs if content is identical, skip error logging for that
+            if "message is not modified" not in resp.text:
+                logger.debug(f"Note: Failed to edit Telegram message: {resp.text}")
     except Exception as e:
         logger.error(f"Network error editing Telegram message: {e}")
+
 
 async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
     """Pipe an incoming message into the Shogun AI engine, capturing its SSE streaming output."""
     logger.info(f"[Telegram] Received: '{user_msg[:50]}...' from {chat_id}")
+
+    # ── 0. Immediate typing indicator — user sees feedback in <100ms ──
+    await send_chat_action(bot_token, chat_id, "typing")
 
     # Emergency controls must be handled before the kill-switch gate so the
     # same authorized Telegram user can also reset an active Harakiri.
@@ -102,14 +177,35 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
         async with async_session_factory() as session:
             svc = AgentService(session)
             
-            # 1. Send initial thinking message
+            # ── 1. Route via mode classifier (fast vs mission) ─────
+            classification = _classify_chat_mode(user_msg, [])
+            mode = classification["mode"]
+            logger.info(
+                "[Telegram] Mode classified: %s (reason=%s, matched=%s)",
+                mode,
+                classification.get("reason", ""),
+                classification.get("matched", [])[:3],
+            )
+
+            # 2. Send initial thinking message
             msg_id = await send_telegram_message(bot_token, chat_id, "_Shogun is thinking..._")
             
-            # Invoke the core engine internal router
-            logger.info(f"[Telegram] Routing to Shogun engine...")
-            response_stream = await _shogun_chat_internal(user_msg=user_msg, history=[], svc=svc)
+            # 3. Invoke the appropriate engine lane
+            if mode == "fast":
+                from shogun.api.agents import _shogun_fast_chat
+                logger.info("[Telegram] Routing to Fast Chat lane...")
+                response_stream = await _shogun_fast_chat(
+                    user_msg=user_msg, history=[], svc=svc,
+                    classification=classification,
+                )
+            else:
+                logger.info("[Telegram] Routing to Mission lane...")
+                response_stream = await _shogun_chat_internal(
+                    user_msg=user_msg, history=[], svc=svc,
+                    classification=classification,
+                )
             
-            # 2. Aggregate the SSE chunks and update Telegram periodically
+            # 4. Aggregate the SSE chunks and update Telegram periodically
             full_reply = ""
             current_action = ""
             last_update_text = ""
@@ -144,9 +240,9 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                                 except json.JSONDecodeError:
                                     pass
                     
-                    # High-frequency update every 0.8 seconds for smooth UI
+                    # Throttled update every 1.5 seconds (Telegram rate limit is ~1 msg/sec per chat)
                     now = datetime.now(timezone.utc)
-                    if (now - last_update_time).total_seconds() > 0.8 or current_action:
+                    if (now - last_update_time).total_seconds() > 1.5 or current_action:
                         display_text = full_reply.strip()
                         if current_action:
                             if display_text:
@@ -155,9 +251,13 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                                 display_text = f"⚙️ _{current_action}_"
                                 
                         if display_text and display_text != last_update_text:
-                            # Note: We use NO parse_mode for intermediate edits
-                            # This prevents Telegram from rejecting messages with unclosed markdown
-                            await edit_telegram_message(bot_token, chat_id, msg_id, display_text + (" ▮" if not current_action else ""))
+                            # use_markdown=False for intermediate edits to avoid
+                            # Telegram rejecting partial/unclosed markdown syntax
+                            await edit_telegram_message(
+                                bot_token, chat_id, msg_id,
+                                display_text + (" ▮" if not current_action else ""),
+                                use_markdown=False,
+                            )
                             last_update_text = display_text
                             last_update_time = now
                 
@@ -170,8 +270,8 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                 logger.warning("[Telegram] AI Engine returned empty response.")
                 full_reply = "I apologize, but I couldn't generate a response to that message."
                 
-            # 3. Final update to the same message — HERE we enable Markdown for the finished text
-            await edit_telegram_message(bot_token, chat_id, msg_id, full_reply)
+            # 5. Final update to the same message — HERE we enable Markdown for the finished text
+            await edit_telegram_message(bot_token, chat_id, msg_id, full_reply, use_markdown=True)
             logger.info(f"[Telegram] Response finalized for {chat_id}")
 
     except Exception as e:
@@ -185,14 +285,13 @@ async def telegram_poller_task():
 
     while True:
         try:
-            # 1. Check if telegram is connected and what the config is
-            bushido = await _get_agent_bushido()
+            # 1. Check if telegram is connected and what the config is (cached)
+            bushido, cfg = await _get_cached_telegram_config()
             if not bushido:
                 logger.debug("[Telegram] No bushido settings found, sleeping...")
                 await asyncio.sleep(10)
                 continue
                 
-            cfg = bushido.get(_TELEGRAM_KEY, {})
             bot_token = cfg.get("bot_token")
             is_connected = cfg.get("connected", False)
             allowed_ids = cfg.get("allowed_chat_ids", [])
@@ -202,18 +301,18 @@ async def telegram_poller_task():
                 await asyncio.sleep(10)
                 continue
                 
-            # 2. Hit the Telegram Long-Polling endpoint.
+            # 2. Hit the Telegram Long-Polling endpoint (uses persistent client).
             url = f"https://api.telegram.org/bot{bot_token}/getUpdates?timeout=30&offset={offset}"
             
-            async with httpx.AsyncClient(timeout=40) as client:
-                try:
-                    resp = await client.get(url)
-                except httpx.ReadTimeout:
-                    continue
-                except Exception as e:
-                    logger.warning(f"[Telegram] Polling network exception: {e}")
-                    await asyncio.sleep(5)
-                    continue
+            client = _get_tg_client()
+            try:
+                resp = await client.get(url)
+            except httpx.ReadTimeout:
+                continue
+            except Exception as e:
+                logger.warning(f"[Telegram] Polling network exception: {e}")
+                await asyncio.sleep(5)
+                continue
 
             if not resp.is_success:
                 if resp.status_code == 401:
@@ -233,6 +332,7 @@ async def telegram_poller_task():
                                 logger.info("[Telegram] Auto-disconnected due to invalid token.")
                     except Exception as disc_err:
                         logger.debug(f"[Telegram] Failed to auto-disconnect: {disc_err}")
+                    invalidate_telegram_config_cache()
                     await asyncio.sleep(60)  # Long sleep after auto-disconnect
                 else:
                     logger.warning(f"[Telegram] Polling failed: HTTP {resp.status_code} - {resp.text[:200]}")
@@ -290,4 +390,8 @@ async def telegram_poller_task():
             logger.error(f"[Telegram] Unexpected exception in poller: {e}\n{traceback.format_exc()}")
             await asyncio.sleep(5)
             
+    # Clean up the persistent client on exit
+    if _tg_client and not _tg_client.is_closed:
+        await _tg_client.aclose()
+
     logger.info("[Telegram] Background listener loop exited.")
