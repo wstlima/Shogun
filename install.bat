@@ -130,7 +130,7 @@ echo  :                                                          :
 echo  :   Installation complete!                                 :
 echo  :                                                          :
 echo  :   Shogun is starting at http://localhost:8000/setup      :
-echo  :   Your browser will open automatically in 5 seconds.     :
+echo  :   Your browser will open when the server is ready.       :
 echo  :                                                          :
 echo  :   A desktop shortcut has been created.                   :
 echo  :   Use it to launch Shogun in the future.                 :
@@ -140,8 +140,8 @@ echo  :                                                          :
 echo  +----------------------------------------------------------+
 echo.
 
-:: Open browser after a short delay
-start "" cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000/setup"
+:: Wait for backend to be ready, then open browser to setup (background)
+start "" powershell -WindowStyle Hidden -Command "$ok=$false; for($i=0;$i -lt 30;$i++){try{$r=Invoke-WebRequest -Uri 'http://localhost:8000/api/v1/health' -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop; if($r.StatusCode -eq 200){Start-Process 'http://localhost:8000/setup'; $ok=$true; break}}catch{}; Start-Sleep -Seconds 2}; if(-not $ok){Write-Host 'Server did not respond in time. Open http://localhost:8000/setup manually.'}"
 
 :: Start the server (blocking)
 python -m shogun

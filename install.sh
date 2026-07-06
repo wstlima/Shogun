@@ -164,7 +164,7 @@ echo -e "${GREEN}  ║                                                          
 echo -e "${GREEN}  ║   ✅ Installation complete!                              ║${NC}"
 echo -e "${GREEN}  ║                                                          ║${NC}"
 echo -e "${GREEN}  ║   Shogun is starting at http://localhost:8000/setup      ║${NC}"
-echo -e "${GREEN}  ║   Your browser will open automatically in 5 seconds.    ║${NC}"
+echo -e "${GREEN}  ║   Your browser will open when the server is ready.      ║${NC}"
 echo -e "${GREEN}  ║                                                          ║${NC}"
 echo -e "${GREEN}  ║   A desktop shortcut has been created.                   ║${NC}"
 echo -e "${GREEN}  ║   Use it to launch Shogun in the future.                ║${NC}"
@@ -174,14 +174,20 @@ echo -e "${GREEN}  ║                                                          
 echo -e "${GREEN}  ╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Open browser after delay (background)
+# Wait for backend to be ready, then open browser (background)
 (
-    sleep 5
-    if [ "$PLATFORM" = "macOS" ]; then
-        open "http://localhost:8000/setup" 2>/dev/null || true
-    else
-        xdg-open "http://localhost:8000/setup" 2>/dev/null || true
-    fi
+    for i in $(seq 1 30); do
+        if curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/health 2>/dev/null | grep -q '^200$'; then
+            if [ "$PLATFORM" = "macOS" ]; then
+                open "http://localhost:8000/setup" 2>/dev/null || true
+            else
+                xdg-open "http://localhost:8000/setup" 2>/dev/null || true
+            fi
+            exit 0
+        fi
+        sleep 2
+    done
+    echo "  Warning: Server did not respond in time. Open http://localhost:8000/setup manually."
 ) &
 
 # Start the server (blocking)

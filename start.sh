@@ -50,14 +50,20 @@ echo ""
 echo "  Press Ctrl+C to stop the server."
 echo ""
 
-# Open browser after delay (background)
+# Wait for backend to be ready, then open browser (background)
 (
-    sleep 3
-    if [ "$OS" = "Darwin" ]; then
-        open "http://localhost:8000" 2>/dev/null || true
-    else
-        xdg-open "http://localhost:8000" 2>/dev/null || true
-    fi
+    for i in $(seq 1 30); do
+        if curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/health 2>/dev/null | grep -q '^200$'; then
+            if [ "$OS" = "Darwin" ]; then
+                open "http://localhost:8000" 2>/dev/null || true
+            else
+                xdg-open "http://localhost:8000" 2>/dev/null || true
+            fi
+            exit 0
+        fi
+        sleep 2
+    done
+    echo "  Warning: Server did not respond in time. Open http://localhost:8000 manually."
 ) &
 
 # Start the server (blocking)

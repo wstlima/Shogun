@@ -1,8 +1,8 @@
 {
-  "version": "1.5.4",
+  "version": "1.5.5",
   "name": "Shogun OS",
-  "build": 34,
+  "build": 35,
   "channel": "stable",
-  "released": "2026-07-06T12:00:00Z",
-  "changelog": "Fixed UI error handling for Updates page and resolved Telegram bot connection string parsing."
+  "released": "2026-07-06T13:00:00Z",
+  "changelog": "Launchers now wait for backend health check before opening browser, preventing blank UI on slow startups."
 }
