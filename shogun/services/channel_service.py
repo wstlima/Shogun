@@ -78,6 +78,7 @@ class ChannelService:
         """Validate the bot token with the Telegram API and persist config."""
         from datetime import datetime, timezone
 
+        bot_token = bot_token.strip()
         url = f"https://api.telegram.org/bot{bot_token}/getMe"
         try:
             async with httpx.AsyncClient(timeout=10) as client:
