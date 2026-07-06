@@ -25,10 +25,24 @@ export const Updates = () => {
     setChecking(true);
     try {
       const r = await fetch(`/api/v1/updates/check?force=${force}`);
+      if (!r.ok) {
+        const errData = await r.json().catch(() => null);
+        throw new Error(errData?.detail || `HTTP Error ${r.status}`);
+      }
       const data = await r.json();
-      setStatus(data);
-    } catch {
-      setStatus(null);
+      setStatus(data.data ? data.data : data);
+    } catch (e: any) {
+      setStatus({
+        update_available: false,
+        local_version: 'error',
+        local_build: 0,
+        remote_version: null,
+        remote_build: null,
+        changelog: null,
+        released: null,
+        last_checked: new Date().toISOString(),
+        error: e.message || 'Failed to check updates'
+      });
     }
     setChecking(false);
   };
