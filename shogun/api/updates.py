@@ -129,8 +129,9 @@ async def apply_update():
             raise HTTPException(status_code=500, detail="ZIP extraction produced no files")
         source = extracted_dirs[0]
 
-        # Step 4: Copy files (skip data/, venv/, node_modules/, .env)
-        skip = {
+        # Step 4: Copy files (skip top-level data/, venv/, node_modules/, .env)
+        # Only skip these at the top level — nested dirs like shogun/data/ must be copied.
+        skip_toplevel = {
             "data", "venv", ".venv", "node_modules", ".env", "__pycache__", ".git",
             "configs", "vault", "logs", "scratch", ".states",
         }
@@ -139,8 +140,8 @@ async def apply_update():
         for item in source.rglob("*"):
             rel = item.relative_to(source)
 
-            # Skip protected directories
-            if any(part in skip for part in rel.parts):
+            # Skip protected top-level directories only
+            if rel.parts[0] in skip_toplevel:
                 continue
 
             dest = root / rel

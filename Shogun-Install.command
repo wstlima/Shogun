@@ -137,7 +137,7 @@ fi
 # Copy files (preserve data/ and venv/)
 mkdir -p "$INSTALL_DIR"
 if command -v rsync &>/dev/null; then
-    rsync -a --exclude='data/' --exclude='venv/' --exclude='node_modules/' \
+    rsync -a --exclude='/data/' --exclude='/venv/' --exclude='/node_modules/' --exclude='/frontend/node_modules/' \
         "$EXTRACTED/" "$INSTALL_DIR/"
 else
     cp -R "$EXTRACTED"/* "$INSTALL_DIR/"

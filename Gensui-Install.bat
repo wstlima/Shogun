@@ -96,7 +96,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%Z
 
 if exist "%TEMP%\shogun-extract\Shogun-%BRANCH%" (
     if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-    robocopy "%TEMP%\shogun-extract\Shogun-%BRANCH%" "%INSTALL_DIR%" /E /XD data venv .venv node_modules /NFL /NDL /NJH /NJS >nul 2>&1
+    robocopy "%TEMP%\shogun-extract\Shogun-%BRANCH%" "%INSTALL_DIR%" /E /XD "%INSTALL_DIR%\data" "%INSTALL_DIR%\venv" "%INSTALL_DIR%\.venv" "%INSTALL_DIR%\node_modules" "%INSTALL_DIR%\frontend\node_modules" /NFL /NDL /NJH /NJS >nul 2>&1
 )
 
 if exist "%TEMP%\gensui_setup_backup.json" (

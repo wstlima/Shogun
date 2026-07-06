@@ -62,7 +62,7 @@ if not defined SOURCE_DIR (
 
 echo  Updating application files while preserving your data and settings...
 robocopy "%SOURCE_DIR%" "%INSTALL_DIR%" /E /R:2 /W:1 ^
-  /XD data venv .venv node_modules configs vault logs scratch .states .git __pycache__ ^
+  /XD "%INSTALL_DIR%\data" "%INSTALL_DIR%\venv" "%INSTALL_DIR%\.venv" "%INSTALL_DIR%\node_modules" "%INSTALL_DIR%\frontend\node_modules" "%INSTALL_DIR%\configs" "%INSTALL_DIR%\vault" "%INSTALL_DIR%\logs" "%INSTALL_DIR%\scratch" "%INSTALL_DIR%\.states" "%INSTALL_DIR%\.git" __pycache__ ^
   /XF .env >nul
 if errorlevel 8 (
     echo  ERROR: Some application files could not be updated.
