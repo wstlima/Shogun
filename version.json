@@ -1,8 +1,8 @@
 {
-  "version": "1.5.3",
+  "version": "1.5.4",
   "name": "Shogun OS",
-  "build": 33,
+  "build": 34,
   "channel": "stable",
-  "released": "2026-07-05T17:15:00Z",
-  "changelog": "Added Harakiri emergency kill-switch controls via Teams and Telegram, and updated UI for AgentFlow and Backups."
+  "released": "2026-07-06T12:00:00Z",
+  "changelog": "Fixed UI error handling for Updates page and resolved Telegram bot connection string parsing."
 }
