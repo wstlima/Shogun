@@ -176,9 +176,22 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
         # Fire up a scoped AgentService session
         async with async_session_factory() as session:
             svc = AgentService(session)
+            from shogun.services.chat_sync_service import (
+                append_chat_message,
+                get_chat_context,
+            )
+            history = await get_chat_context(session, limit=20)
+            await append_chat_message(
+                session,
+                channel="telegram",
+                role="user",
+                content=user_msg,
+                external_chat_id=chat_id,
+            )
+            await session.commit()
             
             # ── 1. Route via mode classifier (fast vs mission) ─────
-            classification = _classify_chat_mode(user_msg, [])
+            classification = _classify_chat_mode(user_msg, history)
             mode = classification["mode"]
             logger.info(
                 "[Telegram] Mode classified: %s (reason=%s, matched=%s)",
@@ -195,13 +208,13 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                 from shogun.api.agents import _shogun_fast_chat
                 logger.info("[Telegram] Routing to Fast Chat lane...")
                 response_stream = await _shogun_fast_chat(
-                    user_msg=user_msg, history=[], svc=svc,
+                    user_msg=user_msg, history=history, svc=svc,
                     classification=classification,
                 )
             else:
                 logger.info("[Telegram] Routing to Mission lane...")
                 response_stream = await _shogun_chat_internal(
-                    user_msg=user_msg, history=[], svc=svc,
+                    user_msg=user_msg, history=history, svc=svc,
                     classification=classification,
                 )
             
@@ -272,6 +285,14 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                 
             # 5. Final update to the same message — HERE we enable Markdown for the finished text
             await edit_telegram_message(bot_token, chat_id, msg_id, full_reply, use_markdown=True)
+            await append_chat_message(
+                session,
+                channel="telegram",
+                role="assistant",
+                content=full_reply,
+                external_chat_id=chat_id,
+            )
+            await session.commit()
             logger.info(f"[Telegram] Response finalized for {chat_id}")
 
     except Exception as e:

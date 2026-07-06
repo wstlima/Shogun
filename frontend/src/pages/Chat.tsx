@@ -14,9 +14,11 @@ type RoninAttachment =
   | { type: 'toolgate_confirm'; confirmId: string; tool: string; args: Record<string, string>; risk: string; reason: string; resolved?: 'approved' | 'denied' | 'timeout' };
 
 interface Message {
+  id?: string;
   role: 'user' | 'shogun';
   content: string;
   timestamp: string;
+  channel?: 'comms' | 'telegram';
   model?: string;
   provider?: string;
   search?: boolean;
@@ -55,6 +57,26 @@ function loadCurrent(t: any): Message[] {
 
 function saveCurrent(msgs: Message[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+}
+
+async function persistSharedMessage(message: Message, mirrorToTelegram = true) {
+  const response = await fetch('/api/v1/comms/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      role: message.role,
+      content: message.content,
+      client_message_id: message.id,
+      mirror_to_telegram: mirrorToTelegram,
+      message_data: {
+        model: message.model,
+        provider: message.provider,
+        search: message.search,
+        mode: message.mode,
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`Could not sync chat message: HTTP ${response.status}`);
 }
 
 function loadHistory(): Session[] {
@@ -208,6 +230,35 @@ export const ChatConsole = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refreshSharedMessages = async () => {
+      if (abortRef.current) return;
+      try {
+        const response = await fetch('/api/v1/comms/messages?limit=200');
+        if (!response.ok) return;
+        const payload = await response.json();
+        const shared: Message[] = (payload.data || []).map((message: any) => ({
+          id: message.id,
+          role: message.role === 'user' ? 'user' : 'shogun',
+          content: message.content,
+          channel: message.channel,
+          timestamp: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ...(message.message_data || {}),
+        }));
+        if (!cancelled && shared.length > 0) setMessages(shared);
+      } catch {
+        // Keep the local cache usable while the server is temporarily offline.
+      }
+    };
+    void refreshSharedMessages();
+    const timer = window.setInterval(refreshSharedMessages, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Persist messages to localStorage on every change
   useEffect(() => {
     saveCurrent(messages);
@@ -224,10 +275,17 @@ export const ChatConsole = () => {
     if (!input.trim() || isThinking) return;
 
     const userMsg: Message = {
+      id: crypto.randomUUID(),
       role: 'user',
       content: input,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      channel: 'comms',
     };
+    try {
+      await persistSharedMessage(userMsg);
+    } catch (err) {
+      console.error('Chat sync failed:', err);
+    }
 
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
@@ -241,9 +299,11 @@ export const ChatConsole = () => {
       .map(m => ({ role: m.role === 'shogun' ? 'assistant' : 'user', content: m.content }));
 
     const placeholder: Message = {
+      id: crypto.randomUUID(),
       role: 'shogun',
       content: '',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      channel: 'comms',
     };
     setMessages(prev => [...prev, placeholder]);
 
@@ -307,6 +367,7 @@ export const ChatConsole = () => {
                 return copy;
               });
             } else if (evt.type === 'error') {
+              assembled = evt.content;
               setMessages(prev => {
                 const copy = [...prev];
                 copy[copy.length - 1] = { ...copy[copy.length - 1], content: evt.content };
@@ -380,6 +441,9 @@ export const ChatConsole = () => {
           } catch { /* malformed event */ }
         }
       }
+      if (assembled.trim()) {
+        await persistSharedMessage({ ...placeholder, ...meta, content: assembled });
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         // User cancelled â€” mark the message as cancelled
@@ -417,8 +481,13 @@ export const ChatConsole = () => {
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     archiveSession(messages, t);
+    try {
+      await fetch('/api/v1/comms/messages', { method: 'DELETE' });
+    } catch {
+      // The local session can still be cleared while offline.
+    }
     const fresh: Message[] = [{ 
       role: 'shogun',
       content: t(WELCOME_KEY),
@@ -433,10 +502,23 @@ export const ChatConsole = () => {
     setShowHistory(true);
   };
 
-  const restoreSession = (session: Session) => {
+  const restoreSession = async (session: Session) => {
     archiveSession(messages, t);
     setMessages(session.messages);
     setShowHistory(false);
+    try {
+      await fetch('/api/v1/comms/messages', { method: 'DELETE' });
+      await Promise.all(
+        session.messages
+          .filter(message => message.content && message.content !== t(WELCOME_KEY))
+          .map(message => persistSharedMessage(
+            { ...message, id: message.id || crypto.randomUUID(), channel: 'comms' },
+            false,
+          )),
+      );
+    } catch (err) {
+      console.error('Could not restore shared chat session:', err);
+    }
   };
 
   return (
@@ -586,6 +668,9 @@ export const ChatConsole = () => {
                 <div className="flex items-center gap-2 px-1 mt-1">
                   <span className="text-[10px] text-shogun-subdued font-bold tracking-wider">{msg.role === 'user' ? operatorName : t('chat.agent_label', 'SHOGUN')}</span>
                   <span className="text-[10px] text-shogun-subdued opacity-50">{msg.timestamp}</span>
+                  {msg.channel === 'telegram' && (
+                    <span className="text-[9px] text-sky-400/80 uppercase tracking-wider">Telegram</span>
+                  )}
                   {msg.role === 'shogun' && (msg.model || msg.search || msg.mode) && (
                     <div className="flex items-center gap-1.5">
                       {msg.mode && (

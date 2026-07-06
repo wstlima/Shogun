@@ -258,6 +258,7 @@ def create_app() -> FastAPI:
     from shogun.api.backups import router as backups_router
     from shogun.api.email import router as email_router
     from shogun.api.calendar import router as calendar_router
+    from shogun.api.comms import router as comms_router
     from shogun.api.agent_flow import router as agent_flow_router
     from shogun.api.mado import router as mado_router
     from shogun.api.gensui_config import router as gensui_config_router
@@ -289,6 +290,7 @@ def create_app() -> FastAPI:
     app.include_router(backups_router, prefix=prefix)
     app.include_router(email_router, prefix=prefix)
     app.include_router(calendar_router, prefix=prefix)
+    app.include_router(comms_router, prefix=prefix)
     app.include_router(agent_flow_router, prefix=prefix)
     app.include_router(mado_router, prefix=prefix)
     app.include_router(gensui_config_router, prefix=prefix)
