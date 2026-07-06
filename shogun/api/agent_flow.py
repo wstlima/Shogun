@@ -63,6 +63,16 @@ async def create_flow(
 _TEMPLATE_CACHE: dict | None = None
 
 
+async def _sync_live_flow_schedule(flow) -> None:
+    """Keep one APScheduler job aligned with the persisted AgentFlow state."""
+    from shogun.scheduler import deregister_flow_schedule, register_flow_schedule
+
+    if flow.trigger_type == "scheduled" and flow.status == "active" and not flow.is_deleted:
+        await register_flow_schedule(flow)
+    else:
+        await deregister_flow_schedule(flow.id)
+
+
 def _load_templates() -> dict:
     """Load and cache the template catalog from JSON."""
     global _TEMPLATE_CACHE
@@ -129,6 +139,7 @@ async def create_from_template(
         name=flow_name,
         description=template.get("description", ""),
         trigger_type=template.get("trigger_type", "manual"),
+        schedule_config=template.get("schedule_config", {}),
         status="draft",
     )
 
@@ -197,6 +208,13 @@ async def update_flow(
     record = await svc.update(flow_id, **update_data)
     if not record:
         raise HTTPException(status_code=404, detail="Agent Flow not found")
+    try:
+        await _sync_live_flow_schedule(record)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"AgentFlow schedule could not be synchronized: {exc}",
+        ) from exc
     # Reload full flow with nodes/edges
     full = await svc.get_flow_full(flow_id)
     return ApiResponse(data=AgentFlowResponse.model_validate(full))
@@ -211,9 +229,12 @@ async def delete_flow(
     svc: AgentFlowService = Depends(get_agent_flow_service),
 ):
     """Soft-delete an Agent Flow."""
+    record = await svc.get_by_id(flow_id)
     success = await svc.delete(flow_id)
     if not success:
         raise HTTPException(status_code=404, detail="Agent Flow not found")
+    if record:
+        await _sync_live_flow_schedule(record)
     return ApiResponse(data={"deleted": True})
 
 
@@ -265,6 +286,13 @@ async def activate_flow(
     record = await svc.update_status(flow_id, "active")
     if not record:
         raise HTTPException(status_code=404, detail="Agent Flow not found")
+    try:
+        await _sync_live_flow_schedule(record)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"AgentFlow could not be activated in the scheduler: {exc}",
+        ) from exc
     return ApiResponse(data=AgentFlowListItem.model_validate(record))
 
 
@@ -277,6 +305,7 @@ async def pause_flow(
     record = await svc.update_status(flow_id, "paused")
     if not record:
         raise HTTPException(status_code=404, detail="Agent Flow not found")
+    await _sync_live_flow_schedule(record)
     return ApiResponse(data=AgentFlowListItem.model_validate(record))
 
 

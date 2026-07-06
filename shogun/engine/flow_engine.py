@@ -26,8 +26,9 @@ from sqlalchemy.orm import selectinload
 
 from shogun.db.engine import async_session_factory
 from shogun.db.models.agent import Agent
-from shogun.db.models.agent_flow import AgentFlow, AgentFlowNode, AgentFlowEdge
+from shogun.db.models.agent_flow import AgentFlow, AgentFlowEdge, AgentFlowNode
 from shogun.db.models.agent_flow_run import AgentFlowRun
+from shogun.db.models.model_definition import ModelDefinition
 from shogun.db.models.model_provider import ModelProvider
 from shogun.db.models.model_routing import ModelRoutingProfile
 
@@ -341,6 +342,8 @@ async def _execute_single_node(
         return await _exec_mado_browser(config, context_str)
     elif node_type == "email_send":
         return await _exec_email_send(config, context_str)
+    elif node_type == "channel_send":
+        return await _exec_channel_send(config, context_str)
     elif node_type == "workspace":
         return await _exec_workspace(config, context_str)
     elif node_type == "office":
@@ -440,12 +443,12 @@ async def _exec_samurai(config: dict, context_str: str) -> str:
                 if not routing_profile_id and agent.model_routing_profile_id:
                     routing_profile_id = str(agent.model_routing_profile_id)
 
-        # Resolve LLM provider
-        provider, model_name, base_url, headers = await _resolve_llm(
+        # Resolve the ordered primary + fallback chain.
+        model_chain = await _resolve_llm_chain(
             session, routing_profile_id
         )
 
-    if not provider:
+    if not model_chain:
         raise ValueError("No active LLM provider available for Samurai execution")
 
     messages = [
@@ -453,22 +456,40 @@ async def _exec_samurai(config: dict, context_str: str) -> str:
         {"role": "user", "content": user_message},
     ]
 
-    # Execute with retries
-    last_error = None
-    for attempt in range(1 + retry_count):
-        try:
-            response = await _call_llm(messages, model_name, base_url, headers, timeout)
-            return response
-        except Exception as exc:
-            last_error = exc
-            if attempt < retry_count:
-                log.warning(
-                    "Samurai node LLM call failed (attempt %d/%d): %s",
-                    attempt + 1, 1 + retry_count, exc,
-                )
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+    return await _call_llm_chain(
+        messages,
+        model_chain,
+        timeout=timeout,
+        retry_count=retry_count,
+        context="AgentFlow Samurai node",
+    )
 
-    raise last_error or ValueError("Samurai execution failed")
+
+async def _exec_channel_send(config: dict, context_str: str) -> str:
+    """Send an AgentFlow message to Telegram, Teams, or both."""
+    from shogun.services.notification_service import send_channel_message
+
+    channel = config.get("channel", "both")
+    template = config.get("message_template") or "{{context}}"
+    message = template.replace("{{context}}", context_str).strip()
+    if not message:
+        raise ValueError("Channel Send node produced an empty message")
+
+    results = await send_channel_message(
+        message,
+        channel=channel,
+        telegram_chat_ids=config.get("telegram_chat_ids") or None,
+        teams_conversation_ids=config.get("teams_conversation_ids") or None,
+    )
+    selected = [channel] if channel != "both" else ["telegram", "teams"]
+    failures = [name for name in selected if not results.get(name, {}).get("ok")]
+    if failures:
+        detail = "; ".join(
+            f"{name}: {results.get(name, {}).get('error') or results.get(name, {}).get('errors')}"
+            for name in failures
+        )
+        raise ValueError(f"Channel delivery failed ({detail})")
+    return f"Message delivered via {', '.join(selected)}"
 
 
 async def _exec_approval(
@@ -491,9 +512,9 @@ async def _exec_approval(
     elif approval_mode == "ai_assisted":
         # Use LLM to evaluate if the output is acceptable
         async with async_session_factory() as session:
-            provider, model_name, base_url, headers = await _resolve_llm(session)
+            model_chain = await _resolve_llm_chain(session)
 
-        if provider:
+        if model_chain:
             judge_messages = [
                 {
                     "role": "system",
@@ -505,7 +526,13 @@ async def _exec_approval(
                 },
                 {"role": "user", "content": f"Review this output:\n\n{review_content[:3000]}"},
             ]
-            verdict = await _call_llm(judge_messages, model_name, base_url, headers, 60)
+            verdict = await _call_llm_chain(
+                judge_messages,
+                model_chain,
+                timeout=60,
+                retry_count=0,
+                context="AgentFlow approval node",
+            )
             if "REJECTED" in verdict.upper():
                 raise ValueError(f"AI review rejected: {verdict[:500]}")
             return f"[AI-APPROVED]\n{review_content}"
@@ -549,9 +576,9 @@ async def _exec_logic(
 
     # Use LLM to evaluate the condition
     async with async_session_factory() as session:
-        provider, model_name, base_url, headers = await _resolve_llm(session)
+        model_chain = await _resolve_llm_chain(session)
 
-    if not provider:
+    if not model_chain:
         # No LLM — default to True
         log.warning("Logic node: no LLM available, defaulting to TRUE branch")
         return True
@@ -572,7 +599,13 @@ async def _exec_logic(
     ]
 
     try:
-        result = await _call_llm(eval_messages, model_name, base_url, headers, 30)
+        result = await _call_llm_chain(
+            eval_messages,
+            model_chain,
+            timeout=30,
+            retry_count=0,
+            context="AgentFlow logic node",
+        )
         return "TRUE" in result.upper()
     except Exception:
         log.warning("Logic node evaluation failed, defaulting to TRUE")
@@ -1184,52 +1217,24 @@ async def _resolve_llm(
 
     Returns (provider, model_name, base_url, headers) or (None, "", "", {}).
     """
-    provider = None
-    model_name = ""
-
-    # Try routing profile first
-    if routing_profile_id:
-        try:
-            rp_result = await session.execute(
-                select(ModelRoutingProfile).where(
-                    ModelRoutingProfile.id == uuid.UUID(routing_profile_id)
-                )
-            )
-            rp = rp_result.scalar_one_or_none()
-            if rp and rp.primary_model_id:
-                prov_result = await session.execute(
-                    select(ModelProvider).where(
-                        ModelProvider.id == rp.primary_model_id,
-                        ModelProvider.status == "connected",
-                    )
-                )
-                provider = prov_result.scalar_one_or_none()
-                if provider and rp.primary_model_name:
-                    model_name = rp.primary_model_name
-        except Exception as exc:
-            log.warning("Failed to resolve routing profile %s: %s", routing_profile_id, exc)
-
-    # Fallback to any connected provider
-    if not provider:
-        result = await session.execute(
-            select(ModelProvider)
-            .where(ModelProvider.status == "connected")
-            .order_by(ModelProvider.created_at)
-            .limit(1)
-        )
-        provider = result.scalar_one_or_none()
-
-    if not provider:
+    chain = await _resolve_llm_chain(session, routing_profile_id)
+    if not chain:
         return None, "", "", {}
+    return chain[0]
 
-    # Resolve model name
-    if not model_name:
-        model_name = (
-            provider.config.get("model_id")
-            or (provider.config.get("models") or [None])[0]
-            or provider.name
-        )
 
+def _provider_connection(
+    provider: ModelProvider,
+    model_name: str | None = None,
+) -> tuple[ModelProvider, str, str, dict]:
+    """Build an API target tuple for one provider/model."""
+    resolved_model = (
+        model_name
+        or provider.config.get("model_id")
+        or provider.config.get("model")
+        or (provider.config.get("models") or [None])[0]
+        or provider.name
+    )
     # Resolve base URL
     base_url = provider.base_url or PROVIDER_URLS.get(
         provider.provider_type, "https://api.openai.com/v1"
@@ -1246,7 +1251,86 @@ async def _resolve_llm(
         headers["HTTP-Referer"] = "https://shogun.ai"
         headers["X-Title"] = "Shogun AgentFlow"
 
-    return provider, model_name, base_url, headers
+    return provider, resolved_model, base_url, headers
+
+
+async def _resolve_model_target(
+    session: AsyncSession, target_id: str | uuid.UUID
+) -> tuple[ModelProvider, str, str, dict] | None:
+    """Resolve routing IDs that refer to either providers or model definitions."""
+    try:
+        parsed_id = target_id if isinstance(target_id, uuid.UUID) else uuid.UUID(str(target_id))
+    except (TypeError, ValueError):
+        return None
+
+    provider = await session.scalar(
+        select(ModelProvider).where(
+            ModelProvider.id == parsed_id,
+            ModelProvider.status == "connected",
+        )
+    )
+    if provider:
+        return _provider_connection(provider)
+
+    definition = await session.scalar(select(ModelDefinition).where(ModelDefinition.id == parsed_id))
+    if definition and definition.provider and definition.provider.status == "connected":
+        return _provider_connection(definition.provider, definition.model_key)
+    return None
+
+
+async def _resolve_llm_chain(
+    session: AsyncSession,
+    routing_profile_id: str | None = None,
+) -> list[tuple[ModelProvider, str, str, dict]]:
+    """Resolve a primary model and every configured fallback in exact order."""
+    profile: ModelRoutingProfile | None = None
+    try:
+        if routing_profile_id:
+            profile = await session.scalar(
+                select(ModelRoutingProfile).where(
+                    ModelRoutingProfile.id == uuid.UUID(routing_profile_id)
+                )
+            )
+        else:
+            profile = await session.scalar(
+                select(ModelRoutingProfile)
+                .where(ModelRoutingProfile.is_default.is_(True))
+                .order_by(ModelRoutingProfile.updated_at.desc())
+                .limit(1)
+            )
+    except Exception as exc:
+        log.warning("Failed to resolve routing profile %s: %s", routing_profile_id, exc)
+
+    chain: list[tuple[ModelProvider, str, str, dict]] = []
+    seen: set[tuple[str, str]] = set()
+    if profile:
+        rule = next((r for r in profile.rules if r.get("task_type") == "*"), None)
+        if not rule and profile.rules:
+            rule = profile.rules[0]
+        if rule:
+            target_ids = [rule.get("primary_model_id"), *(rule.get("fallback_model_ids") or [])]
+            for target_id in target_ids:
+                if not target_id:
+                    continue
+                target = await _resolve_model_target(session, target_id)
+                if target:
+                    key = (str(target[0].id), target[1])
+                    if key not in seen:
+                        seen.add(key)
+                        chain.append(target)
+                else:
+                    log.warning("Configured routing target %s is unavailable; skipping it", target_id)
+
+    if not chain:
+        provider = await session.scalar(
+            select(ModelProvider)
+            .where(ModelProvider.status == "connected")
+            .order_by(ModelProvider.created_at)
+            .limit(1)
+        )
+        if provider:
+            chain.append(_provider_connection(provider))
+    return chain
 
 
 async def _call_llm(
@@ -1282,6 +1366,54 @@ async def _call_llm(
             raise ValueError("LLM returned empty content")
 
         return content
+
+
+async def _call_llm_chain(
+    messages: list[dict],
+    model_chain: list[tuple[ModelProvider, str, str, dict]],
+    *,
+    timeout: int,
+    retry_count: int,
+    context: str,
+) -> str:
+    """Call each model in order, transparently notifying on every transition."""
+    last_error: Exception | None = None
+    for model_index, (_provider, model_name, base_url, headers) in enumerate(model_chain):
+        for attempt in range(1 + retry_count):
+            try:
+                return await _call_llm(messages, model_name, base_url, headers, timeout)
+            except Exception as exc:
+                last_error = exc
+                log.warning(
+                    "%s model '%s' failed (attempt %d/%d, timeout=%ss): %s",
+                    context,
+                    model_name,
+                    attempt + 1,
+                    1 + retry_count,
+                    timeout,
+                    exc,
+                )
+                if attempt < retry_count:
+                    await asyncio.sleep(2 ** attempt)
+
+        if model_index + 1 < len(model_chain):
+            next_model = model_chain[model_index + 1][1]
+            reason = (
+                f"timeout after {timeout}s"
+                if isinstance(last_error, (httpx.TimeoutException, asyncio.TimeoutError))
+                else str(last_error)[:300]
+            )
+            from shogun.services.notification_service import notify_model_fallback
+
+            await notify_model_fallback(
+                from_model=model_name,
+                to_model=next_model,
+                reason=reason,
+                context=context,
+                timeout_seconds=timeout,
+            )
+
+    raise last_error or ValueError(f"{context} failed without a model response")
 
 
 # ═══════════════════════════════════════════════════════════════

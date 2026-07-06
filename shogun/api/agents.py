@@ -2549,6 +2549,23 @@ BEHAVIOUR:
         except Exception:
             pass
 
+        # Successful use, rather than retrieval alone, reinforces memory salience.
+        if "recalled_ids" in dir() and recalled_ids:
+            try:
+                from shogun.db.engine import async_session_factory
+                from shogun.services.memory_service import MemoryService
+
+                async with async_session_factory() as memory_db:
+                    memory_service = MemoryService(memory_db)
+                    for memory_id in recalled_ids:
+                        await memory_service.reinforce(
+                            uuid.UUID(str(memory_id)),
+                            "retrieved_and_used",
+                        )
+                    await memory_db.commit()
+            except Exception as exc:
+                logger.warning("Mission memory reinforcement failed: %s", exc)
+
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(

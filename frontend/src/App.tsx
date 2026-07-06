@@ -17,9 +17,68 @@ import { Updates } from './pages/Updates'
 import { Backups } from './pages/Backups'
 import { Gensui } from './pages/Gensui'
 import { SetupWizard } from './pages/SetupWizard'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation, I18nProvider } from './i18n'
-import { Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2, X } from 'lucide-react'
+
+interface SystemNotification {
+  id: string
+  title: string
+  message: string
+  severity: string
+}
+
+function SystemNotifications() {
+  const [notification, setNotification] = useState<SystemNotification | null>(null)
+  const lastSeen = useRef<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const poll = async () => {
+      try {
+        const suffix = lastSeen.current ? `?after=${encodeURIComponent(lastSeen.current)}` : ''
+        const response = await fetch(`/api/v1/system/notifications${suffix}`)
+        const payload = await response.json()
+        const items: SystemNotification[] = payload.data || []
+        if (active && items.length) {
+          const latest = items[items.length - 1]
+          lastSeen.current = latest.id
+          setNotification(latest)
+        }
+      } catch {
+        // Notifications are supplementary; transient polling failures are harmless.
+      }
+    }
+    poll()
+    const timer = window.setInterval(poll, 2000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!notification) return
+    const timer = window.setTimeout(() => setNotification(null), 12000)
+    return () => window.clearTimeout(timer)
+  }, [notification])
+
+  if (!notification) return null
+  return (
+    <div className="fixed right-5 top-5 z-[9999] w-[min(440px,calc(100vw-2.5rem))] rounded-xl border border-amber-400/50 bg-[#15120a] p-4 shadow-2xl shadow-amber-500/20">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-amber-200">{notification.title}</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-50/80">{notification.message}</p>
+        </div>
+        <button onClick={() => setNotification(null)} className="text-amber-100/60 hover:text-amber-100" aria-label="Dismiss notification">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Wrapper that checks first-run status and redirects to /setup if needed.
@@ -113,6 +172,7 @@ function App() {
   return (
     <I18nProvider>
       <AppContent />
+      <SystemNotifications />
     </I18nProvider>
   )
 }

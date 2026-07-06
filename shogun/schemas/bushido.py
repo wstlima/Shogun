@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from shogun.schemas.common import (
     BushidoFrequency,
@@ -17,7 +17,6 @@ from shogun.schemas.common import (
     ShogunBase,
     TriggerMode,
 )
-
 
 # ── Bushido Job ──────────────────────────────────────────────
 
@@ -96,6 +95,46 @@ class BushidoScheduleCreate(ShogunBase):
     auto_approve: bool = False
     task_instruction: str | None = None
     is_enabled: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Job name is required")
+        return value
+
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        try:
+            hour_text, minute_text = value.split(":")
+            hour, minute = int(hour_text), int(minute_text)
+        except (ValueError, AttributeError):
+            raise ValueError("Schedule time must use HH:MM format") from None
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ValueError("Schedule time must be a valid local time")
+        return f"{hour:02d}:{minute:02d}"
+
+    @model_validator(mode="after")
+    def validate_frequency_details(self):
+        if self.frequency == BushidoFrequency.WEEKLY and not self.schedule_days:
+            raise ValueError("Weekly schedules require at least one active day")
+        if self.frequency == BushidoFrequency.ONE_OFF:
+            if not self.schedule_datetime:
+                raise ValueError("One-off schedules require a future date and time")
+            try:
+                run_at = datetime.fromisoformat(self.schedule_datetime)
+            except ValueError:
+                raise ValueError("One-off schedule date is invalid") from None
+            now = datetime.now(run_at.tzinfo) if run_at.tzinfo else datetime.now()
+            if run_at <= now:
+                raise ValueError("One-off schedule date must be in the future")
+        if self.job_type == BushidoJobType.CUSTOM_TASK and not (self.task_instruction or "").strip():
+            raise ValueError("Custom tasks require a task instruction")
+        return self
 
 
 class BushidoScheduleUpdate(ShogunBase):

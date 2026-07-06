@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -323,11 +322,81 @@ async def reject_recommendation(
 async def list_schedules(
     svc: BushidoScheduleService = Depends(get_bushido_schedule_service),
 ):
-    """List all Bushido schedules (presets + custom)."""
+    """List every cron-backed schedule, including scheduled AgentFlows."""
     records, total = await svc.get_all(limit=200)
+    from sqlalchemy import select
+
+    from shogun.db.models.agent_flow import AgentFlow
+    from shogun.scheduler import scheduler_job_snapshot
+
+    schedule_items = []
+    for record in records:
+        item = BushidoScheduleResponse.model_validate(record).model_dump(mode="json")
+        runtime = scheduler_job_snapshot(f"bushido_{record.id}")
+        if runtime["next_run_at"]:
+            runtime["next_run_at"] = runtime["next_run_at"].isoformat()
+        item.update(runtime)
+        item["source"] = "bushido"
+        schedule_items.append(item)
+
+    flow_result = await svc.session.execute(
+        select(
+            AgentFlow.id,
+            AgentFlow.name,
+            AgentFlow.description,
+            AgentFlow.status,
+            AgentFlow.schedule_config,
+            AgentFlow.created_at,
+            AgentFlow.updated_at,
+        )
+        .where(
+            AgentFlow.trigger_type == "scheduled",
+            AgentFlow.is_deleted.is_(False),
+        )
+        .order_by(AgentFlow.created_at)
+    )
+    flows = list(flow_result.mappings().all())
+    for flow in flows:
+        config = flow["schedule_config"] or {}
+        runtime = scheduler_job_snapshot(f"agentflow_{flow['id']}")
+        next_run = runtime["next_run_at"]
+        schedule_items.append({
+            "id": str(flow["id"]),
+            "flow_id": str(flow["id"]),
+            "name": flow["name"],
+            "job_type": "agent_flow",
+            "frequency": config.get("frequency", "nightly"),
+            "schedule_time": config.get("schedule_time", "02:00"),
+            "schedule_days": config.get("schedule_days"),
+            "schedule_day": config.get("schedule_day"),
+            "minute_offset": config.get("minute_offset", 0),
+            "schedule_datetime": None,
+            "scope": {},
+            "priority": 50,
+            "all_agents": False,
+            "dry_run": False,
+            "auto_approve": False,
+            "task_instruction": flow["description"],
+            "is_enabled": flow["status"] == "active",
+            "is_preset": False,
+            "flow_status": flow["status"],
+            "last_run_at": None,
+            "next_run_at": next_run.isoformat() if next_run else None,
+            "created_at": flow["created_at"].isoformat(),
+            "updated_at": flow["updated_at"].isoformat(),
+            "source": "agent_flow",
+            "scheduler_job_id": runtime["scheduler_job_id"],
+            "scheduler_registered": runtime["scheduler_registered"],
+        })
+
     return ApiResponse(
-        data=[BushidoScheduleResponse.model_validate(r) for r in records],
-        meta={"total": total},
+        data=schedule_items,
+        meta={
+            "total": len(schedule_items),
+            "bushido_schedules": total,
+            "agent_flow_schedules": len(flows),
+            "scheduler": "APScheduler",
+        },
     )
 
 
@@ -345,14 +414,19 @@ async def create_schedule(
     record = await svc.create(**data)
 
     # Register with APScheduler
+    from shogun.scheduler import register_schedule
     try:
-        from shogun.scheduler import register_schedule
         await register_schedule(record)
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Scheduler registration failed: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Schedule could not be registered: {exc}",
+        ) from exc
 
-    return ApiResponse(data=BushidoScheduleResponse.model_validate(record))
+    return ApiResponse(
+        data=BushidoScheduleResponse.model_validate(record),
+        meta={"scheduler_registered": True, "scheduler_job_id": f"bushido_{record.id}"},
+    )
 
 
 @router.get("/schedules/{schedule_id}", response_model=ApiResponse)
@@ -378,12 +452,14 @@ async def update_schedule(
     if not record:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
+    from shogun.scheduler import register_schedule
     try:
-        from shogun.scheduler import register_schedule
         await register_schedule(record)
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Scheduler re-registration failed: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Schedule could not be re-registered: {exc}",
+        ) from exc
 
     return ApiResponse(data=BushidoScheduleResponse.model_validate(record))
 
@@ -401,15 +477,18 @@ async def toggle_schedule(
     new_enabled = not record.is_enabled
     record = await svc.update(schedule_id, is_enabled=new_enabled)
 
+    from shogun.scheduler import deregister_schedule, register_schedule
     try:
-        from shogun.scheduler import register_schedule, deregister_schedule
         if new_enabled:
             await register_schedule(record)
         else:
             await deregister_schedule(schedule_id)
+            record.next_run_at = None
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Scheduler toggle failed: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Schedule state could not be changed: {exc}",
+        ) from exc
 
     return ApiResponse(
         data=BushidoScheduleResponse.model_validate(record),
@@ -430,15 +509,18 @@ async def toggle_preset_schedule(
     new_enabled = not record.is_enabled
     record = await svc.update(record.id, is_enabled=new_enabled)
 
+    from shogun.scheduler import deregister_schedule, register_schedule
     try:
-        from shogun.scheduler import register_schedule, deregister_schedule
         if new_enabled:
             await register_schedule(record)
         else:
             await deregister_schedule(record.id)
+            record.next_run_at = None
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Scheduler preset toggle failed: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Preset schedule state could not be changed: {exc}",
+        ) from exc
 
     return ApiResponse(
         data=BushidoScheduleResponse.model_validate(record),

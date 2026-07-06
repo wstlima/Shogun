@@ -27,6 +27,24 @@ import { useTranslation } from '../i18n';
 
 type TabType = 'general' | 'models' | 'behavior' | 'permissions' | 'operations';
 
+const scheduleLabel = (schedule: any, fallback: string): string => {
+  if (!schedule) return fallback;
+  const time = schedule.schedule_time || '00:00';
+  if (schedule.frequency === 'hourly') return `Every hour at :${String(schedule.minute_offset || 0).padStart(2, '0')}`;
+  if (schedule.frequency === 'weekly') return `Every ${(schedule.schedule_days || ['mon']).join(', ')} at ${time}`;
+  if (schedule.frequency === 'monthly') return `Monthly on day ${schedule.schedule_day || 1} at ${time}`;
+  if (schedule.frequency === 'one-off') return schedule.schedule_datetime ? `Once at ${new Date(schedule.schedule_datetime).toLocaleString()}` : 'One-off';
+  return `Every day at ${time}`;
+};
+
+const apiErrorText = (error: any, fallback: string): string => {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item: any) => item?.msg || String(item)).join('; ');
+  }
+  return typeof detail === 'string' ? detail : fallback;
+};
+
 export const ShogunProfile = () => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [loading, setLoading] = useState(true);
@@ -51,6 +69,7 @@ export const ShogunProfile = () => {
   });
   const [schedules, setSchedules] = useState<any[]>([]);
   const [runningJobs, setRunningJobs] = useState<Record<string, boolean>>({});
+  const [creatingJob, setCreatingJob] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
@@ -263,17 +282,17 @@ export const ShogunProfile = () => {
 
   const handlePresetToggle = async (jobType: string) => {
     try {
-      const res = await axios.patch(`/api/v1/bushido/schedules/preset/${jobType}/toggle`);
-      if (res.data.data) {
-        setSchedules(prev => prev.map(s => s.job_type === jobType ? res.data.data : s));
-      }
+      await axios.patch(`/api/v1/bushido/schedules/preset/${jobType}/toggle`);
+      await fetchSchedules();
     } catch {
       setStatusMessage({ type: 'error', text: 'Failed to toggle schedule.' });
       setTimeout(() => setStatusMessage(null), 3000);
     }
   };
 
-  const getPresetSchedule = (jobType: string) => schedules.find(s => s.job_type === jobType && s.is_preset);
+  const getPresetSchedule = (jobType: string) => schedules.find(
+    s => s.source !== 'agent_flow' && s.job_type === jobType && s.is_preset
+  );
 
   const handleSave = async () => {
     setSaving(true);
@@ -1289,7 +1308,7 @@ delegation_rules:
 
             <div className="shogun-card space-y-6">
               <h3 className="text-lg font-bold flex items-center gap-2 text-shogun-text">
-                <Clock className="w-5 h-5 text-shogun-gold" /> {t('profile.operational_cadence', 'Operational Cadence (Cron)')}
+                <Clock className="w-5 h-5 text-shogun-gold" /> Operational Cadence Presets
               </h3>
               <div className="space-y-4">
                 {[
@@ -1355,8 +1374,13 @@ delegation_rules:
                         )}>
                           <Clock className="w-2.5 h-2.5 text-shogun-gold/60 shrink-0" />
                           <span className="text-[9px] font-mono text-shogun-gold/70 uppercase tracking-widest">
-                            {job.cronLabel}
+                            {scheduleLabel(schedule, job.cronLabel)}
                           </span>
+                          {schedule && !schedule.scheduler_registered && isEnabled && (
+                            <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border text-red-400 border-red-500/30 bg-red-500/10">
+                              Not registered
+                            </span>
+                          )}
                           <span className={cn(
                             "ml-auto text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border",
                             isEnabled
@@ -1747,11 +1771,25 @@ delegation_rules:
 
                       <button
                         onClick={async () => {
+                          if (creatingJob) return;
                           if (!jobName.trim()) {
                             setStatusMessage({ type: 'error', text: 'Please provide a job name.' });
                             setTimeout(() => setStatusMessage(null), 3000);
                             return;
                           }
+                          if (frequency === 'weekly' && customJob.scheduleDays.length === 0) {
+                            setStatusMessage({ type: 'error', text: 'Select at least one day for a weekly schedule.' });
+                            return;
+                          }
+                          if (frequency === 'one-off' && !customJob.scheduleDateTime) {
+                            setStatusMessage({ type: 'error', text: 'Select a future date and time.' });
+                            return;
+                          }
+                          if (jobType === 'custom_task' && !customJob.taskInstruction.trim()) {
+                            setStatusMessage({ type: 'error', text: 'Custom tasks require an instruction.' });
+                            return;
+                          }
+                          setCreatingJob(true);
                           try {
                             setStatusMessage({ type: 'success', text: `Creating "${jobName}"...` });
                             const payload = {
@@ -1772,21 +1810,27 @@ delegation_rules:
                               is_enabled: true,
                             };
                             const res = await axios.post('/api/v1/bushido/schedules', payload);
-                            if (res.data.data) {
-                              setSchedules(prev => [...prev, res.data.data]);
+                            if (!res.data?.meta?.scheduler_registered) {
+                              throw new Error('The job was saved but not registered with the scheduler.');
                             }
+                            await fetchSchedules();
                             setStatusMessage({ type: 'success', text: `"${jobName}" created and scheduled.` });
                             setCustomJob({ name: '', type: 'memory_consolidation', frequency: 'nightly', scheduleTime: '02:00', scheduleDays: ['mon', 'wed', 'fri'], scheduleDay: 1, minuteOffset: 0, scheduleDateTime: '', priority: 50, memoryTypes: ['episodic', 'semantic'], taskInstruction: '', allAgents: true, dryRun: false, autoApprove: false });
-                          } catch {
-                            setStatusMessage({ type: 'error', text: 'Failed to create schedule.' });
+                          } catch (error: any) {
+                            setStatusMessage({
+                              type: 'error',
+                              text: apiErrorText(error, error?.message || 'Failed to create schedule.'),
+                            });
                           } finally {
-                            setTimeout(() => setStatusMessage(null), 3000);
+                            setCreatingJob(false);
+                            setTimeout(() => setStatusMessage(null), 6000);
                           }
                         }}
-                        className="w-full py-3 bg-gradient-to-r from-shogun-gold to-yellow-600 hover:from-yellow-600 hover:to-shogun-gold text-black font-bold rounded-lg transition-all shadow-shogun text-sm uppercase tracking-widest flex items-center justify-center gap-2"
+                        disabled={creatingJob}
+                        className="w-full py-3 bg-gradient-to-r from-shogun-gold to-yellow-600 hover:from-yellow-600 hover:to-shogun-gold disabled:opacity-50 disabled:cursor-wait text-black font-bold rounded-lg transition-all shadow-shogun text-sm uppercase tracking-widest flex items-center justify-center gap-2"
                       >
-                        <Zap className="w-4 h-4" />
-                        {t('profile.create_schedule_btn', 'Create & Schedule Job')}
+                        {creatingJob ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        {creatingJob ? 'Registering Job…' : t('profile.create_schedule_btn', 'Create & Schedule Job')}
                       </button>
                     </div>
                   </div>
@@ -1799,7 +1843,7 @@ delegation_rules:
               <div className="md:col-span-2 shogun-card space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold flex items-center gap-2 text-shogun-text">
-                    <Clock className="w-5 h-5 text-shogun-gold" /> {t('profile.active_custom_schedules', 'Active Custom Schedules')}
+                    <Clock className="w-5 h-5 text-shogun-gold" /> Operational Cadence — Scheduled Jobs & AgentFlows
                   </h3>
                   <button
                     onClick={fetchSchedules}
@@ -1810,7 +1854,7 @@ delegation_rules:
                 </div>
                 <div className="space-y-2">
                   {schedules.filter(s => !s.is_preset).map((s: any) => (
-                    <div key={s.id} className="flex items-center justify-between p-3 bg-[#050508] border border-shogun-border rounded-xl hover:border-shogun-gold/20 transition-all">
+                    <div key={`${s.source || 'bushido'}-${s.id}`} className="flex items-center justify-between p-3 bg-[#050508] border border-shogun-border rounded-xl hover:border-shogun-gold/20 transition-all">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={cn(
                           "w-2 h-2 rounded-full shrink-0",
@@ -1819,6 +1863,14 @@ delegation_rules:
                         <div className="min-w-0">
                           <p className="text-sm font-bold truncate">{s.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
+                            <span className={cn(
+                              "text-[8px] font-bold uppercase tracking-widest border px-1.5 py-0.5 rounded",
+                              s.source === 'agent_flow'
+                                ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
+                                : "text-shogun-blue border-shogun-blue/30 bg-shogun-blue/10"
+                            )}>
+                              {s.source === 'agent_flow' ? 'AgentFlow' : 'Bushido'}
+                            </span>
                             <span className="text-[9px] font-mono text-shogun-subdued uppercase tracking-wider">
                               {s.job_type.replace(/_/g, ' ')}
                             </span>
@@ -1827,6 +1879,11 @@ delegation_rules:
                               {s.frequency}
                               {s.schedule_time ? ` @ ${s.schedule_time}` : ''}
                             </span>
+                            {s.is_enabled && !s.scheduler_registered && (
+                              <span className="text-[8px] font-bold text-red-400 uppercase tracking-widest bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">
+                                Not registered
+                              </span>
+                            )}
                             {s.dry_run && (
                               <span className="text-[8px] font-bold text-shogun-blue uppercase tracking-widest bg-shogun-blue/10 border border-shogun-blue/20 px-1.5 py-0.5 rounded">Dry Run</span>
                             )}
@@ -1835,11 +1892,45 @@ delegation_rules:
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-3">
                         <button
+                          disabled={runningJobs[`${s.source || 'bushido'}-${s.id}`]}
+                          onClick={async () => {
+                            const key = `${s.source || 'bushido'}-${s.id}`;
+                            setRunningJobs(prev => ({ ...prev, [key]: true }));
+                            try {
+                              if (s.source === 'agent_flow') {
+                                await axios.post(`/api/v1/agent-flows/${s.id}/run`, { trigger_type: 'manual' });
+                              } else {
+                                await axios.post('/api/v1/bushido/run', {
+                                  job_type: s.job_type,
+                                  scope: s.scope || { agent_ids: [], memory_types: [] },
+                                  trigger_mode: 'manual',
+                                  priority: s.priority || 50,
+                                });
+                              }
+                              setStatusMessage({ type: 'success', text: `"${s.name}" dispatched.` });
+                            } catch (error: any) {
+                              setStatusMessage({ type: 'error', text: apiErrorText(error, 'Failed to run scheduled job.') });
+                            } finally {
+                              setRunningJobs(prev => ({ ...prev, [key]: false }));
+                              setTimeout(() => setStatusMessage(null), 4000);
+                            }
+                          }}
+                          className="text-[9px] font-bold uppercase text-shogun-blue hover:text-shogun-gold disabled:opacity-40 transition-colors"
+                        >
+                          {runningJobs[`${s.source || 'bushido'}-${s.id}`] ? 'Running…' : 'Run now'}
+                        </button>
+                        <button
                           onClick={async () => {
                             try {
-                              const res = await axios.patch(`/api/v1/bushido/schedules/${s.id}/toggle`);
-                              if (res.data.data) setSchedules(prev => prev.map(x => x.id === s.id ? res.data.data : x));
-                            } catch { /* ignore */ }
+                              if (s.source === 'agent_flow') {
+                                await axios.post(`/api/v1/agent-flows/${s.id}/${s.is_enabled ? 'pause' : 'activate'}`);
+                              } else {
+                                await axios.patch(`/api/v1/bushido/schedules/${s.id}/toggle`);
+                              }
+                              await fetchSchedules();
+                            } catch (error: any) {
+                              setStatusMessage({ type: 'error', text: apiErrorText(error, 'Failed to change schedule state.') });
+                            }
                           }}
                           className={cn(
                             "w-8 h-4 rounded-full relative transition-all duration-300 shrink-0",
@@ -1851,18 +1942,22 @@ delegation_rules:
                             s.is_enabled ? "left-4 bg-white" : "left-0.5 bg-shogun-subdued"
                           )} />
                         </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await axios.delete(`/api/v1/bushido/schedules/${s.id}`);
-                              setSchedules(prev => prev.filter(x => x.id !== s.id));
-                            } catch { /* ignore */ }
-                          }}
-                          className="text-shogun-subdued hover:text-red-400 transition-colors p-1"
-                          title="Delete schedule"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        {s.source !== 'agent_flow' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await axios.delete(`/api/v1/bushido/schedules/${s.id}`);
+                                await fetchSchedules();
+                              } catch (error: any) {
+                                setStatusMessage({ type: 'error', text: apiErrorText(error, 'Failed to delete schedule.') });
+                              }
+                            }}
+                            className="text-shogun-subdued hover:text-red-400 transition-colors p-1"
+                            title="Delete schedule"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

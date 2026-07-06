@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import uuid
+from types import SimpleNamespace
+
+import pytest
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from shogun.api.agent_flow import _sync_live_flow_schedule
+from shogun.api.bushido import create_schedule, list_schedules
+from shogun.db.models.agent_flow import AgentFlow
+from shogun.db.models.bushido import BushidoSchedule
+from shogun.schemas.bushido import BushidoScheduleCreate
+from shogun.services.bushido_service import BushidoScheduleService
+
+
+def test_custom_schedule_validation_rejects_incomplete_jobs():
+    with pytest.raises(ValidationError, match="at least one active day"):
+        BushidoScheduleCreate(
+            name="Weekly audit",
+            job_type="performance_audit",
+            frequency="weekly",
+            schedule_days=[],
+        )
+
+    with pytest.raises(ValidationError, match="future date and time"):
+        BushidoScheduleCreate(
+            name="One off",
+            job_type="memory_consolidation",
+            frequency="one-off",
+        )
+
+    with pytest.raises(ValidationError, match="task instruction"):
+        BushidoScheduleCreate(
+            name="Custom",
+            job_type="custom_task",
+            frequency="nightly",
+            task_instruction="",
+        )
+
+
+@pytest.mark.asyncio
+async def test_register_schedule_creates_one_live_scheduler_job(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    scheduler = AsyncIOScheduler()
+    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
+    schedule = BushidoSchedule(
+        id=uuid.uuid4(),
+        name="Morning audit",
+        job_type="performance_audit",
+        frequency="nightly",
+        schedule_time="08:00",
+        scope={},
+        is_enabled=True,
+    )
+
+    await scheduler_module.register_schedule(schedule)
+    snapshot = scheduler_module.scheduler_job_snapshot(f"bushido_{schedule.id}")
+
+    assert snapshot["scheduler_registered"] is True
+    assert len(scheduler.get_jobs()) == 1
+    assert schedule.next_run_at is not None
+
+
+@pytest.mark.asyncio
+async def test_create_custom_job_persists_and_registers(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    scheduler = AsyncIOScheduler()
+    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(
+            lambda sync_connection: BushidoSchedule.__table__.create(sync_connection)
+        )
+
+    async with sessions() as session:
+        body = BushidoScheduleCreate(
+            name="Morning memory audit",
+            job_type="memory_consolidation",
+            frequency="nightly",
+            schedule_time="08:00",
+            scope={"memory_types": ["episodic"], "agent_ids": []},
+        )
+        response = await create_schedule(body, BushidoScheduleService(session))
+        await session.commit()
+
+        assert response.meta["scheduler_registered"] is True
+        assert scheduler.get_job(response.meta["scheduler_job_id"]) is not None
+        persisted = await session.get(BushidoSchedule, response.data.id)
+        assert persisted is not None
+        assert persisted.schedule_time == "08:00"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_flow_activation_and_pause_share_scheduler_lifecycle(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    calls: list[tuple[str, uuid.UUID]] = []
+
+    async def register(flow):
+        calls.append(("register", flow.id))
+
+    async def deregister(flow_id):
+        calls.append(("deregister", flow_id))
+
+    monkeypatch.setattr(scheduler_module, "register_flow_schedule", register)
+    monkeypatch.setattr(scheduler_module, "deregister_flow_schedule", deregister)
+
+    flow_id = uuid.uuid4()
+    active = SimpleNamespace(
+        id=flow_id,
+        trigger_type="scheduled",
+        status="active",
+        is_deleted=False,
+    )
+    paused = SimpleNamespace(
+        id=flow_id,
+        trigger_type="scheduled",
+        status="paused",
+        is_deleted=False,
+    )
+
+    await _sync_live_flow_schedule(active)
+    await _sync_live_flow_schedule(paused)
+
+    assert calls == [("register", flow_id), ("deregister", flow_id)]
+
+
+@pytest.mark.asyncio
+async def test_agentflow_schedule_replaces_same_live_cron_instead_of_duplicating(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    scheduler = AsyncIOScheduler()
+    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
+    flow = SimpleNamespace(
+        id=uuid.uuid4(),
+        name="Morning news",
+        trigger_type="scheduled",
+        status="active",
+        schedule_config={"frequency": "nightly", "schedule_time": "08:00"},
+    )
+
+    await scheduler_module.register_flow_schedule(flow)
+    await scheduler_module.register_flow_schedule(flow)
+
+    jobs = scheduler.get_jobs()
+    assert len(jobs) == 1
+    assert jobs[0].id == f"agentflow_{flow.id}"
+
+
+@pytest.mark.asyncio
+async def test_operational_cadence_lists_bushido_and_agentflow(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    scheduler = AsyncIOScheduler()
+    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(
+            lambda sync_connection: BushidoSchedule.__table__.create(sync_connection)
+        )
+        await connection.run_sync(
+            lambda sync_connection: AgentFlow.__table__.create(sync_connection)
+        )
+
+    async with sessions() as session:
+        bushido = BushidoSchedule(
+            name="Nightly",
+            job_type="memory_consolidation",
+            frequency="nightly",
+            schedule_time="02:00",
+            scope={},
+            is_enabled=True,
+            is_preset=False,
+        )
+        flow = AgentFlow(
+            name="Morning news",
+            description="Daily briefing",
+            status="active",
+            trigger_type="scheduled",
+            schedule_config={"frequency": "nightly", "schedule_time": "08:00"},
+            viewport={},
+        )
+        session.add_all([bushido, flow])
+        await session.commit()
+
+        response = await list_schedules(BushidoScheduleService(session))
+        sources = {item["source"] for item in response.data}
+
+        assert sources == {"bushido", "agent_flow"}
+        flow_item = next(item for item in response.data if item["source"] == "agent_flow")
+        assert flow_item["schedule_time"] == "08:00"
+        assert flow_item["scheduler_job_id"] == f"agentflow_{flow.id}"
+
+    await engine.dispose()

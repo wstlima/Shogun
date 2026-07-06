@@ -21,6 +21,14 @@ from shogun.db.models.mission import Mission
 router = APIRouter(prefix="/system", tags=["System"])
 
 
+@router.get("/notifications", response_model=ApiResponse)
+async def get_notifications(after: str | None = None):
+    """Return operator notifications created after the supplied event ID."""
+    from shogun.services.notification_service import list_notifications
+
+    return ApiResponse(data=list_notifications(after))
+
+
 async def _check_qdrant() -> str:
     """Helper to check Qdrant connectivity via the global VectorStore."""
     try:

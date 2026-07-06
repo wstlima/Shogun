@@ -465,6 +465,7 @@ export function Katana() {
   const [newRule, setNewRule]                   = useState({
     task_type: '*',
     primary_model_id: '',
+    fallback_model_ids: [] as string[],
     latency_bias: '' as string,
     cost_bias: '' as string,
   });
@@ -1069,6 +1070,7 @@ export function Katana() {
     setNewRule({
       task_type: rule.task_type,
       primary_model_id: rule.primary_model_id,
+      fallback_model_ids: rule.fallback_model_ids || [],
       latency_bias: rule.latency_bias || '',
       cost_bias: rule.cost_bias || '',
     });
@@ -1080,7 +1082,7 @@ export function Katana() {
     const rule = {
       task_type: newRule.task_type,
       primary_model_id: newRule.primary_model_id,
-      fallback_model_ids: [],
+      fallback_model_ids: newRule.fallback_model_ids,
       latency_bias: newRule.latency_bias || null,
       cost_bias: newRule.cost_bias || null,
     };
@@ -1100,7 +1102,7 @@ export function Katana() {
       setStatusMessage({ type: 'success', text: editingRuleIdx !== null ? 'Routing rule updated.' : 'Routing rule added.' });
       setShowAddRule(false);
       setEditingRuleIdx(null);
-      setNewRule({ task_type: '*', primary_model_id: '', latency_bias: '', cost_bias: '' });
+      setNewRule({ task_type: '*', primary_model_id: '', fallback_model_ids: [], latency_bias: '', cost_bias: '' });
       fetchData();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
@@ -2471,6 +2473,9 @@ export function Katana() {
                                             <span className="text-red-400/70 text-[10px]">{t('katana.unlinked')}</span>
                                           )}
                                         </p>
+                                        <p className="text-[9px] text-shogun-subdued mt-0.5">
+                                          {rule.fallback_model_ids?.length || 0} fallback(s)
+                                        </p>
                                       </div>
                                       <div>
                                         <p className="text-[9px] text-shogun-subdued uppercase tracking-widest font-bold">{t('katana.latency')}</p>
@@ -2545,7 +2550,11 @@ export function Katana() {
                                   <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">{t('katana.primary_model_provider', 'Primary Model Provider *')}</label>
                                   <select
                                     value={newRule.primary_model_id}
-                                    onChange={e => setNewRule({ ...newRule, primary_model_id: e.target.value })}
+                                    onChange={e => setNewRule({
+                                      ...newRule,
+                                      primary_model_id: e.target.value,
+                                      fallback_model_ids: newRule.fallback_model_ids.filter(id => id !== e.target.value),
+                                    })}
                                     className="w-full bg-[#050508] border border-shogun-border rounded-lg p-2.5 text-sm focus:border-shogun-blue outline-none"
                                   >
                                     <option value="">{t('katana.select_provider')}</option>
@@ -2561,6 +2570,50 @@ export function Katana() {
                                   {providers.length === 0 && (
                                     <p className="text-[9px] text-yellow-400">⚠ {t('katana.add_provider_first')}</p>
                                   )}
+                                </div>
+
+                                {/* Latency Bias */}
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Fallback Chain (in order)</label>
+                                  <select
+                                    value=""
+                                    onChange={e => {
+                                      const id = e.target.value;
+                                      if (id && !newRule.fallback_model_ids.includes(id)) {
+                                        setNewRule({ ...newRule, fallback_model_ids: [...newRule.fallback_model_ids, id] });
+                                      }
+                                    }}
+                                    className="w-full bg-[#050508] border border-shogun-border rounded-lg p-2.5 text-sm focus:border-shogun-blue outline-none"
+                                  >
+                                    <option value="">— Add fallback provider —</option>
+                                    {providers
+                                      .filter(p => p.id !== newRule.primary_model_id && !newRule.fallback_model_ids.includes(p.id))
+                                      .map(p => <option key={p.id} value={p.id}>{p.name} — {p.provider_type}</option>)}
+                                  </select>
+                                  {newRule.fallback_model_ids.map((id, index) => {
+                                    const fallback = providers.find(p => p.id === id);
+                                    return (
+                                      <div key={id} className="flex items-center gap-2 rounded-lg border border-shogun-border bg-[#050508] px-3 py-2">
+                                        <span className="text-[10px] font-bold text-shogun-gold">#{index + 1}</span>
+                                        <span className="flex-1 text-xs">{fallback?.name || 'Unlinked provider'}</span>
+                                        <button type="button" disabled={index === 0} onClick={() => {
+                                          const ids = [...newRule.fallback_model_ids];
+                                          [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+                                          setNewRule({ ...newRule, fallback_model_ids: ids });
+                                        }} className="disabled:opacity-20"><ChevronUp className="w-3.5 h-3.5" /></button>
+                                        <button type="button" disabled={index === newRule.fallback_model_ids.length - 1} onClick={() => {
+                                          const ids = [...newRule.fallback_model_ids];
+                                          [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
+                                          setNewRule({ ...newRule, fallback_model_ids: ids });
+                                        }} className="disabled:opacity-20"><ChevronDown className="w-3.5 h-3.5" /></button>
+                                        <button type="button" onClick={() => setNewRule({
+                                          ...newRule,
+                                          fallback_model_ids: newRule.fallback_model_ids.filter(item => item !== id),
+                                        })}><X className="w-3.5 h-3.5 text-red-400" /></button>
+                                      </div>
+                                    );
+                                  })}
+                                  <p className="text-[9px] text-shogun-subdued">A model is tried after the previous model exhausts its configured retries or times out.</p>
                                 </div>
 
                                 {/* Latency Bias */}
@@ -2605,7 +2658,7 @@ export function Katana() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => { setShowAddRule(false); setEditingRuleIdx(null); setNewRule({ task_type: '*', primary_model_id: '', latency_bias: '', cost_bias: '' }); }}
+                                    onClick={() => { setShowAddRule(false); setEditingRuleIdx(null); setNewRule({ task_type: '*', primary_model_id: '', fallback_model_ids: [], latency_bias: '', cost_bias: '' }); }}
                                     className="px-4 py-2 text-sm text-shogun-subdued hover:text-shogun-text transition-colors font-bold"
                                   >
                                     {t('common.cancel')}

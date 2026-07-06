@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "total_templates": 137,
+  "total_templates": 140,
   "categories": [
     {
       "name": "Document Processing",
@@ -109,7 +109,7 @@
     },
     {
       "name": "Business Operations",
-      "count": 16,
+      "count": 19,
       "templates": [
         "meeting-minutes",
         "project-status",
@@ -126,7 +126,10 @@
         "adv-strategic-plan",
         "adv-ops-dashboard",
         "adv-rca-report",
-        "adv-business-case"
+        "adv-business-case",
+        "ops-brief-channel-broadcast",
+        "incident-triage-channel-alert",
+        "adv-intelligence-channel-command"
       ]
     },
     {
@@ -14327,6 +14330,465 @@
         {
           "source_node_id": "s",
           "target_node_id": "o2",
+          "edge_type": "default",
+          "config": {}
+        }
+      ]
+    },
+    {
+      "id": "ops-brief-channel-broadcast",
+      "name": "Daily Business News Brief to Telegram",
+      "description": "Every morning at 08:00, check several trusted business-news websites, synthesize the important developments, and send a concise brief through Telegram.",
+      "category": "Business Operations",
+      "icon": "\ud83d\udcf0",
+      "difficulty": "intermediate",
+      "trigger_type": "scheduled",
+      "schedule_config": {
+        "frequency": "nightly",
+        "schedule_time": "08:00"
+      },
+      "node_count": 10,
+      "nodes": [
+        {
+          "id": "trigger",
+          "node_type": "input",
+          "label": "Every Morning at 08:00",
+          "position_x": 0,
+          "position_y": 300,
+          "config": {
+            "input_type": "scheduled",
+            "schedule_frequency": "nightly",
+            "schedule_time": "08:00",
+            "description": "Collect the latest business news and deliver the morning brief at 08:00 local server time"
+          }
+        },
+        {
+          "id": "reuters-open",
+          "node_type": "mado_browser",
+          "label": "Open Reuters Business",
+          "position_x": 300,
+          "position_y": 80,
+          "config": {
+            "action": "navigate",
+            "url": "https://www.reuters.com/business/",
+            "session_name": "business_news_reuters",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "reuters-read",
+          "node_type": "mado_browser",
+          "label": "Read Reuters Headlines",
+          "position_x": 620,
+          "position_y": 80,
+          "config": {
+            "action": "extract_content",
+            "selector": "main",
+            "extract_type": "text",
+            "session_name": "business_news_reuters",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "ap-open",
+          "node_type": "mado_browser",
+          "label": "Open AP Business",
+          "position_x": 300,
+          "position_y": 300,
+          "config": {
+            "action": "navigate",
+            "url": "https://apnews.com/hub/business",
+            "session_name": "business_news_ap",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "ap-read",
+          "node_type": "mado_browser",
+          "label": "Read AP Headlines",
+          "position_x": 620,
+          "position_y": 300,
+          "config": {
+            "action": "extract_content",
+            "selector": "main",
+            "extract_type": "text",
+            "session_name": "business_news_ap",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "bbc-open",
+          "node_type": "mado_browser",
+          "label": "Open BBC Business",
+          "position_x": 300,
+          "position_y": 520,
+          "config": {
+            "action": "navigate",
+            "url": "https://www.bbc.com/business",
+            "session_name": "business_news_bbc",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "bbc-read",
+          "node_type": "mado_browser",
+          "label": "Read BBC Headlines",
+          "position_x": 620,
+          "position_y": 520,
+          "config": {
+            "action": "extract_content",
+            "selector": "main",
+            "extract_type": "text",
+            "session_name": "business_news_bbc",
+            "browser_mode": "headless"
+          }
+        },
+        {
+          "id": "compose",
+          "node_type": "samurai",
+          "label": "Compose Morning Brief",
+          "position_x": 960,
+          "position_y": 300,
+          "config": {
+            "task_description": "Create a concise morning business-news brief from the collected website content. Prioritize developments from the last 24 hours that could affect companies, markets, technology, supply chains, regulation, energy, or the global economy. Cross-check duplicate stories across sources. Include: (1) five to eight top stories, (2) why each matters in one sentence, (3) a Markets & Economy snapshot, (4) risks or events to watch today, and (5) source attribution with links when available. Clearly distinguish reported facts from inference. Do not invent missing details. Keep the result readable in Telegram and under 3,500 characters.",
+            "expected_output": "Telegram-ready business news brief with source attribution",
+            "timeout": 180,
+            "retry_count": 2,
+            "failure_action": "stop"
+          }
+        },
+        {
+          "id": "telegram",
+          "node_type": "channel_send",
+          "label": "Send via Telegram",
+          "position_x": 1290,
+          "position_y": 300,
+          "config": {
+            "channel": "telegram",
+            "message_template": "\ud83d\udcf0 MORNING BUSINESS BRIEF\n\n{{context}}",
+            "telegram_chat_ids": []
+          }
+        },
+        {
+          "id": "archive",
+          "node_type": "output",
+          "label": "Archive Daily Brief",
+          "position_x": 1600,
+          "position_y": 300,
+          "config": {
+            "output_type": "artifact",
+            "format": "markdown"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source_node_id": "trigger",
+          "target_node_id": "reuters-open",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "reuters-open",
+          "target_node_id": "reuters-read",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "trigger",
+          "target_node_id": "ap-open",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "ap-open",
+          "target_node_id": "ap-read",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "trigger",
+          "target_node_id": "bbc-open",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "bbc-open",
+          "target_node_id": "bbc-read",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "reuters-read",
+          "target_node_id": "compose",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "ap-read",
+          "target_node_id": "compose",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "bbc-read",
+          "target_node_id": "compose",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "compose",
+          "target_node_id": "telegram",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "compose",
+          "target_node_id": "archive",
+          "edge_type": "default",
+          "config": {}
+        }
+      ]
+    },
+    {
+      "id": "incident-triage-channel-alert",
+      "name": "Governed Incident Triage & Alert",
+      "description": "Assess an incident, pass the response through a Shogun policy gate, and send the approved incident brief to Telegram and Teams.",
+      "category": "Business Operations",
+      "icon": "\ud83d\udea8",
+      "difficulty": "intermediate",
+      "trigger_type": "manual",
+      "node_count": 5,
+      "nodes": [
+        {
+          "id": "incident",
+          "node_type": "input",
+          "label": "Incident Report",
+          "position_x": 0,
+          "position_y": 200,
+          "config": {
+            "input_type": "manual",
+            "description": "Paste the incident report, monitoring alert, or operator observations into Manual Input",
+            "manual_input": ""
+          }
+        },
+        {
+          "id": "triage",
+          "node_type": "samurai",
+          "label": "Triage Incident",
+          "position_x": 320,
+          "position_y": 200,
+          "config": {
+            "task_description": "Triage the incident. Determine severity, affected systems, likely impact, known facts, uncertain assumptions, immediate containment actions, required owners, escalation deadline, and the next update time. Do not minimize uncertainty. Format the result as an operator-ready incident alert.",
+            "expected_output": "Structured incident alert with severity and next actions",
+            "timeout": 120,
+            "retry_count": 2,
+            "failure_action": "stop"
+          }
+        },
+        {
+          "id": "approval",
+          "node_type": "shogun_approval",
+          "label": "Policy Approval",
+          "position_x": 640,
+          "position_y": 200,
+          "config": {
+            "approval_mode": "policy_based",
+            "confidence_threshold": 85
+          }
+        },
+        {
+          "id": "alert",
+          "node_type": "channel_send",
+          "label": "Send Incident Alert",
+          "position_x": 960,
+          "position_y": 200,
+          "config": {
+            "channel": "both",
+            "message_template": "\ud83d\udea8 INCIDENT TRANSPARENCY ALERT\n\n{{context}}\n\nThis message was generated by a governed AgentFlow.",
+            "telegram_chat_ids": [],
+            "teams_conversation_ids": []
+          }
+        },
+        {
+          "id": "record",
+          "node_type": "output",
+          "label": "Incident Record",
+          "position_x": 1280,
+          "position_y": 200,
+          "config": {
+            "output_type": "artifact",
+            "format": "markdown"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source_node_id": "incident",
+          "target_node_id": "triage",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "triage",
+          "target_node_id": "approval",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "approval",
+          "target_node_id": "alert",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "alert",
+          "target_node_id": "record",
+          "edge_type": "default",
+          "config": {}
+        }
+      ]
+    },
+    {
+      "id": "adv-intelligence-channel-command",
+      "name": "Multi-Agent Intelligence Command Brief",
+      "description": "Run parallel strategic and risk analysis, synthesize the findings under an approval gate, then deliver the command brief through Telegram and Teams.",
+      "category": "Business Operations",
+      "icon": "\ud83c\udfaf",
+      "difficulty": "advanced",
+      "trigger_type": "manual",
+      "node_count": 7,
+      "nodes": [
+        {
+          "id": "mission",
+          "node_type": "input",
+          "label": "Command Question",
+          "position_x": 0,
+          "position_y": 240,
+          "config": {
+            "input_type": "manual",
+            "description": "Provide the strategic question, decision context, source notes, and deadline",
+            "manual_input": ""
+          }
+        },
+        {
+          "id": "strategy",
+          "node_type": "samurai",
+          "label": "Strategic Analysis",
+          "position_x": 320,
+          "position_y": 100,
+          "config": {
+            "task_description": "Analyze the decision from a strategic perspective. Identify objectives, options, tradeoffs, dependencies, stakeholder effects, and recommended direction. Explicitly separate evidence from inference.",
+            "expected_output": "Evidence-based strategic assessment",
+            "timeout": 180,
+            "retry_count": 2,
+            "failure_action": "stop"
+          }
+        },
+        {
+          "id": "risk",
+          "node_type": "samurai",
+          "label": "Independent Risk Review",
+          "position_x": 320,
+          "position_y": 380,
+          "config": {
+            "task_description": "Independently challenge the proposed decision context. Identify operational, financial, security, compliance, reputational, and execution risks. Rate likelihood and impact, name leading indicators, and propose mitigations.",
+            "expected_output": "Independent risk register and challenge",
+            "timeout": 180,
+            "retry_count": 2,
+            "failure_action": "stop"
+          }
+        },
+        {
+          "id": "synthesis",
+          "node_type": "samurai",
+          "label": "Synthesize Command Brief",
+          "position_x": 650,
+          "position_y": 240,
+          "config": {
+            "task_description": "Reconcile the strategic analysis and independent risk review into one command brief. Include decision requested, recommended option, strongest evidence, material disagreements, principal risks, mitigations, accountable owners, and immediate next actions. Preserve uncertainty and dissent.",
+            "expected_output": "Executive command brief suitable for operator notification",
+            "timeout": 180,
+            "retry_count": 2,
+            "failure_action": "stop"
+          }
+        },
+        {
+          "id": "review",
+          "node_type": "shogun_approval",
+          "label": "Shogun Quality Gate",
+          "position_x": 970,
+          "position_y": 240,
+          "config": {
+            "approval_mode": "ai_assisted",
+            "confidence_threshold": 90
+          }
+        },
+        {
+          "id": "command-channel",
+          "node_type": "channel_send",
+          "label": "Deliver Command Brief",
+          "position_x": 1290,
+          "position_y": 240,
+          "config": {
+            "channel": "both",
+            "message_template": "\ud83c\udfaf COMMAND BRIEF\n\n{{context}}\n\nTransparency: this brief passed parallel analysis and a Shogun quality gate.",
+            "telegram_chat_ids": [],
+            "teams_conversation_ids": []
+          }
+        },
+        {
+          "id": "archive",
+          "node_type": "output",
+          "label": "Archive Command Brief",
+          "position_x": 1610,
+          "position_y": 240,
+          "config": {
+            "output_type": "artifact",
+            "format": "markdown"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "source_node_id": "mission",
+          "target_node_id": "strategy",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "mission",
+          "target_node_id": "risk",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "strategy",
+          "target_node_id": "synthesis",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "risk",
+          "target_node_id": "synthesis",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "synthesis",
+          "target_node_id": "review",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "review",
+          "target_node_id": "command-channel",
+          "edge_type": "default",
+          "config": {}
+        },
+        {
+          "source_node_id": "command-channel",
+          "target_node_id": "archive",
           "edge_type": "default",
           "config": {}
         }

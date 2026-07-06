@@ -167,6 +167,7 @@ async def _shogun_governed_chat(
     # ── 5. Retrieve memories (semantic search + pinned) ──
     memory_context_block = ""
     memory_count = 0
+    recalled_memory_ids: list[uuid.UUID] = []
     try:
         from shogun.services.memory_service import MemoryService
         from shogun.db.engine import async_session_factory
@@ -179,7 +180,6 @@ async def _shogun_governed_chat(
                 query=user_msg,
                 agent_id=agent.id,
                 limit=5,
-                min_score=0.3,
             )
 
             # Pinned memories (always included)
@@ -192,18 +192,26 @@ async def _shogun_governed_chat(
             for mem in (pinned or []):
                 if hasattr(mem, "id") and mem.id not in seen_ids:
                     seen_ids.add(mem.id)
+                    recalled_memory_ids.append(mem.id)
                     memory_entries.append(f"[PINNED] {mem.content}")
 
             for mem in (search_results or []):
-                mem_obj = mem if hasattr(mem, "id") else (mem.get("record") if isinstance(mem, dict) else None)
-                if mem_obj and hasattr(mem_obj, "id") and mem_obj.id not in seen_ids:
-                    seen_ids.add(mem_obj.id)
-                    score = getattr(mem, "score", None) or (mem.get("score") if isinstance(mem, dict) else None)
-                    score_str = f" (relevance: {score:.2f})" if score else ""
-                    content = mem_obj.content if hasattr(mem_obj, "content") else str(mem_obj)
-                    memory_entries.append(f"[RECALLED{score_str}] {content}")
+                if isinstance(mem, dict):
+                    memory_id = uuid.UUID(str(mem["memory_id"]))
+                    if memory_id not in seen_ids:
+                        seen_ids.add(memory_id)
+                        recalled_memory_ids.append(memory_id)
+                        score = (mem.get("scores") or {}).get("final")
+                        score_str = f" (salience: {score:.2f})" if score is not None else ""
+                        memory_entries.append(
+                            f"[RECALLED{score_str}] {mem.get('title', '')}\n{mem.get('content', '')}"
+                        )
 
             memory_count = len(memory_entries)
+            for memory_id in recalled_memory_ids:
+                await mem_svc.record_access(memory_id)
+            if recalled_memory_ids:
+                await mem_db.commit()
             if memory_entries:
                 memory_context_block = "\n\n[MEMORY CONTEXT — recalled from Archives]\n" + "\n".join(memory_entries)
 
@@ -317,12 +325,14 @@ When referencing recalled memories, acknowledge them naturally.
 
                 async with async_session_factory() as mem_db:
                     mem_svc = MemoryService(mem_db)
+                    for memory_id in recalled_memory_ids:
+                        await mem_svc.reinforce(memory_id, "retrieved_and_used")
                     await mem_svc.create_memory(
                         agent_id=agent.id,
+                        title=f"Governed chat: {user_msg[:120]}",
                         content=f"[Governed Chat Exchange]\nOperator: {user_msg}\nShogun: {full_response[:1000]}",
                         memory_type="episodic",
-                        source="governed_chat",
-                        tags=["chat", "governed", "conversation"],
+                        source_type="governed_chat",
                         decay_class="medium",
                     )
                     await mem_db.commit()

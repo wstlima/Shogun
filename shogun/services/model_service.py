@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shogun.db.models.model_provider import ModelProvider
 from shogun.db.models.model_definition import ModelDefinition
+from shogun.db.models.model_provider import ModelProvider
 from shogun.db.models.model_routing import ModelRoutingProfile
 from shogun.services.base_service import BaseService
-
-import uuid
 
 
 class ModelProviderService(BaseService[ModelProvider]):
@@ -41,6 +42,25 @@ class ModelRoutingProfileService(BaseService[ModelRoutingProfile]):
 
     async def get_default(self) -> ModelRoutingProfile | None:
         result = await self.session.execute(
-            select(ModelRoutingProfile).where(ModelRoutingProfile.is_default == True)
+            select(ModelRoutingProfile)
+            .where(ModelRoutingProfile.is_default.is_(True))
+            .order_by(ModelRoutingProfile.updated_at.desc())
+            .limit(1)
         )
         return result.scalars().first()
+
+    async def create(self, **kwargs) -> ModelRoutingProfile:
+        if kwargs.get("is_default"):
+            await self.session.execute(
+                sa_update(ModelRoutingProfile).values(is_default=False)
+            )
+        return await super().create(**kwargs)
+
+    async def update(self, record_id: uuid.UUID, **kwargs) -> ModelRoutingProfile | None:
+        if kwargs.get("is_default"):
+            await self.session.execute(
+                sa_update(ModelRoutingProfile)
+                .where(ModelRoutingProfile.id != record_id)
+                .values(is_default=False)
+            )
+        return await super().update(record_id, **kwargs)

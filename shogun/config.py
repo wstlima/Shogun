@@ -71,8 +71,10 @@ class Settings(BaseSettings):
     teams_rate_limit_per_user_per_minute: int = 20
     teams_rate_limit_per_channel_per_minute: int = 60
     teams_high_risk_confirmation_ttl_seconds: int = 300
+    teams_bridge_url: str = "http://127.0.0.1:3978"
     shogun_internal_api_url: str = "http://127.0.0.1:8000"
     shogun_internal_api_key_ref: str | None = None
+    shogun_internal_api_key: str | None = None
 
     # ── GitHub (for update checker on private repos) ─────────
     github_token: str | None = None

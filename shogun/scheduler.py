@@ -103,6 +103,26 @@ async def _fire_schedule(
         dry_run=dry_run,
     )
 
+    # Keep persisted schedule state aligned with the live scheduler.
+    from sqlalchemy import select
+
+    from shogun.db.engine import async_session_factory
+    from shogun.db.models.bushido import BushidoSchedule
+
+    if sid:
+        async with async_session_factory() as session:
+            schedule = await session.scalar(
+                select(BushidoSchedule).where(BushidoSchedule.id == sid)
+            )
+            if schedule:
+                if schedule.frequency == "one-off":
+                    schedule.is_enabled = False
+                    schedule.next_run_at = None
+                else:
+                    job = get_scheduler().get_job(_make_job_id(schedule.id))
+                    schedule.next_run_at = getattr(job, "next_run_time", None)
+                await session.commit()
+
 
 # ── Schedule management ──────────────────────────────────────
 
@@ -120,6 +140,9 @@ async def register_schedule(schedule: "BushidoSchedule") -> None:
         return
 
     trigger = build_trigger(schedule)
+    next_run = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+    if schedule.frequency == "one-off" and next_run is None:
+        raise ValueError("One-off schedule must specify a future date and time")
 
     sched.add_job(
         _fire_schedule,
@@ -135,6 +158,7 @@ async def register_schedule(schedule: "BushidoSchedule") -> None:
         replace_existing=True,
         misfire_grace_time=60,
     )
+    schedule.next_run_at = next_run
     log.info(
         "Bushido: registered schedule '%s' (%s) — freq=%s",
         schedule.name, schedule.id, schedule.frequency,
@@ -296,6 +320,7 @@ async def sync_all_schedules(session) -> int:
     except Exception as exc:
         log.warning("AgentFlow: failed to sync flow schedules: %s", exc)
 
+    await session.commit()
     return count
 
 
@@ -370,6 +395,16 @@ async def register_flow_schedule(flow) -> None:
         "AgentFlow: registered schedule for '%s' (%s) — freq=%s at %s",
         flow.name, flow.id, frequency, time_str,
     )
+
+
+def scheduler_job_snapshot(job_id: str) -> dict:
+    """Return transparent live registration state for a scheduler job."""
+    job = get_scheduler().get_job(job_id)
+    return {
+        "scheduler_job_id": job_id,
+        "scheduler_registered": job is not None,
+        "next_run_at": getattr(job, "next_run_time", None) if job else None,
+    }
 
 
 async def deregister_flow_schedule(flow_id: uuid.UUID) -> None:

@@ -65,6 +65,7 @@ import {
   FileSpreadsheet,
   Sparkles,
   LayoutGrid,
+  MessageSquare,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -158,6 +159,7 @@ const NODE_PALETTE = [
   { type: 'output',          label: 'Output',           icon: LogOut,    color: '#f97316', desc: 'Final delivery' },
   { type: 'mado_browser',    label: 'Mado Browser',     icon: Globe,     color: '#06b6d4', desc: 'Browser automation' },
   { type: 'email_send',      label: 'Email Send',       icon: Mail,      color: '#e879a8', desc: 'Send email via SMTP' },
+  { type: 'channel_send',    label: 'Telegram / Teams', icon: MessageSquare, color: '#38bdf8', desc: 'Send an operator message' },
   { type: 'workspace',       label: 'Workspace',        icon: FolderOpen, color: '#f59e0b', desc: 'File operations' },
   { type: 'office',          label: 'Office',           icon: FileSpreadsheet, color: '#10b981', desc: 'Office documents' },
 ] as const;
@@ -175,6 +177,7 @@ const nodeColors: Record<string, string> = {
   output: '#f97316',
   mado_browser: '#06b6d4',
   email_send: '#e879a8',
+  channel_send: '#38bdf8',
   workspace: '#f59e0b',
   office: '#10b981',
 };
@@ -187,6 +190,7 @@ const nodeIcons: Record<string, React.ElementType> = {
   output: LogOut,
   mado_browser: Globe,
   email_send: Mail,
+  channel_send: MessageSquare,
   workspace: FolderOpen,
   office: FileSpreadsheet,
 };
@@ -364,6 +368,19 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
             )}
           </>
         )}
+        {type === 'channel_send' && (
+          <>
+            <div className="flex items-center gap-1">
+              <MessageSquare className="w-2.5 h-2.5 text-[#38bdf8]/70" />
+              <span className="text-[8px] font-bold text-[#38bdf8]/80 uppercase">
+                {config.channel || 'both'}
+              </span>
+            </div>
+            <p className="text-[9px] text-[#7a8899] line-clamp-2">
+              {config.message_template || 'Uses predecessor output'}
+            </p>
+          </>
+        )}
         {type === 'workspace' && (
           <>
             <div className="flex items-center gap-1">
@@ -466,6 +483,7 @@ const nodeTypes: NodeTypes = {
   output: FlowNode,
   mado_browser: FlowNode,
   email_send: FlowNode,
+  channel_send: FlowNode,
   workspace: FlowNode,
   office: FlowNode,
 };
@@ -1822,6 +1840,54 @@ Content-Type: application/json
                 <strong>Mail ✉</strong> — Sends via the SMTP account configured in the Mail page.
                 Requires <code className="text-[#e879a8]">perm_send_mail</code> to be enabled.
               </p>
+            </div>
+          </>
+        )}
+
+        {/* Workspace fields */}
+        {nodeType === 'channel_send' && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Channel</label>
+              <select
+                value={config.channel || 'both'}
+                onChange={(e) => updateConfig('channel', e.target.value)}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#38bdf8] transition-colors outline-none"
+              >
+                <option value="both">Telegram and Teams</option>
+                <option value="telegram">Telegram</option>
+                <option value="teams">Microsoft Teams</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Message Template</label>
+              <textarea
+                value={config.message_template || ''}
+                onChange={(e) => updateConfig('message_template', e.target.value)}
+                rows={4}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#38bdf8] transition-colors outline-none resize-none"
+                placeholder="Leave empty to send the predecessor output, or use {{context}} inside a message."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Telegram Chat IDs (optional)</label>
+              <input
+                type="text"
+                value={(config.telegram_chat_ids || []).join(', ')}
+                onChange={(e) => updateConfig('telegram_chat_ids', e.target.value.split(',').map(v => v.trim()).filter(Boolean))}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#38bdf8] transition-colors outline-none"
+                placeholder="Uses configured allowed chats when empty"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-[#7a8899] uppercase tracking-widest">Teams Conversation IDs (optional)</label>
+              <input
+                type="text"
+                value={(config.teams_conversation_ids || []).join(', ')}
+                onChange={(e) => updateConfig('teams_conversation_ids', e.target.value.split(',').map(v => v.trim()).filter(Boolean))}
+                className="w-full bg-[#0a0e1a] border border-[#1a2040] rounded-lg p-2 text-xs text-[#c8d0d8] focus:border-[#38bdf8] transition-colors outline-none"
+                placeholder="Uses notification routes or known conversations when empty"
+              />
             </div>
           </>
         )}

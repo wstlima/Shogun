@@ -15,9 +15,14 @@ set "SHORTCUT_NAME=Shogun - The Tenshu"
 set "DESKTOP=%USERPROFILE%\Desktop"
 set "TARGET=%SHOGUN_DIR%\start.bat"
 
-:: Resolve the icon path (use .ico from frontend/public if available)
+:: Resolve the icon path. Keep the desktop icon under Assets and give it
+:: a dedicated filename so Windows does not reuse a stale cached logo.
 set "ICON_PATH="
-if exist "%SHOGUN_DIR%\frontend\public\shogun-logo.ico" (
+if exist "%SHOGUN_DIR%\frontend\public\shogun-afm-desktop.ico" (
+    set "ICON_PATH=%SHOGUN_DIR%\frontend\public\shogun-afm-desktop.ico"
+) else if exist "%SHOGUN_DIR%\Assets\shogun-afm-logo.ico" (
+    set "ICON_PATH=%SHOGUN_DIR%\Assets\shogun-afm-logo.ico"
+) else if exist "%SHOGUN_DIR%\frontend\public\shogun-logo.ico" (
     set "ICON_PATH=%SHOGUN_DIR%\frontend\public\shogun-logo.ico"
 ) else if exist "%SHOGUN_DIR%\frontend\dist\shogun-logo.ico" (
     set "ICON_PATH=%SHOGUN_DIR%\frontend\dist\shogun-logo.ico"
