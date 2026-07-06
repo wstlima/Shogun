@@ -108,12 +108,20 @@ async def lifespan(app: FastAPI):
         pass
 
     # ── Office App Mode: Detection + temp cleanup ─────────────
+    import asyncio as _aio
     try:
         from shogun.office.office_detector import detect_office_applications
         from shogun.office.config import load_office_config
         from shogun.office.output_versioning import cleanup_temp_folder
         import logging as _log
-        office_detection = detect_office_applications()
+
+        # Run synchronous Office detection in a thread with a hard timeout
+        # to prevent COM hangs (e.g. Outlook profile dialogs) from blocking startup
+        loop = _aio.get_running_loop()
+        office_detection = await _aio.wait_for(
+            loop.run_in_executor(None, detect_office_applications),
+            timeout=10.0,
+        )
         _log.getLogger(__name__).info("Office detection: %s", office_detection.message)
         # Run temp cleanup on startup if configured
         office_cfg = load_office_config()
@@ -121,6 +129,9 @@ async def lifespan(app: FastAPI):
             cleaned = cleanup_temp_folder(office_cfg.folders.temp)
             if cleaned:
                 _log.getLogger(__name__).info("Office temp cleanup: removed %d files", cleaned)
+    except (TimeoutError, _aio.TimeoutError):
+        import logging
+        logging.getLogger(__name__).warning("Office detection timed out after 10s — skipping")
     except Exception as exc:
         import logging
         logging.getLogger(__name__).debug("Office detection/cleanup skipped: %s", exc)

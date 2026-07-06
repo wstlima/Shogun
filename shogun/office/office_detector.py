@@ -130,60 +130,35 @@ def detect_office_applications() -> OfficeDetectionResult:
 
 
 def _detect_via_com(app_key: str, app_name: str) -> OfficeAppInfo:
-    """Attempt to detect an Office application by creating a COM object."""
+    """Detect an Office application via registry probe (fast, non-blocking).
+
+    Only checks COM class registration in the Windows registry — does NOT
+    call ``win32com.client.Dispatch()`` which would actually *launch* the
+    application.  Launching Office during startup can hang indefinitely if
+    the app shows a dialog (activation, profile selection, first-launch
+    setup) and blocks the entire async event loop.
+
+    Version/path info is enriched later from the registry via
+    ``_enrich_from_registry``.
+    """
     info = OfficeAppInfo(name=app_name)
     prog_id = _COM_PROG_IDS.get(app_key, "")
     info.com_prog_id = prog_id
 
     try:
-        import pythoncom
-        import win32com.client
-
-        # Use EnsureDispatch to check COM registration without fully launching
-        # We use GetObject first to check if already running, then Dispatch
+        # Lightweight CLSID check via the registry — never launches the app
+        import winreg
+        key_path = f"{prog_id}\\CLSID"
         try:
-            # Try a lightweight CLSID check via the registry
-            import winreg
-            # Check if the ProgID is registered
-            key_path = f"{prog_id}\\CLSID"
-            try:
-                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, key_path):
-                    info.installed = True
-                    log.debug("COM ProgID '%s' found in registry", prog_id)
-            except FileNotFoundError:
-                info.installed = False
-                info.error = f"COM class '{prog_id}' not registered"
-                return info
-        except ImportError:
-            # winreg not available — fall back to trying Dispatch
-            pass
-
-        # If registry check passed, try to get version info
-        if info.installed:
-            try:
-                app = win32com.client.Dispatch(prog_id)
-                try:
-                    info.version = str(getattr(app, "Version", ""))
-                    info.build = str(getattr(app, "Build", ""))
-                    info.path = str(getattr(app, "Path", ""))
-                except Exception:
-                    pass
-                finally:
-                    # Don't leave the app running — quit it
-                    try:
-                        app.Quit()
-                    except Exception:
-                        pass
-                    del app
-            except Exception as exc:
-                # COM registered but couldn't instantiate — still mark as installed
-                log.debug("COM class '%s' registered but instantiation failed: %s", prog_id, exc)
-                info.error = f"Registered but could not instantiate: {exc}"
-
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, key_path):
+                info.installed = True
+                log.debug("COM ProgID '%s' found in registry", prog_id)
+        except FileNotFoundError:
+            info.installed = False
+            info.error = f"COM class '{prog_id}' not registered"
     except ImportError:
         info.installed = False
-        info.error = "pywin32 is not installed. Install with: pip install pywin32"
-        log.warning("pywin32 not available — cannot detect Office applications")
+        info.error = "winreg not available (non-Windows platform)"
     except Exception as exc:
         info.installed = False
         info.error = str(exc)
