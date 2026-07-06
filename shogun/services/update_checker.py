@@ -5,10 +5,8 @@ Runs on a background schedule (every 6 hours by default) and caches the result.
 
 import json
 import logging
-import asyncio
-from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
 
 import httpx
 
@@ -21,8 +19,51 @@ REMOTE_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
 CHECK_INTERVAL_HOURS = 6
 
 # ── Cached state ─────────────────────────────────────────────────
-_cached_result: Optional[dict] = None
-_last_check: Optional[datetime] = None
+_cached_result: dict | None = None
+_last_check: datetime | None = None
+_last_fetch_error: dict | None = None
+
+
+def _credential_file() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "data" / "update_credentials.json"
+
+
+def get_update_token() -> str:
+    """Return the update token without exposing it through the API."""
+    from shogun.config import settings
+
+    if settings.github_token:
+        return settings.github_token.strip()
+    path = _credential_file()
+    if not path.exists():
+        return ""
+    try:
+        from shogun.services.email_service import decrypt_password
+
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return decrypt_password(payload["github_token"]).strip()
+    except Exception as exc:
+        logger.warning("Could not read update credentials: %s", exc)
+        return ""
+
+
+def save_update_token(token: str) -> None:
+    """Persist the update credential encrypted in the protected data directory."""
+    from shogun.services.email_service import encrypt_password
+
+    token = token.strip()
+    if not token:
+        raise ValueError("GitHub access token is required")
+    path = _credential_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"github_token": encrypt_password(token)}, indent=2),
+        encoding="utf-8",
+    )
+
+
+def update_token_configured() -> bool:
+    return bool(get_update_token())
 
 
 def _get_local_version() -> dict:
@@ -42,7 +83,7 @@ def _get_local_version() -> dict:
         return {"version": "0.0.0", "build": 0, "channel": "unknown", "released": "", "changelog": ""}
 
 
-async def _fetch_remote_version() -> Optional[dict]:
+async def _fetch_remote_version() -> dict | None:
     """
     Fetch the remote version.json from GitHub.
 
@@ -52,12 +93,14 @@ async def _fetch_remote_version() -> Optional[dict]:
     3. GitHub API without auth (works for public repos, rate-limited)
     """
     import base64
-    from shogun.config import settings
 
-    github_token = settings.github_token or ""
+    global _last_fetch_error
+    _last_fetch_error = None
+    github_token = get_update_token()
     headers = {"Accept": "application/vnd.github.v3+json"}
     if github_token:
-        headers["Authorization"] = f"token {github_token}"
+        headers["Authorization"] = f"Bearer {github_token}"
+    headers["User-Agent"] = "Shogun-Updater"
 
     strategies = []
 
@@ -69,11 +112,14 @@ async def _fetch_remote_version() -> Optional[dict]:
     raw_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
     strategies.append(("Raw GitHub", raw_url, False))
 
+    statuses: list[int] = []
+    errors: list[str] = []
     for name, url, is_api in strategies:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 req_headers = dict(headers) if is_api else {}
                 resp = await client.get(url, headers=req_headers)
+                statuses.append(resp.status_code)
 
                 if resp.status_code == 200:
                     if is_api:
@@ -87,8 +133,26 @@ async def _fetch_remote_version() -> Optional[dict]:
                 logger.debug("%s returned %d", name, resp.status_code)
         except Exception as e:
             logger.debug("%s failed: %s", name, e)
+            errors.append(str(e))
 
     logger.warning("All update check strategies failed for %s", REPO)
+    auth_required = not github_token and any(status in {401, 403, 404} for status in statuses)
+    invalid_token = bool(github_token) and any(status in {401, 403, 404} for status in statuses)
+    if auth_required:
+        message = "The update source requires GitHub access. Add an access token below to enable updates."
+    elif invalid_token:
+        message = "The saved GitHub access token was rejected. Please replace it."
+    elif statuses:
+        message = f"Update server returned HTTP {statuses[-1]}."
+    else:
+        message = "Could not reach the update server. Check the internet connection."
+    _last_fetch_error = {
+        "message": message,
+        "auth_required": auth_required or invalid_token,
+        "token_configured": bool(github_token),
+        "http_status": statuses[-1] if statuses else None,
+        "technical_detail": errors[-1] if errors else None,
+    }
     return None
 
 
@@ -120,6 +184,7 @@ async def check_for_updates(force: bool = False) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
     if remote is None:
+        fetch_error = _last_fetch_error or {}
         result = {
             "update_available": False,
             "local_version": local.get("version", "0.0.0"),
@@ -129,7 +194,10 @@ async def check_for_updates(force: bool = False) -> dict:
             "changelog": None,
             "released": None,
             "last_checked": now,
-            "error": "Could not reach update server. Check your internet connection.",
+            "error": fetch_error.get("message", "Could not reach the update server."),
+            "auth_required": fetch_error.get("auth_required", False),
+            "token_configured": fetch_error.get("token_configured", update_token_configured()),
+            "http_status": fetch_error.get("http_status"),
         }
     else:
         local_build = local.get("build", 0)
@@ -145,6 +213,8 @@ async def check_for_updates(force: bool = False) -> dict:
             "changelog": remote.get("changelog", "") if update_available else None,
             "released": remote.get("released", "") if update_available else None,
             "last_checked": now,
+            "auth_required": False,
+            "token_configured": update_token_configured(),
         }
 
     _cached_result = result

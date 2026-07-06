@@ -12,6 +12,8 @@ interface UpdateStatus {
   released: string | null;
   last_checked: string;
   error?: string;
+  auth_required?: boolean;
+  token_configured?: boolean;
 }
 
 export const Updates = () => {
@@ -20,6 +22,30 @@ export const Updates = () => {
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<string | null>(null);
+  const [githubToken, setGithubToken] = useState('');
+  const [savingToken, setSavingToken] = useState(false);
+
+  const saveUpdateAccess = async () => {
+    if (!githubToken.trim()) return;
+    setSavingToken(true);
+    setInstallResult(null);
+    try {
+      const response = await fetch('/api/v1/updates/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_token: githubToken.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      setGithubToken('');
+      setStatus(data.status);
+      setInstallResult('Update access saved securely on this device.');
+    } catch (e: any) {
+      setInstallResult(`Could not save update access: ${e.message}`);
+    } finally {
+      setSavingToken(false);
+    }
+  };
 
   const checkForUpdates = async (force = false) => {
     setChecking(true);
@@ -55,7 +81,8 @@ export const Updates = () => {
       const r = await fetch('/api/v1/updates/apply', { method: 'POST' });
       const data = await r.json();
       if (data.success) {
-        setInstallResult(`✅ Updated to v${data.new_version} (build ${data.new_build}). ${data.files_updated} files updated. Please restart Shogun.`);
+        const warningText = data.warnings?.length ? ` Warnings: ${data.warnings.join(' ')}` : '';
+        setInstallResult(`✅ Updated to v${data.new_version} (build ${data.new_build}). ${data.files_updated} files updated. Please restart Shogun.${warningText}`);
         checkForUpdates(true);
       } else {
         setInstallResult(`❌ ${data.detail || 'Update failed'}`);
@@ -129,6 +156,35 @@ export const Updates = () => {
         )}
       </div>
 
+      {status?.auth_required && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-amber-300">Private update access</h3>
+            <p className="text-xs text-shogun-subdued mt-1">
+              This installation needs GitHub access to check and download updates. The token is encrypted and stored only on this device.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <input
+              type="password"
+              value={githubToken}
+              onChange={event => setGithubToken(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Enter') void saveUpdateAccess(); }}
+              placeholder="GitHub access token"
+              autoComplete="off"
+              className="flex-1 bg-shogun-bg border border-shogun-border rounded-lg px-3 py-2 text-sm text-shogun-text focus:border-amber-400 outline-none"
+            />
+            <button
+              onClick={saveUpdateAccess}
+              disabled={savingToken || !githubToken.trim()}
+              className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-500 disabled:opacity-50"
+            >
+              {savingToken ? 'Checking…' : 'Save & check'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Changelog */}
       {status?.update_available && status.changelog && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6">
@@ -145,7 +201,7 @@ export const Updates = () => {
       {/* Install result */}
       {installResult && (
         <div className={`rounded-xl p-4 border text-sm ${
-          installResult.startsWith('✅') 
+          installResult.startsWith('✅') || installResult.startsWith('Update access')
             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
             : 'bg-red-500/10 border-red-500/30 text-red-300'
         }`}>

@@ -109,11 +109,25 @@ echo        Database ready.
 :: -- Step 6: Install and build frontend -------------------------
 echo [6/8] Building frontend...
 cd frontend
-call npm install --silent 2>nul
-call npm run build --silent 2>nul
+call npm install --silent
+if %ERRORLEVEL% neq 0 (
+    echo  WARNING: npm install failed. The frontend may not work correctly.
+    echo           Try running 'npm install' manually in the frontend folder.
+    cd ..
+    goto step7
+)
+call npm run build
+if %ERRORLEVEL% neq 0 (
+    echo  WARNING: Frontend build failed. The UI may be outdated.
+    echo           Try running 'npm run build' manually in the frontend folder.
+    cd ..
+    goto step7
+)
 cd ..
 echo        Frontend built.
 
+
+:step7
 :: -- Step 7: Create desktop shortcut ----------------------------
 echo [7/8] Creating desktop shortcut...
 if exist "scripts\create_shortcut_win.bat" (

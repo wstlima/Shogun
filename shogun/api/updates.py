@@ -4,14 +4,20 @@ Shogun Updates API — Check for updates and trigger self-update.
 
 import json
 import logging
+import platform
 import subprocess
 import sys
-import platform
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from shogun.services.update_checker import check_for_updates, get_local_version_sync
+from shogun.services.update_checker import (
+    check_for_updates,
+    get_local_version_sync,
+    get_update_token,
+    save_update_token,
+    update_token_configured,
+)
 
 logger = logging.getLogger("shogun.api.updates")
 router = APIRouter(prefix="/updates", tags=["updates"])
@@ -35,6 +41,25 @@ async def get_version():
     return get_local_version_sync()
 
 
+@router.get("/credentials")
+async def update_credentials_status():
+    """Report whether private update access is configured, never the secret itself."""
+    return {"token_configured": update_token_configured()}
+
+
+@router.post("/credentials")
+async def configure_update_credentials(body: dict):
+    """Save and validate a GitHub token used only for update downloads."""
+    token = str(body.get("github_token", "")).strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="GitHub access token is required")
+    save_update_token(token)
+    result = await check_for_updates(force=True)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return {"success": True, "token_configured": True, "status": result}
+
+
 @router.post("/apply")
 async def apply_update():
     """
@@ -46,24 +71,41 @@ async def apply_update():
     3. Rebuild the frontend
     4. Return a message asking the user to restart
     """
-    import httpx
-    import zipfile
     import shutil
     import tempfile
+    import zipfile
 
-    REPO = "AlphaHorizon-AI/Shogun"
-    BRANCH = "main"
-    ZIP_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
+    import httpx
+
+    repo = "AlphaHorizon-AI/Shogun"
+    branch = "main"
+    token = get_update_token()
+    zip_url = (
+        f"https://api.github.com/repos/{repo}/zipball/{branch}"
+        if token
+        else f"https://github.com/{repo}/archive/refs/heads/{branch}.zip"
+    )
 
     # Find project root
     root = Path(__file__).resolve().parent.parent.parent
 
     try:
         # Step 1: Download
-        logger.info("Downloading update from %s", ZIP_URL)
+        logger.info("Downloading update from %s", zip_url)
+        headers = {"User-Agent": "Shogun-Updater"}
+        if token:
+            headers.update({
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            })
         async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            resp = await client.get(ZIP_URL)
+            resp = await client.get(zip_url, headers=headers)
             if resp.status_code != 200:
+                if resp.status_code in {401, 403, 404}:
+                    raise HTTPException(
+                        status_code=502,
+                        detail="GitHub denied access to the update. Check the access token in Updates.",
+                    )
                 raise HTTPException(status_code=502, detail=f"Download failed: HTTP {resp.status_code}")
 
         # Step 2: Save to temp
@@ -74,23 +116,31 @@ async def apply_update():
         # Step 3: Extract to temp directory
         tmp_extract = Path(tempfile.mkdtemp(prefix="shogun-update-"))
         with zipfile.ZipFile(tmp_zip, "r") as zf:
+            extract_root = tmp_extract.resolve()
+            for member in zf.infolist():
+                destination = (tmp_extract / member.filename).resolve()
+                if destination != extract_root and extract_root not in destination.parents:
+                    raise HTTPException(status_code=400, detail="Unsafe path found in update package")
             zf.extractall(tmp_extract)
 
         # Find the extracted folder (Shogun-main/)
         extracted_dirs = list(tmp_extract.iterdir())
-        if not extracted_dirs:
+        if not extracted_dirs or not extracted_dirs[0].is_dir():
             raise HTTPException(status_code=500, detail="ZIP extraction produced no files")
         source = extracted_dirs[0]
 
         # Step 4: Copy files (skip data/, venv/, node_modules/, .env)
-        SKIP = {"data", "venv", "node_modules", ".env", "__pycache__", ".git"}
+        skip = {
+            "data", "venv", ".venv", "node_modules", ".env", "__pycache__", ".git",
+            "configs", "vault", "logs", "scratch", ".states",
+        }
         updated_files = 0
 
         for item in source.rglob("*"):
             rel = item.relative_to(source)
 
             # Skip protected directories
-            if any(part in SKIP for part in rel.parts):
+            if any(part in skip for part in rel.parts):
                 continue
 
             dest = root / rel
@@ -108,26 +158,47 @@ async def apply_update():
         logger.info("Update applied: %d files updated", updated_files)
 
         # Step 6: Rebuild frontend
+        warnings: list[str] = []
+        dependency_result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", ".[office]", "--disable-pip-version-check"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if dependency_result.returncode != 0:
+            warnings.append("Python dependency refresh failed; see server logs.")
+            logger.warning("Dependency refresh failed: %s", dependency_result.stderr[-2000:])
+
         frontend_dir = root / "frontend"
         if (frontend_dir / "package.json").exists():
             logger.info("Rebuilding frontend...")
             try:
                 npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
-                subprocess.run(
+                npm_install = subprocess.run(
                     [npm_cmd, "install", "--silent"],
                     cwd=str(frontend_dir),
                     capture_output=True,
                     timeout=120,
                 )
-                subprocess.run(
+                npm_build = subprocess.run(
                     [npm_cmd, "run", "build", "--silent"],
                     cwd=str(frontend_dir),
                     capture_output=True,
                     timeout=120,
                 )
-                logger.info("Frontend rebuilt successfully.")
+                if npm_install.returncode or npm_build.returncode:
+                    warnings.append("Frontend rebuild failed; see server logs.")
+                    logger.warning(
+                        "Frontend update failed: install=%s build=%s",
+                        npm_install.returncode,
+                        npm_build.returncode,
+                    )
+                else:
+                    logger.info("Frontend rebuilt successfully.")
             except Exception as e:
-                logger.warning("Frontend rebuild failed: %s — you may need to rebuild manually", e)
+                warnings.append("Frontend rebuild failed; see server logs.")
+                logger.warning("Frontend rebuild failed: %s", e)
 
         # Read the new version
         new_version = json.loads((root / "version.json").read_text(encoding="utf-8"))
@@ -140,6 +211,7 @@ async def apply_update():
             "changelog": new_version.get("changelog", ""),
             "message": "Update applied successfully. Please restart Shogun to complete the update.",
             "restart_required": True,
+            "warnings": warnings,
         }
 
     except HTTPException:

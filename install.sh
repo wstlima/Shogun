@@ -145,10 +145,20 @@ echo -e "       ${GREEN}Database ready.${NC}"
 # ── Step 6: Install and build frontend ─────────────────────────
 echo -e "${GOLD}[6/8]${NC} Building frontend..."
 cd frontend
-npm install --silent 2>/dev/null
-npm run build --silent 2>/dev/null
-cd ..
-echo -e "       ${GREEN}Frontend built.${NC}"
+if ! npm install --silent 2>/dev/null; then
+    echo -e "       ${RED}WARNING: npm install failed. The frontend may not work correctly.${NC}"
+    echo "       Try running 'npm install' manually in the frontend folder."
+    cd ..
+else
+    if ! npm run build --silent 2>/dev/null; then
+        echo -e "       ${RED}WARNING: Frontend build failed. The UI may be outdated.${NC}"
+        echo "       Try running 'npm run build' manually in the frontend folder."
+        cd ..
+    else
+        cd ..
+        echo -e "       ${GREEN}Frontend built.${NC}"
+    fi
+fi
 
 # ── Step 7: Create desktop shortcut ────────────────────────────
 echo -e "${GOLD}[7/8]${NC} Creating desktop shortcut..."
