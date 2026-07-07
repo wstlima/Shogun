@@ -1,8 +1,8 @@
 {
   "version": "1.6.0",
   "name": "Shogun OS",
-  "build": 41,
+  "build": 42,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Fix: Gmail/IMAP mail folders now sync more reliably in Comms, including real Gmail Sent Mail folders; Windows launch still opens Shogun automatically once ready."
+  "changelog": "Telegram: Shogun now receives uploaded photos/files, can inspect images, saves attachments into the workspace, preserves group/topic context, and replies inside the same Telegram topic."
 }
