@@ -1,8 +1,8 @@
 {
-  "version": "1.6.2",
+  "version": "1.6.3",
   "name": "Shogun OS",
-  "build": 49,
+  "build": 50,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "AgentFlow: Reliable node properties selection. Dojo: Installed skills, achievements, transcript, and exam tools. Launcher: Rebuild frontend assets on start."
+  "changelog": "File Explorer: Show a stable Workspace root so Telegram appears as a child folder, not as the workspace itself."
 }
