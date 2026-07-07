@@ -2027,7 +2027,7 @@ function AgentFlowCanvas({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [flowName, setFlowName] = useState(flow.name);
@@ -2220,11 +2220,15 @@ function AgentFlowCanvas({
 
   // Handle node selection
   const onNodeClick = useCallback((_: any, node: Node) => {
-    setSelectedNode(node);
+    setSelectedNodeId(node.id);
   }, []);
 
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
+    setSelectedNodeId(null);
+  }, []);
+
+  const onSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: Node[] }) => {
+    setSelectedNodeId(selectedNodes[0]?.id || null);
   }, []);
 
   // Update node data from inspector
@@ -2232,7 +2236,6 @@ function AgentFlowCanvas({
     setNodes((nds) =>
       nds.map((n) => (n.id === nodeId ? { ...n, data: newData } : n))
     );
-    setSelectedNode((prev) => prev && prev.id === nodeId ? { ...prev, data: newData } : prev);
   }, [setNodes]);
 
   // Drag-and-drop from palette
@@ -2272,7 +2275,7 @@ function AgentFlowCanvas({
   const onDeleteSelected = useCallback(() => {
     setNodes((nds) => nds.filter((n) => !n.selected));
     setEdges((eds) => eds.filter((e) => !e.selected));
-    setSelectedNode(null);
+    setSelectedNodeId(null);
   }, [setNodes, setEdges]);
 
   // Save flow
@@ -2459,7 +2462,7 @@ function AgentFlowCanvas({
   }, [handleSave, onDeleteSelected]);
 
   // Find the actual selected node object for inspector
-  const inspectorNode = selectedNode ? nodes.find((n) => n.id === selectedNode.id) || selectedNode : null;
+  const inspectorNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) || null : null;
 
   return (
     <div className="relative flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040]">
@@ -2640,6 +2643,7 @@ function AgentFlowCanvas({
               onConnect={onConnect}
               onNodeClick={onNodeClick}
               onPaneClick={onPaneClick}
+              onSelectionChange={onSelectionChange}
               onDrop={onDrop}
               onDragOver={onDragOver}
               nodeTypes={nodeTypes}
@@ -2699,7 +2703,7 @@ function AgentFlowCanvas({
         <NodeInspector
           node={inspectorNode}
           onUpdate={onNodeDataUpdate}
-          onClose={() => setSelectedNode(null)}
+          onClose={() => setSelectedNodeId(null)}
           agents={agents}
           routingProfiles={routingProfiles}
           flowId={flow.id}

@@ -411,6 +411,49 @@ async def get_achievements(db: AsyncSession = Depends(get_db)):
 
 # ── URL-Based Skill Import ──────────────────────────────────
 
+@router.get("/openclaw/installed", response_model=ApiResponse)
+async def get_installed_openclaw_skills(db: AsyncSession = Depends(get_db)):
+    """Return locally installed OpenClaw skills with display metadata."""
+    from sqlalchemy.orm import joinedload
+
+    from shogun.db.models.skill_installation import SkillInstallation
+
+    result = await db.execute(
+        select(SkillInstallation)
+        .where(SkillInstallation.status == "installed")
+        .options(joinedload(SkillInstallation.skill))
+    )
+    installations = list(result.scalars().all())
+
+    skills: list[dict[str, Any]] = []
+    for inst in installations:
+        skill = inst.skill
+        if not skill or skill.is_deleted:
+            continue
+        manifest = skill.manifest or {}
+        skills.append({
+            "skill_id": str(skill.id),
+            "openclaw_skill_id": inst.openclaw_skill_id or manifest.get("openclaw_id", ""),
+            "name": skill.name,
+            "slug": skill.slug,
+            "version": inst.installed_version or skill.version,
+            "status": inst.status,
+            "installed_at": inst.installed_at.isoformat() if inst.installed_at else None,
+            "installed_by": inst.installed_by,
+            "description": manifest.get("description", ""),
+            "faculty": manifest.get("faculty") or manifest.get("faculty_id", ""),
+            "subcategory": manifest.get("subcategory") or manifest.get("subcategory_id", ""),
+            "risk_tier": manifest.get("risk_tier", ""),
+            "capabilities": manifest.get("capabilities", []),
+            "permissions": manifest.get("permissions", {}),
+        })
+
+    return ApiResponse(
+        data=skills,
+        meta={"total": len(skills), "source": OPENCLAW_SOURCE_SLUG},
+    )
+
+
 @router.post("/skills/add-url", response_model=ApiResponse)
 async def add_skill_from_url(body: AddUrlRequest):
     """Import a skill or bundle from a GitHub/ClawHub URL.

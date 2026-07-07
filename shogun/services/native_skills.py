@@ -1530,6 +1530,51 @@ NATIVE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_take_exam",
+            "description": "Take the OpenClaw College certification exam for an installed or catalog skill. Returns pass/fail, score, model, and test metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "openclaw_skill_id": {
+                        "type": "string",
+                        "description": "The OpenClaw skill ID to certify.",
+                    },
+                },
+                "required": ["openclaw_skill_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_get_achievements",
+            "description": "Show the registered Shogun agent's Dojo achievements, installed skill count, badges, and exam totals.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_get_transcript",
+            "description": "Show the OpenClaw College certification transcript and exam history for the registered Shogun agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
 ]
 
 
@@ -3285,6 +3330,12 @@ async def _execute_dojo_tool(name: str, args: dict[str, Any]) -> str:
             return await _dojo_install_skill(args)
         elif name == "dojo_list_installed":
             return await _dojo_list_installed()
+        elif name == "dojo_take_exam":
+            return await _dojo_take_exam(args)
+        elif name == "dojo_get_achievements":
+            return await _dojo_get_achievements()
+        elif name == "dojo_get_transcript":
+            return await _dojo_get_transcript()
         else:
             return json.dumps({"status": "error", "message": f"Unknown dojo tool: {name}"})
     except Exception as exc:
@@ -3517,4 +3568,237 @@ async def _dojo_list_installed() -> str:
 
     except Exception as exc:
         logger.error(f"dojo_list_installed failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _dojo_get_primary_agent(db):
+    from sqlalchemy import select
+
+    from shogun.db.models.agent import Agent
+
+    result = await db.execute(
+        select(Agent).where(Agent.is_primary == True, Agent.is_deleted == False)
+    )
+    return result.scalars().first()
+
+
+async def _dojo_resolve_primary_model(agent: Any, db) -> str:
+    if not getattr(agent, "model_routing_profile_id", None):
+        return "unknown"
+    try:
+        from sqlalchemy import select
+
+        from shogun.db.models.model_routing import ModelRoutingProfile
+
+        result = await db.execute(
+            select(ModelRoutingProfile).where(ModelRoutingProfile.id == agent.model_routing_profile_id)
+        )
+        profile = result.scalars().first()
+        if profile and profile.rules:
+            for rule in profile.rules:
+                if isinstance(rule, dict) and rule.get("model"):
+                    return rule["model"]
+    except Exception:
+        pass
+    return "unknown"
+
+
+async def _dojo_take_exam(args: dict[str, Any]) -> str:
+    """Take and submit an OpenClaw certification exam for a skill."""
+    openclaw_skill_id = (
+        args.get("openclaw_skill_id")
+        or args.get("skill_id")
+        or ""
+    ).strip()
+    if not openclaw_skill_id:
+        return json.dumps({
+            "status": "error",
+            "message": "openclaw_skill_id is required.",
+        })
+
+    try:
+        from shogun.api.dojo import _generate_exam_questions
+        from shogun.db.engine import async_session_factory
+        from shogun.integrations.openclaw_client import get_openclaw_client
+
+        async with async_session_factory() as db:
+            agent = await _dojo_get_primary_agent(db)
+            if not agent or not agent.openclaw_agent_id:
+                return json.dumps({
+                    "status": "error",
+                    "message": "The primary Shogun agent is not registered with OpenClaw College.",
+                })
+
+            async with get_openclaw_client(
+                actor_id=agent.openclaw_agent_id,
+                api_key=agent.openclaw_api_key or None,
+            ) as client:
+                test = await client.find_test(openclaw_skill_id)
+                if not test:
+                    return json.dumps({
+                        "status": "error",
+                        "message": f"No exam found for skill {openclaw_skill_id}.",
+                    })
+
+                test_id = test["id"]
+                pass_threshold = test.get("passThreshold", 85)
+                questions = test.get("questions", [])
+                if not questions:
+                    exam = await client.get_test_questions(test_id)
+                    questions = exam.get("questions", []) if isinstance(exam, dict) else []
+
+                if not questions:
+                    skill_name = test.get("name", "Unknown Skill")
+                    faculty = "technical"
+                    try:
+                        skill_data = await client.get_skill_by_id(openclaw_skill_id)
+                        if skill_data:
+                            faculty = getattr(skill_data, "faculty_id", None) or "technical"
+                            skill_name = getattr(skill_data, "name", skill_name) or skill_name
+                    except Exception:
+                        pass
+                    questions = _generate_exam_questions(skill_name, faculty)
+
+                total = len(questions)
+                correct = 0
+                for question in questions:
+                    options = question.get("options", [""])
+                    selected = question.get("correctAnswer", options[0] if options else "")
+                    if selected == question.get("correctAnswer", selected):
+                        correct += 1
+
+                score = int((correct / total) * 100) if total > 0 else 100
+                model_id = await _dojo_resolve_primary_model(agent, db)
+                log_artifact = (
+                    f"Native Dojo exam by {agent.name} ({agent.openclaw_agent_id})\n"
+                    f"Model: {model_id}\n"
+                    f"Test: {test_id} | Questions: {total} | Score: {score}%\n"
+                    f"Answered {correct}/{total} correctly"
+                )
+                college_result = await client.submit_test_result(
+                    test_id=test_id,
+                    agent_id=agent.openclaw_agent_id,
+                    score=score,
+                    log_artifact=log_artifact,
+                    agent_name=agent.name,
+                    model_id=model_id,
+                )
+
+        return json.dumps({
+            "status": "success",
+            "openclaw_skill_id": openclaw_skill_id,
+            "test_id": test_id,
+            "questions_total": total,
+            "questions_correct": correct,
+            "score": score,
+            "pass_threshold": pass_threshold,
+            "passed": score >= pass_threshold,
+            "agent_name": agent.name,
+            "model_id": model_id,
+            "college_result": college_result,
+            "message": f"Exam completed with score {score}%.",
+        })
+    except Exception as exc:
+        logger.error(f"dojo_take_exam failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _dojo_get_achievements() -> str:
+    """Return local install counts plus College achievements."""
+    try:
+        from sqlalchemy import func as sa_func, select
+
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.skill_installation import SkillInstallation
+        from shogun.integrations.openclaw_client import get_openclaw_client
+
+        async with async_session_factory() as db:
+            agent = await _dojo_get_primary_agent(db)
+            installed_result = await db.execute(
+                select(sa_func.count()).select_from(SkillInstallation).where(
+                    SkillInstallation.status == "installed"
+                )
+            )
+            installed_count = installed_result.scalar() or 0
+            installed_ids_result = await db.execute(
+                select(SkillInstallation.openclaw_skill_id).where(
+                    SkillInstallation.status == "installed"
+                )
+            )
+            installed_skill_ids = [row[0] for row in installed_ids_result.fetchall() if row[0]]
+
+            if not agent or not agent.openclaw_agent_id:
+                return json.dumps({
+                    "status": "success",
+                    "registered": False,
+                    "skills_installed": installed_count,
+                    "installed_skill_ids": installed_skill_ids,
+                    "badges": [],
+                    "specializations_earned": [],
+                    "message": "Local installed skills are available, but the primary agent is not registered with OpenClaw College.",
+                })
+
+            async with get_openclaw_client() as client:
+                agent_data = await client.get_agent_by_id(agent.openclaw_agent_id)
+
+        test_results = (agent_data or {}).get("testResults", [])
+        exams_passed = sum(
+            1 for result in test_results
+            if result.get("verificationStatus") == "approved"
+            or result.get("passed") is True
+            or (result.get("score", 0) >= result.get("passThreshold", 85))
+        )
+        return json.dumps({
+            "status": "success",
+            "registered": True,
+            "openclaw_agent_id": agent.openclaw_agent_id,
+            "agent_name": (agent_data or {}).get("name", agent.name),
+            "badges": (agent_data or {}).get("earnedBadges", []),
+            "specializations_earned": (agent_data or {}).get("earnedSpecializations", []),
+            "skills_completed": (agent_data or {}).get("skillsCompleted", 0),
+            "skills_installed": installed_count,
+            "installed_skill_ids": installed_skill_ids,
+            "exams_passed": exams_passed,
+            "exams_total": len(test_results),
+        })
+    except Exception as exc:
+        logger.error(f"dojo_get_achievements failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _dojo_get_transcript() -> str:
+    """Return the registered agent's OpenClaw transcript."""
+    try:
+        from shogun.db.engine import async_session_factory
+        from shogun.integrations.openclaw_client import get_openclaw_client
+
+        async with async_session_factory() as db:
+            agent = await _dojo_get_primary_agent(db)
+            if not agent or not agent.openclaw_agent_id:
+                return json.dumps({
+                    "status": "error",
+                    "message": "The primary Shogun agent is not registered with OpenClaw College.",
+                })
+
+            async with get_openclaw_client(
+                actor_id=agent.openclaw_agent_id,
+                api_key=agent.openclaw_api_key or None,
+            ) as client:
+                transcript = await client.get_agent_transcript(agent.openclaw_agent_id)
+
+        if not transcript:
+            return json.dumps({
+                "status": "error",
+                "message": "Transcript not found.",
+            })
+
+        return json.dumps({
+            "status": "success",
+            "openclaw_agent_id": agent.openclaw_agent_id,
+            "test_results": transcript.get("testResults", []),
+            "transcript": transcript.get("transcript", []),
+            "profile": transcript,
+        })
+    except Exception as exc:
+        logger.error(f"dojo_get_transcript failed: {exc}", exc_info=True)
         return json.dumps({"status": "error", "message": str(exc)})

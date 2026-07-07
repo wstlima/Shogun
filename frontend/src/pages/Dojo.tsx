@@ -94,6 +94,7 @@ export function Dojo() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [installMessage, setInstallMessage] = useState<{type: 'success' | 'error' | 'info', text: string} | null>(null);
   const [installedSkills, setInstalledSkills] = useState<Set<string>>(new Set());
+  const [installedSkillDetails, setInstalledSkillDetails] = useState<any[]>([]);
 
   // ── Data Fetching ──────────────────────────────────────────
 
@@ -119,6 +120,17 @@ export function Dojo() {
     }
   }, []);
 
+  const fetchInstalledSkills = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/v1/dojo/openclaw/installed');
+      const installed = res.data.data || [];
+      setInstalledSkillDetails(installed);
+      setInstalledSkills(new Set(installed.map((s: any) => s.openclaw_skill_id).filter(Boolean)));
+    } catch (error) {
+      console.error('Error fetching installed skills:', error);
+    }
+  }, []);
+
   const fetchTabData = useCallback(async () => {
     setLoading(true);
     try {
@@ -134,12 +146,16 @@ export function Dojo() {
         const res = await axios.get('/api/v1/dojo/openclaw/specializations');
         setSpecializations(res.data.data || []);
       } else if (activeTab === 'achieved') {
-        const [badgesRes, achieveRes] = await Promise.all([
+        const [badgesRes, achieveRes, installedRes] = await Promise.all([
           axios.get('/api/v1/dojo/openclaw/badges'),
           axios.get('/api/v1/dojo/openclaw/achievements'),
+          axios.get('/api/v1/dojo/openclaw/installed'),
         ]);
         setBadges(badgesRes.data.data || []);
         setAchievements(achieveRes.data.data);
+        const installed = installedRes.data.data || [];
+        setInstalledSkillDetails(installed);
+        setInstalledSkills(new Set(installed.map((s: any) => s.openclaw_skill_id).filter(Boolean)));
       }
     } catch (error) {
       console.error('Error fetching tab data:', error);
@@ -151,7 +167,8 @@ export function Dojo() {
   useEffect(() => {
     fetchStats();
     fetchCategories();
-  }, []);
+    fetchInstalledSkills();
+  }, [fetchStats, fetchCategories, fetchInstalledSkills]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -229,6 +246,7 @@ export function Dojo() {
         const transcriptRes = await axios.get('/api/v1/dojo/openclaw/transcript');
         setTranscript(transcriptRes.data.data);
       } catch { /* non-critical */ }
+      fetchTabData();
     } catch (error: any) {
       setExamError(error.response?.data?.detail || 'Could not complete exam. Check your API key in credentials.');
       setExamMode('idle');
@@ -264,6 +282,7 @@ export function Dojo() {
         setInstallMessage({ type: 'success', text: `${skill.name} installed successfully!` });
       }
       setInstalledSkills(prev => new Set(prev).add(skill.id));
+      fetchInstalledSkills();
     } catch (error: any) {
       setInstallMessage({ type: 'error', text: error.response?.data?.detail || 'Install failed.' });
     } finally {
@@ -931,16 +950,15 @@ export function Dojo() {
                        </div>
 
                         {/* Installed Skills */}
-                        {installedSkills.size > 0 && (
+                        {installedSkillDetails.length > 0 && (
                           <div className="space-y-4">
                             <h3 className="text-[10px] font-bold text-shogun-subdued uppercase tracking-[0.2em] flex items-center gap-2">
                               <Package className="w-3.5 h-3.5 text-green-400" /> Installed Skills
-                              <span className="ml-auto text-[9px] px-2 py-0.5 bg-green-500/10 text-green-400 rounded-full font-mono">{installedSkills.size}</span>
+                              <span className="ml-auto text-[9px] px-2 py-0.5 bg-green-500/10 text-green-400 rounded-full font-mono">{installedSkillDetails.length}</span>
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {Array.from(installedSkills).map((skillId: string) => {
-                                const skill = skills.find((s: any) => s.id === skillId);
-                                if (!skill) return null;
+                              {installedSkillDetails.map((skill: any) => {
+                                const skillId = skill.openclaw_skill_id || skill.skill_id;
                                 return (
                                   <div key={skillId} className="relative overflow-hidden rounded-xl border border-green-500/15 bg-gradient-to-r from-green-500/5 via-[#050508] to-[#050508] transition-all hover:border-green-500/30">
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500/50" />
@@ -951,7 +969,9 @@ export function Dojo() {
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-shogun-text truncate">{skill.name}</p>
                                         <div className="flex items-center gap-2 mt-0.5">
-                                          <span className="text-[8px] px-1.5 py-0.5 bg-shogun-card border border-shogun-border rounded text-shogun-subdued uppercase tracking-wider">{skill.faculty?.replace(/_/g, ' ')}</span>
+                                          {skill.faculty && (
+                                            <span className="text-[8px] px-1.5 py-0.5 bg-shogun-card border border-shogun-border rounded text-shogun-subdued uppercase tracking-wider">{skill.faculty?.replace(/_/g, ' ')}</span>
+                                          )}
                                           <span className="text-[8px] text-shogun-subdued font-mono">v{skill.version}</span>
                                         </div>
                                       </div>
