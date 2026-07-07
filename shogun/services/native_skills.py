@@ -3309,22 +3309,27 @@ async def _dojo_browse_skills(args: dict[str, Any]) -> str:
                     "message": "OpenClaw College is not reachable. The skill catalog may be offline.",
                 })
 
-            skills = await client.browse_skills(
+            # The client uses get_skills() with faculty/subcategory/search params
+            skills = await client.get_skills(
                 search=search or None,
-                category=category or None,
+                subcategory=category or None,
+                limit=50,
             )
 
-        # Serialize the skill objects
+        # Serialize the OpenClawSkill dataclass objects
         skill_list = []
-        for skill in skills[:50]:  # Cap at 50 to avoid context overflow
+        for skill in skills:
             skill_list.append({
-                "id": getattr(skill, "id", "") or getattr(skill, "skill_id", ""),
-                "name": getattr(skill, "name", ""),
-                "slug": getattr(skill, "slug", ""),
-                "description": getattr(skill, "description", "")[:200],
-                "category": getattr(skill, "category", ""),
-                "risk_tier": getattr(skill, "risk_tier", "standard"),
-                "version": getattr(skill, "version", "1.0.0"),
+                "id": skill.id,
+                "name": skill.name,
+                "slug": skill.slug,
+                "description": skill.short_description[:200] if skill.short_description else "",
+                "faculty": skill.faculty_id,
+                "subcategory": skill.subcategory_id,
+                "risk_tier": skill.risk_tier,
+                "version": skill.version,
+                "author": skill.author_name,
+                "status": skill.status,
             })
 
         return json.dumps({
@@ -3343,32 +3348,11 @@ async def _dojo_browse_skills(args: dict[str, Any]) -> str:
             "message": "OpenClaw integration is not available.",
         })
     except Exception as exc:
-        # If the client doesn't have browse_skills, try the raw API
-        try:
-            from shogun.integrations.openclaw_client import get_openclaw_client
-            async with get_openclaw_client() as client:
-                result = await client.list_skills(
-                    search=args.get("search") or None,
-                    category=args.get("category") or None,
-                )
-                skills_data = []
-                for s in (result if isinstance(result, list) else []):
-                    skills_data.append({
-                        "id": s.get("id", ""),
-                        "name": s.get("name", ""),
-                        "description": str(s.get("description", ""))[:200],
-                        "category": s.get("category", ""),
-                    })
-                return json.dumps({
-                    "status": "success",
-                    "skills": skills_data,
-                    "total": len(skills_data),
-                })
-        except Exception:
-            return json.dumps({
-                "status": "error",
-                "message": f"Failed to browse OpenClaw catalog: {exc}",
-            })
+        logger.error(f"dojo_browse_skills failed: {exc}", exc_info=True)
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to browse OpenClaw catalog: {exc}",
+        })
 
 
 async def _dojo_install_skill(args: dict[str, Any]) -> str:
