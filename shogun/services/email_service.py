@@ -64,6 +64,94 @@ def parse_header_str(header_value: str | None) -> str:
         return str(header_value)
 
 
+def _decode_imap_utf7(value: str) -> str:
+    """Decode IMAP modified UTF-7 folder names, leaving plain ASCII intact."""
+    if "&" not in value:
+        return value
+
+    out: list[str] = []
+    i = 0
+    while i < len(value):
+        if value[i] != "&":
+            out.append(value[i])
+            i += 1
+            continue
+
+        end = value.find("-", i)
+        if end == -1:
+            out.append(value[i:])
+            break
+
+        token = value[i + 1:end]
+        if token == "":
+            out.append("&")
+        else:
+            try:
+                padded = token.replace(",", "/")
+                padded += "=" * ((4 - len(padded) % 4) % 4)
+                out.append(base64.b64decode(padded).decode("utf-16-be"))
+            except Exception:
+                out.append(value[i:end + 1])
+        i = end + 1
+
+    return "".join(out)
+
+
+def _unquote_imap_name(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        value = value[1:-1].replace(r"\"", '"').replace(r"\\", "\\")
+    return _decode_imap_utf7(value)
+
+
+def _parse_imap_list_line(line: bytes | str) -> str | None:
+    """Extract a selectable mailbox name from an IMAP LIST response line."""
+    text = line.decode("utf-8", errors="ignore") if isinstance(line, bytes) else str(line)
+    match = re.match(r'\((?P<flags>.*?)\)\s+(?P<delimiter>"[^"]*"|NIL)\s+(?P<name>.+)$', text)
+    if match:
+        return _unquote_imap_name(match.group("name"))
+
+    # Fallback for unusual servers: the mailbox is normally the final token.
+    parts = text.rsplit(" ", 1)
+    if parts:
+        return _unquote_imap_name(parts[-1])
+    return None
+
+
+def _quote_mailbox(folder: str) -> str:
+    if folder.upper() == "INBOX":
+        return "INBOX"
+    escaped = folder.replace("\\", "\\\\").replace('"', r"\"")
+    return f'"{escaped}"'
+
+
+def _folder_candidates(folder: str) -> list[str]:
+    lname = folder.lower()
+    aliases = {
+        "sent": ["Sent", "Sent Mail", "[Gmail]/Sent Mail", "[Google Mail]/Sent Mail"],
+        "drafts": ["Drafts", "[Gmail]/Drafts", "[Google Mail]/Drafts"],
+        "trash": ["Trash", "Bin", "[Gmail]/Trash", "[Gmail]/Bin", "[Google Mail]/Trash", "[Google Mail]/Bin"],
+        "archive": ["Archive", "All Mail", "[Gmail]/All Mail", "[Google Mail]/All Mail"],
+        "all mail": ["All Mail", "[Gmail]/All Mail", "[Google Mail]/All Mail"],
+    }
+    candidates = [folder]
+    for key, values in aliases.items():
+        if lname == key or key in lname:
+            candidates.extend(values)
+    return list(dict.fromkeys(candidates))
+
+
+def _select_mailbox(mail: imaplib.IMAP4, folder: str):
+    last_status = None
+    last_data = None
+    for candidate in _folder_candidates(folder):
+        status, data = mail.select(_quote_mailbox(candidate))
+        last_status, last_data = status, data
+        if status == "OK":
+            return status, data
+    return last_status, last_data
+
+
 class EmailService(BaseService[EmailAccount]):
     """Service to handle mail operations governed by Katana permissions."""
 
@@ -227,20 +315,13 @@ class EmailService(BaseService[EmailAccount]):
                 return ["INBOX"]
 
             folders = []
-            list_re = re.compile(r'\((?P<flags>.*?)\)\s+"(?P<delimiter>.*?)"\s+(?P<name>.*)')
             for f in folder_list:
-                f_str = f.decode("utf-8", errors="ignore")
-                match = list_re.match(f_str)
-                if match:
-                    name = match.group("name").strip('"')
+                name = _parse_imap_list_line(f)
+                if name:
                     folders.append(name)
-                else:
-                    parts = f_str.split(' "/" ')
-                    if len(parts) > 1:
-                        folders.append(parts[-1].strip('"'))
-                    else:
-                        folders.append(f_str)
-            return folders
+
+            deduped = list(dict.fromkeys(folders))
+            return sorted(deduped, key=lambda x: (x.upper() != "INBOX", x.lower()))
 
         try:
             return await asyncio.to_thread(_get_folders)
@@ -266,7 +347,10 @@ class EmailService(BaseService[EmailAccount]):
             mail.login(acc.username, password)
             
             # Select folder
-            mail.select(folder)
+            status, _ = _select_mailbox(mail, folder)
+            if status != "OK":
+                mail.logout()
+                return [], 0
             status, messages = mail.uid("search", None, "ALL")
             if status != "OK" or not messages[0]:
                 mail.logout()
@@ -416,7 +500,10 @@ class EmailService(BaseService[EmailAccount]):
             else:
                 mail = imaplib.IMAP4(acc.imap_host, acc.imap_port)
             mail.login(acc.username, password)
-            mail.select(folder)
+            status, _ = _select_mailbox(mail, folder)
+            if status != "OK":
+                mail.logout()
+                raise ValueError(f"Could not select mail folder: {folder}")
 
             status, fetch_data = mail.uid("fetch", uid, "(RFC822 FLAGS)")
             if status != "OK" or not fetch_data:
@@ -570,7 +657,10 @@ class EmailService(BaseService[EmailAccount]):
             else:
                 mail = imaplib.IMAP4(acc.imap_host, acc.imap_port)
             mail.login(acc.username, password)
-            mail.select(folder)
+            status, _ = _select_mailbox(mail, folder)
+            if status != "OK":
+                mail.logout()
+                raise ValueError(f"Could not select mail folder: {folder}")
 
             op = "+FLAGS" if read else "-FLAGS"
             mail.uid("store", uid, op, "\\Seen")
@@ -595,26 +685,27 @@ class EmailService(BaseService[EmailAccount]):
             else:
                 mail = imaplib.IMAP4(acc.imap_host, acc.imap_port)
             mail.login(acc.username, password)
-            mail.select(folder)
+            status, _ = _select_mailbox(mail, folder)
+            if status != "OK":
+                mail.logout()
+                raise ValueError(f"Could not select mail folder: {folder}")
 
             # Move to Trash if possible, else mark deleted and expunge
             status, folder_list = mail.list()
             trash_folder = None
             if status == "OK":
                 for f in folder_list:
-                    f_str = f.decode("utf-8", errors="ignore").lower()
+                    name = _parse_imap_list_line(f)
+                    if not name:
+                        continue
+                    f_str = name.lower()
                     if "trash" in f_str or "bin" in f_str:
-                        # Find the actual folder name
-                        parts = f_str.split(' "/" ')
-                        name = parts[-1].strip('"') if len(parts) > 1 else f_str.split()[-1].strip('"')
-                        # Recover exact name from original listing casing
-                        match_re = re.search(r'"([^"]+)"\s*$', f.decode("utf-8", errors="ignore"))
-                        trash_folder = match_re.group(1) if match_re else name
+                        trash_folder = name
                         break
 
             if trash_folder and trash_folder.lower() != folder.lower():
                 try:
-                    result = mail.uid("copy", uid, trash_folder)
+                    result = mail.uid("copy", uid, _quote_mailbox(trash_folder))
                     if result[0] == "OK":
                         mail.uid("store", uid, "+FLAGS", "\\Deleted")
                         mail.expunge()

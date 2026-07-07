@@ -184,6 +184,8 @@ export const MailView = () => {
       setComposeBcc('');
       setComposeSubject('');
       setComposeBody('');
+      await fetchFolders();
+      await fetchMessages();
       setTimeout(() => {
         setShowCompose(false);
         setSuccessMsg('');

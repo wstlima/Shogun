@@ -1,8 +1,8 @@
 {
   "version": "1.6.0",
   "name": "Shogun OS",
-  "build": 40,
+  "build": 41,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Fix: Windows launch and install now open the Shogun browser page automatically once the server is ready; Campaign mode still allows approved high-risk tools without extra ToolGate confirmation."
+  "changelog": "Fix: Gmail/IMAP mail folders now sync more reliably in Comms, including real Gmail Sent Mail folders; Windows launch still opens Shogun automatically once ready."
 }
