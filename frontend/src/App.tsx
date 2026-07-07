@@ -80,6 +80,40 @@ function SystemNotifications() {
   )
 }
 
+function BuildRefreshGuard() {
+  useEffect(() => {
+    let active = true
+    const storageKey = 'shogun_loaded_build'
+
+    const checkBuild = async () => {
+      try {
+        const response = await fetch('/api/v1/health', { cache: 'no-store' })
+        const payload = await response.json()
+        const currentBuild = payload?.build != null ? String(payload.build) : null
+        if (!active || !currentBuild) return
+
+        const previousBuild = sessionStorage.getItem(storageKey)
+        sessionStorage.setItem(storageKey, currentBuild)
+
+        if (previousBuild && previousBuild !== currentBuild) {
+          window.location.reload()
+        }
+      } catch {
+        // The app can still run while the server is warming up.
+      }
+    }
+
+    checkBuild()
+    const timer = window.setInterval(checkBuild, 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  return null
+}
+
 /**
  * Wrapper that checks first-run status and redirects to /setup if needed.
  * Only affects the "/" route on initial load.
@@ -171,6 +205,7 @@ function AppContent() {
 function App() {
   return (
     <I18nProvider>
+      <BuildRefreshGuard />
       <AppContent />
       <SystemNotifications />
     </I18nProvider>

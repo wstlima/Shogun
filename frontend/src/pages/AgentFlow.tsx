@@ -195,6 +195,12 @@ const nodeIcons: Record<string, React.ElementType> = {
   office: FileSpreadsheet,
 };
 
+function isInspectorInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(
+    target.closest('button, input, textarea, select, a, [role="button"], .nodrag, .nowheel')
+  );
+}
+
 function FlowNode({ id, data, selected, type }: { id: string; data: Record<string, any>; selected: boolean; type: string }) {
   const color = nodeColors[type] || '#d4a017';
   const Icon = nodeIcons[type] || Users;
@@ -214,6 +220,10 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
           ? "ring-2 ring-offset-1 ring-offset-[#0a0e1a] shadow-lg"
           : "shadow-md hover:shadow-lg"
       )}
+      onClick={(event) => {
+        if (isInspectorInteractiveTarget(event.target)) return;
+        data.onOpenInspector?.(id);
+      }}
       style={{
         background: isRunning
           ? `linear-gradient(135deg, ${color}0a 0%, #0e1225 42%, ${color}06 100%)`
@@ -2180,6 +2190,21 @@ function AgentFlowCanvas({
   // Track changes
   useEffect(() => { setDirty(true); }, [nodes, edges]);
 
+  const openNodeInspector = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+  }, []);
+
+  const renderedNodes = useMemo(
+    () => nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onOpenInspector: openNodeInspector,
+      },
+    })),
+    [nodes, openNodeInspector]
+  );
+
   // ── Poll active run status ───────────────────────────────
   useEffect(() => {
     if (!activeRunId) return;
@@ -2220,8 +2245,8 @@ function AgentFlowCanvas({
 
   // Handle node selection
   const onNodeClick = useCallback((_: any, node: Node) => {
-    setSelectedNodeId(node.id);
-  }, []);
+    openNodeInspector(node.id);
+  }, [openNodeInspector]);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
@@ -2638,7 +2663,7 @@ function AgentFlowCanvas({
         <div ref={reactFlowWrapper} className="flex-1">
           <OutputResultViewerContext.Provider value={outputResultContext}>
             <ReactFlow
-              nodes={nodes}
+              nodes={renderedNodes}
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
