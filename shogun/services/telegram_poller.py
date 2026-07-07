@@ -40,6 +40,7 @@ def _get_tg_client() -> httpx.AsyncClient:
 # ── Telegram config cache (avoid DB hit every poll cycle) ──────────────────
 _tg_config_cache: dict = {"data": None, "ts": 0.0}
 _TG_CONFIG_TTL = 60  # seconds
+_topic_registry_cache: dict | None = None
 
 
 def _select_telegram_chat_mode(user_msg: str, history: list) -> tuple[str, str, dict]:
@@ -100,6 +101,133 @@ def invalidate_telegram_config_cache():
 
 
 # ── Telegram API helpers (use persistent client) ──────────────────────────
+
+
+def _topic_registry_path() -> Path:
+    return settings.workspace_path.resolve() / "Telegram" / "topic_registry.json"
+
+
+def _load_topic_registry() -> dict:
+    """Load remembered Telegram forum topic names from disk."""
+    global _topic_registry_cache
+    if _topic_registry_cache is not None:
+        return _topic_registry_cache
+
+    path = _topic_registry_path()
+    try:
+        _topic_registry_cache = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception as exc:
+        logger.warning("[Telegram] Could not load topic registry: %s", exc)
+        _topic_registry_cache = {}
+    return _topic_registry_cache
+
+
+def _save_topic_registry(registry: dict) -> None:
+    """Persist remembered Telegram forum topic names."""
+    try:
+        path = _topic_registry_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(registry, indent=2, sort_keys=True), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("[Telegram] Could not save topic registry: %s", exc)
+
+
+def _update_topic_registry_from_message(msg: dict) -> None:
+    """Remember group/forum topic names Telegram reveals in service messages."""
+    chat = msg.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    if not chat_id:
+        return
+
+    registry = _load_topic_registry()
+    chat_entry = registry.setdefault(chat_id, {
+        "chat_id": chat_id,
+        "chat_title": chat.get("title") or "",
+        "chat_type": chat.get("type") or "",
+        "topics": {},
+    })
+    chat_entry["chat_title"] = chat.get("title") or chat_entry.get("chat_title") or ""
+    chat_entry["chat_type"] = chat.get("type") or chat_entry.get("chat_type") or ""
+
+    thread_id = msg.get("message_thread_id")
+    if thread_id is None:
+        _save_topic_registry(registry)
+        return
+
+    topic_entry = chat_entry.setdefault("topics", {}).setdefault(str(thread_id), {
+        "message_thread_id": thread_id,
+    })
+    topic_entry["message_thread_id"] = thread_id
+
+    created = msg.get("forum_topic_created")
+    edited = msg.get("forum_topic_edited")
+    if isinstance(created, dict) and created.get("name"):
+        topic_entry["name"] = created["name"]
+        topic_entry["icon_color"] = created.get("icon_color")
+    if isinstance(edited, dict) and edited.get("name"):
+        topic_entry["name"] = edited["name"]
+    if msg.get("forum_topic_closed") is not None:
+        topic_entry["status"] = "closed"
+    if msg.get("forum_topic_reopened") is not None:
+        topic_entry["status"] = "open"
+
+    _save_topic_registry(registry)
+
+
+def _telegram_context_from_message(msg: dict) -> dict:
+    """Extract group and forum-topic context from a Telegram message."""
+    chat = msg.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    thread_id = msg.get("message_thread_id")
+    registry = _load_topic_registry()
+    chat_entry = registry.get(chat_id, {})
+    topic_entry = (chat_entry.get("topics") or {}).get(str(thread_id), {}) if thread_id is not None else {}
+
+    return {
+        "chat_id": chat_id,
+        "chat_type": chat.get("type") or chat_entry.get("chat_type") or "",
+        "chat_title": chat.get("title") or chat_entry.get("chat_title") or "",
+        "message_thread_id": thread_id,
+        "is_topic_message": bool(msg.get("is_topic_message")),
+        "topic_name": topic_entry.get("name") or "",
+        "known_topics": [
+            {
+                "message_thread_id": value.get("message_thread_id") or key,
+                "name": value.get("name") or "",
+                "status": value.get("status") or "open",
+            }
+            for key, value in sorted((chat_entry.get("topics") or {}).items())
+        ],
+    }
+
+
+def _telegram_context_text(user_msg: str, telegram_context: dict | None) -> str:
+    """Add group/topic context to the prompt."""
+    if not telegram_context:
+        return user_msg
+
+    chat_title = telegram_context.get("chat_title") or "unknown"
+    chat_type = telegram_context.get("chat_type") or "unknown"
+    thread_id = telegram_context.get("message_thread_id")
+    topic_name = telegram_context.get("topic_name") or "unknown"
+    known_topics = telegram_context.get("known_topics") or []
+
+    lines = ["", "", "Telegram context:", f"- Chat: {chat_title} ({chat_type})"]
+    if thread_id is not None:
+        lines.append(f"- Topic/thread id: {thread_id}")
+        lines.append(f"- Topic name: {topic_name}")
+    if known_topics:
+        topic_text = ", ".join(
+            f"{topic.get('name') or 'unknown'} [{topic.get('message_thread_id')}]"
+            for topic in known_topics[:20]
+        )
+        lines.append(f"- Known topics in this chat: {topic_text}")
+    else:
+        lines.append("- Known topics in this chat: none learned yet")
+    lines.append(
+        "You can see the current group/topic metadata above, but Telegram Bot API does not provide a full topic list unless topic events or messages have been observed."
+    )
+    return user_msg.strip() + "\n".join(lines)
 
 
 _IMAGE_MIME_PREFIX = "image/"
@@ -239,7 +367,13 @@ async def send_chat_action(bot_token: str, chat_id: str, action: str = "typing")
         pass  # Non-critical — best effort
 
 
-async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> int | None:
+async def send_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    text: str,
+    *,
+    message_thread_id: int | None = None,
+) -> int | None:
     """Push a textual response back to the Telegram client. Returns message_id if successful."""
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
@@ -247,6 +381,8 @@ async def send_telegram_message(bot_token: str, chat_id: str, text: str) -> int 
         "text": text,
         "parse_mode": "Markdown"
     }
+    if message_thread_id is not None:
+        payload["message_thread_id"] = message_thread_id
     try:
         client = _get_tg_client()
         resp = await client.post(url, json=payload)
@@ -291,10 +427,17 @@ async def edit_telegram_message(
         logger.error(f"Network error editing Telegram message: {e}")
 
 
-async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str, attachments: list[dict] | None = None):
+async def process_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    user_msg: str,
+    attachments: list[dict] | None = None,
+    telegram_context: dict | None = None,
+):
     """Pipe an incoming message into the Shogun AI engine, capturing its SSE streaming output."""
     attachments = attachments or []
-    prompt_msg = _attachment_context_text(user_msg, attachments)
+    message_thread_id = telegram_context.get("message_thread_id") if telegram_context else None
+    prompt_msg = _telegram_context_text(_attachment_context_text(user_msg, attachments), telegram_context)
     logger.info(f"[Telegram] Received: '{user_msg[:50]}...' from {chat_id}")
 
     # ── 0. Immediate typing indicator — user sees feedback in <100ms ──
@@ -356,7 +499,10 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str, 
                 role="user",
                 content=prompt_msg,
                 external_chat_id=chat_id,
-                message_data={"attachments": attachments} if attachments else {},
+                message_data={
+                    **({"attachments": attachments} if attachments else {}),
+                    **({"telegram_context": telegram_context} if telegram_context else {}),
+                },
             )
             await session.commit()
             
@@ -372,7 +518,12 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str, 
             )
 
             # 2. Send initial thinking message
-            msg_id = await send_telegram_message(bot_token, chat_id, "_Shogun is thinking..._")
+            msg_id = await send_telegram_message(
+                bot_token,
+                chat_id,
+                "_Shogun is thinking..._",
+                message_thread_id=message_thread_id,
+            )
             
             # 3. Invoke the appropriate engine lane
             if mode == "fast":
@@ -475,7 +626,12 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str, 
 
     except Exception as e:
         logger.error(f"[Telegram] Critical failure in process_telegram_message: {e}\n{traceback.format_exc()}")
-        await send_telegram_message(bot_token, chat_id, "⚠️ I encountered a critical system error.")
+        await send_telegram_message(
+            bot_token,
+            chat_id,
+            "⚠️ I encountered a critical system error.",
+            message_thread_id=message_thread_id,
+        )
 
 async def telegram_poller_task():
     """Continuous background loop for polling Long-Polling getUpdates API."""
@@ -556,6 +712,8 @@ async def telegram_poller_task():
                 chat = msg.get("chat", {})
                 chat_id_str = str(chat.get("id"))
                 text = (msg.get("text") or msg.get("caption") or "").strip()
+                _update_topic_registry_from_message(msg)
+                telegram_context = _telegram_context_from_message(msg)
                 
                 # Check whitelist (allowing ID capture if empty)
                 if allowed_ids and chat_id_str not in allowed_ids:
@@ -582,7 +740,15 @@ async def telegram_poller_task():
                 attachments = await _extract_telegram_attachments(bot_token, chat_id_str, msg)
                     
                 if text or attachments:
-                    asyncio.create_task(process_telegram_message(bot_token, chat_id_str, text, attachments))
+                    asyncio.create_task(
+                        process_telegram_message(
+                            bot_token,
+                            chat_id_str,
+                            text,
+                            attachments,
+                            telegram_context,
+                        )
+                    )
 
         except asyncio.CancelledError:
             logger.info("[Telegram] Listener task cancelled.")

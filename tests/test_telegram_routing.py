@@ -1,5 +1,12 @@
 from shogun.api.agents import _chat_attachment_content
-from shogun.services.telegram_poller import _attachment_context_text, _select_telegram_chat_mode
+from shogun.services import telegram_poller
+from shogun.services.telegram_poller import (
+    _attachment_context_text,
+    _select_telegram_chat_mode,
+    _telegram_context_from_message,
+    _telegram_context_text,
+    _update_topic_registry_from_message,
+)
 
 
 def test_telegram_defaults_to_tool_capable_mission_mode():
@@ -67,3 +74,48 @@ def test_chat_attachment_content_includes_image_bytes(tmp_path):
     assert content[0] == {"type": "text", "text": "Describe this image"}
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_telegram_topic_registry_remembers_forum_topic(monkeypatch):
+    monkeypatch.setattr(telegram_poller, "_topic_registry_cache", {})
+    monkeypatch.setattr(telegram_poller, "_save_topic_registry", lambda registry: None)
+
+    _update_topic_registry_from_message({
+        "chat": {"id": -100123, "type": "supergroup", "title": "Max Workspace"},
+        "message_thread_id": 42,
+        "forum_topic_created": {"name": "Operations", "icon_color": 7322096},
+    })
+
+    context = _telegram_context_from_message({
+        "chat": {"id": -100123, "type": "supergroup", "title": "Max Workspace"},
+        "message_thread_id": 42,
+        "is_topic_message": True,
+        "text": "Can you see this topic?",
+    })
+
+    assert context["chat_title"] == "Max Workspace"
+    assert context["message_thread_id"] == 42
+    assert context["topic_name"] == "Operations"
+    assert context["known_topics"] == [{
+        "message_thread_id": 42,
+        "name": "Operations",
+        "status": "open",
+    }]
+
+
+def test_telegram_context_text_includes_group_and_topic():
+    message = _telegram_context_text(
+        "Can you see the group?",
+        {
+            "chat_title": "Max Workspace",
+            "chat_type": "supergroup",
+            "message_thread_id": 42,
+            "topic_name": "Operations",
+            "known_topics": [{"message_thread_id": 42, "name": "Operations", "status": "open"}],
+        },
+    )
+
+    assert "Can you see the group?" in message
+    assert "Chat: Max Workspace (supergroup)" in message
+    assert "Topic/thread id: 42" in message
+    assert "Known topics in this chat: Operations [42]" in message
