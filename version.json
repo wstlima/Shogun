@@ -1,8 +1,8 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "name": "Shogun OS",
-  "build": 43,
+  "build": 44,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Launcher: Windows Tenshu startup now opens localhost:8000 more reliably, waits longer for readiness, and writes browser-launch diagnostics to logs/launcher-browser.log."
+  "changelog": "Telegram: agent can now read images (workspace_read_image), PDFs (workspace_read_pdf), see groups it belongs to (telegram_list_groups), and manage Dojo skills (dojo_browse/install/list) in Campaign/Ronin posture."
 }

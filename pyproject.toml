@@ -1,6 +1,6 @@
 [project]
 name = "shogun"
-version = "1.6.0"
+version = "1.6.1"
 description = "Shogun — A GUI-first AI agent framework with structured memory, governed autonomy, and OpenClaw compatibility"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -48,6 +48,7 @@ dependencies = [
     "sentence-transformers>=3.1.0",
     "torch>=2.4.0",
     "caldav>=1.4.0",
+    "pypdf>=4.0.0",
 ]
 
 [project.optional-dependencies]

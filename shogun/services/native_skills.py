@@ -1413,6 +1413,123 @@ NATIVE_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_read_image",
+            "description": "Read and visually inspect an image file from the workspace. Returns the image content so you can see and describe what is in the image. Supports JPEG, PNG, GIF, WebP. Use this for Telegram-uploaded photos or any workspace images you need to understand.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the image file inside the workspace.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "comms",
+        "function": {
+            "name": "telegram_list_groups",
+            "description": "List all Telegram groups and supergroups this bot knows about. Shows group name, type, admin status, and known topics/threads. The bot discovers groups when it is added to them or when messages are received. If a group is missing, ask the user to send a message in that group first.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "workspace",
+        "function": {
+            "name": "workspace_read_pdf",
+            "description": "Extract text content from a PDF file in the workspace. Returns the text of each page. Use this to read PDFs uploaded via Telegram or saved in the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the PDF file inside the workspace.",
+                    },
+                    "pages": {
+                        "type": "string",
+                        "description": "Optional. Page range to extract, e.g. '1-5' or '1,3,7'. Omit to extract all pages.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "medium",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_browse_skills",
+            "description": "Browse the OpenClaw College skill catalog. Search for skills by keyword, category, or specialization. Returns skill names, descriptions, IDs, risk tiers, and categories.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search": {
+                        "type": "string",
+                        "description": "Optional search keyword to filter skills.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional category slug to filter by (e.g. 'automation', 'data-analysis').",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "high",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_install_skill",
+            "description": "Install a skill from the OpenClaw College catalog into the local Shogun system. Requires the skill's OpenClaw ID and name. Only available when skill auto-install is enabled in the posture.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "openclaw_skill_id": {
+                        "type": "string",
+                        "description": "The OpenClaw skill ID to install.",
+                    },
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Human-readable name of the skill.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Brief description of what the skill does.",
+                    },
+                },
+                "required": ["openclaw_skill_id", "skill_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "dojo",
+        "function": {
+            "name": "dojo_list_installed",
+            "description": "List all skills currently installed in the local Shogun Dojo. Shows skill name, version, status, and installation details.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
 ]
 
 
@@ -2201,6 +2318,14 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
         elif name.startswith("workspace_"):
             return await _execute_workspace_tool(name, args)
 
+        # ── Telegram Tools ────────────────────────────────────────────
+        elif name == "telegram_list_groups":
+            return await _execute_telegram_list_groups()
+
+        # ── Dojo / Skill Tools ────────────────────────────────────────
+        elif name.startswith("dojo_"):
+            return await _execute_dojo_tool(name, args)
+
         else:
             return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
             
@@ -2873,7 +2998,18 @@ async def _execute_workspace_tool(name: str, args: dict[str, Any]) -> str:
             try:
                 content = target_path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                return json.dumps({"status": "error", "message": f"Cannot read as text (binary file): {rel_path}"})
+                import mimetypes as _mt
+                guessed_mime, _ = _mt.guess_type(target_path.name)
+                mime_str = guessed_mime or "unknown"
+                hint = ""
+                if mime_str.startswith("image/"):
+                    hint = " Use the workspace_read_image tool to visually inspect this image."
+                elif mime_str == "application/pdf":
+                    hint = " Use the workspace_read_pdf tool to extract text from this PDF."
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Cannot read as text (binary file): {rel_path} — detected type: {mime_str}, size: {size} bytes.{hint}",
+                })
 
             return json.dumps({
                 "status": "success",
@@ -2947,6 +3083,138 @@ async def _execute_workspace_tool(name: str, args: dict[str, Any]) -> str:
                 "message": f"Deleted: {rel_path} ({size} bytes)",
             })
 
+        elif name == "workspace_read_image":
+            rel_path = args.get("path", "").strip()
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            if not target_path.exists():
+                return json.dumps({"status": "error", "message": f"File not found: {rel_path}"})
+            if not target_path.is_file():
+                return json.dumps({"status": "error", "message": f"Not a file: {rel_path}"})
+
+            import mimetypes as _mt
+            guessed_mime, _ = _mt.guess_type(target_path.name)
+            mime_type = guessed_mime or "application/octet-stream"
+            _IMAGE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/tiff"}
+            if mime_type not in _IMAGE_MIMES:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Not a supported image format: {rel_path} (detected: {mime_type}). Supported: JPEG, PNG, GIF, WebP, BMP, TIFF.",
+                })
+
+            # Size guard: refuse images > 10 MB
+            size = target_path.stat().st_size
+            if size > 10 * 1024 * 1024:
+                return json.dumps({"status": "error", "message": f"Image too large: {size} bytes (max 10 MB)"})
+
+            import base64
+            data = target_path.read_bytes()
+            b64 = base64.b64encode(data).decode("ascii")
+
+            return json.dumps({
+                "status": "success",
+                "path": rel_path,
+                "mime_type": mime_type,
+                "size_bytes": size,
+                "image_data": f"data:{mime_type};base64,{b64}",
+                "message": f"Image loaded: {rel_path} ({mime_type}, {size} bytes). Inspect the image_data field to see the image content.",
+            })
+
+        elif name == "workspace_read_pdf":
+            rel_path = args.get("path", "").strip()
+            if not rel_path:
+                return json.dumps({"status": "error", "message": "Missing required parameter: path"})
+
+            target = _validate_workspace_path(workspace_root, rel_path)
+            target_path = Path(target)
+
+            if not target_path.exists():
+                return json.dumps({"status": "error", "message": f"File not found: {rel_path}"})
+            if not target_path.is_file():
+                return json.dumps({"status": "error", "message": f"Not a file: {rel_path}"})
+            if target_path.suffix.lower() != ".pdf":
+                return json.dumps({"status": "error", "message": f"Not a PDF file: {rel_path}"})
+
+            # Size guard: refuse PDFs > 20 MB
+            size = target_path.stat().st_size
+            if size > 20 * 1024 * 1024:
+                return json.dumps({"status": "error", "message": f"PDF too large: {size} bytes (max 20 MB)"})
+
+            try:
+                from pypdf import PdfReader
+            except ImportError:
+                return json.dumps({"status": "error", "message": "PDF reading is not available — pypdf library is not installed."})
+
+            try:
+                reader = PdfReader(str(target_path))
+                total_pages = len(reader.pages)
+
+                # Parse optional page range
+                pages_arg = args.get("pages", "").strip()
+                page_indices: list[int] = []
+                if pages_arg:
+                    for part in pages_arg.split(","):
+                        part = part.strip()
+                        if "-" in part:
+                            start_s, end_s = part.split("-", 1)
+                            start_i = max(1, int(start_s.strip()))
+                            end_i = min(total_pages, int(end_s.strip()))
+                            page_indices.extend(range(start_i - 1, end_i))
+                        else:
+                            idx = int(part) - 1  # 1-based to 0-based
+                            if 0 <= idx < total_pages:
+                                page_indices.append(idx)
+                else:
+                    page_indices = list(range(total_pages))
+
+                # Limit to first 50 pages to avoid context overflow
+                if len(page_indices) > 50:
+                    page_indices = page_indices[:50]
+                    truncated = True
+                else:
+                    truncated = False
+
+                pages_text = []
+                for idx in page_indices:
+                    page = reader.pages[idx]
+                    text = page.extract_text() or ""
+                    pages_text.append({
+                        "page": idx + 1,
+                        "text": text.strip(),
+                    })
+
+                # PDF metadata
+                meta = reader.metadata
+                pdf_meta = {}
+                if meta:
+                    for key in ["title", "author", "subject", "creator"]:
+                        val = getattr(meta, key, None)
+                        if val:
+                            pdf_meta[key] = str(val)
+
+                full_text = "\n\n".join(p["text"] for p in pages_text if p["text"])
+                char_count = len(full_text)
+
+                return json.dumps({
+                    "status": "success",
+                    "path": rel_path,
+                    "size_bytes": size,
+                    "total_pages": total_pages,
+                    "pages_extracted": len(page_indices),
+                    "truncated": truncated,
+                    "metadata": pdf_meta,
+                    "char_count": char_count,
+                    "pages": pages_text,
+                    "message": f"Extracted {char_count} characters from {len(page_indices)}/{total_pages} pages of {rel_path}."
+                    + (" (truncated to first 50 pages)" if truncated else ""),
+                })
+            except Exception as pdf_exc:
+                return json.dumps({"status": "error", "message": f"Failed to read PDF: {pdf_exc}"})
+
         else:
             return json.dumps({"status": "error", "message": f"Unknown workspace tool: {name}"})
 
@@ -2954,4 +3222,313 @@ async def _execute_workspace_tool(name: str, args: dict[str, Any]) -> str:
         return json.dumps({"status": "error", "message": str(exc)})
     except Exception as exc:
         logger.error(f"Workspace tool execution failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _execute_telegram_list_groups() -> str:
+    """Return all known Telegram groups from the topic registry."""
+    try:
+        from shogun.services.telegram_poller import _load_topic_registry
+        registry = _load_topic_registry()
+
+        if not registry:
+            return json.dumps({
+                "status": "success",
+                "groups": [],
+                "message": "No Telegram groups discovered yet. The bot learns about groups when it is added to them or receives messages. Ask the user to send a message in any group the bot is a member of, or add the bot to a new group.",
+            })
+
+        groups = []
+        for chat_id, entry in registry.items():
+            chat_type = entry.get("chat_type", "")
+            if chat_type not in ("group", "supergroup"):
+                continue
+            topics = entry.get("topics", {})
+            topic_list = [
+                {
+                    "id": tid,
+                    "name": tdata.get("name", "unknown"),
+                    "status": tdata.get("status", "open"),
+                }
+                for tid, tdata in sorted(topics.items())
+            ]
+            groups.append({
+                "chat_id": chat_id,
+                "title": entry.get("chat_title", "Unknown"),
+                "type": chat_type,
+                "bot_status": entry.get("bot_status", "member"),
+                "topics": topic_list,
+                "topic_count": len(topic_list),
+            })
+
+        return json.dumps({
+            "status": "success",
+            "groups": groups,
+            "total": len(groups),
+            "message": f"Found {len(groups)} known group(s). Note: the bot only knows about groups where it has received at least one event (message or membership change).",
+        })
+    except Exception as exc:
+        logger.error(f"telegram_list_groups failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _execute_dojo_tool(name: str, args: dict[str, Any]) -> str:
+    """Execute a Dojo / skill management tool.
+
+    All Dojo tools are gated by the ``skill_auto_install`` posture flag
+    via ``filter_tools_by_posture``, so they only appear in Campaign/Ronin.
+    """
+    try:
+        if name == "dojo_browse_skills":
+            return await _dojo_browse_skills(args)
+        elif name == "dojo_install_skill":
+            return await _dojo_install_skill(args)
+        elif name == "dojo_list_installed":
+            return await _dojo_list_installed()
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown dojo tool: {name}"})
+    except Exception as exc:
+        logger.error(f"Dojo tool execution failed: {exc}", exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
+
+
+async def _dojo_browse_skills(args: dict[str, Any]) -> str:
+    """Browse the OpenClaw College catalog."""
+    try:
+        from shogun.integrations.openclaw_client import get_openclaw_client
+
+        search = args.get("search", "").strip()
+        category = args.get("category", "").strip()
+
+        async with get_openclaw_client() as client:
+            # First check if OpenClaw is reachable
+            healthy = await client.health_check()
+            if not healthy:
+                return json.dumps({
+                    "status": "error",
+                    "message": "OpenClaw College is not reachable. The skill catalog may be offline.",
+                })
+
+            skills = await client.browse_skills(
+                search=search or None,
+                category=category or None,
+            )
+
+        # Serialize the skill objects
+        skill_list = []
+        for skill in skills[:50]:  # Cap at 50 to avoid context overflow
+            skill_list.append({
+                "id": getattr(skill, "id", "") or getattr(skill, "skill_id", ""),
+                "name": getattr(skill, "name", ""),
+                "slug": getattr(skill, "slug", ""),
+                "description": getattr(skill, "description", "")[:200],
+                "category": getattr(skill, "category", ""),
+                "risk_tier": getattr(skill, "risk_tier", "standard"),
+                "version": getattr(skill, "version", "1.0.0"),
+            })
+
+        return json.dumps({
+            "status": "success",
+            "skills": skill_list,
+            "total": len(skill_list),
+            "search": search,
+            "category": category,
+            "message": f"Found {len(skill_list)} skill(s) in the OpenClaw catalog."
+            + (f" Search: '{search}'." if search else "")
+            + (f" Category: '{category}'." if category else ""),
+        })
+    except ImportError:
+        return json.dumps({
+            "status": "error",
+            "message": "OpenClaw integration is not available.",
+        })
+    except Exception as exc:
+        # If the client doesn't have browse_skills, try the raw API
+        try:
+            from shogun.integrations.openclaw_client import get_openclaw_client
+            async with get_openclaw_client() as client:
+                result = await client.list_skills(
+                    search=args.get("search") or None,
+                    category=args.get("category") or None,
+                )
+                skills_data = []
+                for s in (result if isinstance(result, list) else []):
+                    skills_data.append({
+                        "id": s.get("id", ""),
+                        "name": s.get("name", ""),
+                        "description": str(s.get("description", ""))[:200],
+                        "category": s.get("category", ""),
+                    })
+                return json.dumps({
+                    "status": "success",
+                    "skills": skills_data,
+                    "total": len(skills_data),
+                })
+        except Exception:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to browse OpenClaw catalog: {exc}",
+            })
+
+
+async def _dojo_install_skill(args: dict[str, Any]) -> str:
+    """Install an OpenClaw skill into the local Shogun system."""
+    from datetime import datetime, timezone
+
+    openclaw_skill_id = args.get("openclaw_skill_id", "").strip()
+    skill_name = args.get("skill_name", "").strip()
+    description = args.get("description", "").strip()
+
+    if not openclaw_skill_id or not skill_name:
+        return json.dumps({
+            "status": "error",
+            "message": "Both openclaw_skill_id and skill_name are required.",
+        })
+
+    try:
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.skill import Skill
+        from shogun.db.models.skill_installation import SkillInstallation
+        from shogun.db.models.skill_source import SkillSource
+        from shogun.integrations.openclaw_client import (
+            OPENCLAW_BASE_URL,
+            OPENCLAW_SOURCE_NAME,
+            OPENCLAW_SOURCE_SLUG,
+        )
+        from sqlalchemy import select
+
+        async with async_session_factory() as db:
+            # Ensure OpenClaw source exists
+            result = await db.execute(
+                select(SkillSource).where(SkillSource.slug == OPENCLAW_SOURCE_SLUG)
+            )
+            source = result.scalars().first()
+            if not source:
+                source = SkillSource(
+                    name=OPENCLAW_SOURCE_NAME,
+                    slug=OPENCLAW_SOURCE_SLUG,
+                    source_type="registry",
+                    base_url=OPENCLAW_BASE_URL,
+                    default_enabled=True,
+                    trust_level="certified",
+                    sync_policy="manual_refresh",
+                    status="active",
+                )
+                db.add(source)
+                await db.flush()
+
+            # Build slug
+            slug = skill_name.lower().replace(" ", "-").replace("&", "and")[:100]
+
+            # Check for duplicate
+            result = await db.execute(
+                select(Skill).where(Skill.slug == slug, Skill.source_id == source.id)
+            )
+            existing = result.scalars().first()
+            if existing and not existing.is_deleted:
+                return json.dumps({
+                    "status": "success",
+                    "already_installed": True,
+                    "skill_id": str(existing.id),
+                    "skill_name": existing.name,
+                    "message": f"Skill '{existing.name}' is already installed.",
+                })
+
+            # Create the Skill record
+            skill = Skill(
+                source_id=source.id,
+                name=skill_name,
+                slug=slug,
+                version="1.0.0",
+                skill_type="single",
+                manifest={
+                    "openclaw_id": openclaw_skill_id,
+                    "risk_tier": "standard",
+                    "description": description,
+                },
+                risk_score=0.3,
+                trust_score=80,
+                status="installed",
+            )
+            db.add(skill)
+            await db.flush()
+
+            # Create the installation record
+            installation = SkillInstallation(
+                skill_id=skill.id,
+                target_type="global",
+                status="installed",
+                installed_version="1.0.0",
+                auto_update=False,
+                quarantine_status="cleared",
+                installed_at=datetime.now(timezone.utc),
+                installed_by="agent",
+            )
+            db.add(installation)
+            await db.commit()
+
+            return json.dumps({
+                "status": "success",
+                "installed": True,
+                "skill_id": str(skill.id),
+                "skill_name": skill.name,
+                "version": "1.0.0",
+                "installation_id": str(installation.id),
+                "message": f"Successfully installed skill '{skill.name}' from OpenClaw College.",
+            })
+
+    except Exception as exc:
+        return json.dumps({"status": "error", "message": f"Failed to install skill: {exc}"})
+
+
+async def _dojo_list_installed() -> str:
+    """List all installed skills in the local Shogun system."""
+    try:
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.skill import Skill
+        from shogun.db.models.skill_installation import SkillInstallation
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(SkillInstallation)
+                .where(SkillInstallation.status == "installed")
+                .options(joinedload(SkillInstallation.skill))
+            )
+            installations = list(result.scalars().all())
+
+            if not installations:
+                return json.dumps({
+                    "status": "success",
+                    "skills": [],
+                    "total": 0,
+                    "message": "No skills are currently installed. Use dojo_browse_skills to find skills and dojo_install_skill to install them.",
+                })
+
+            skills_data = []
+            for inst in installations:
+                skill = inst.skill
+                if not skill or skill.is_deleted:
+                    continue
+                skills_data.append({
+                    "skill_id": str(skill.id),
+                    "name": skill.name,
+                    "slug": skill.slug,
+                    "version": inst.installed_version or skill.version,
+                    "status": inst.status,
+                    "installed_at": inst.installed_at.isoformat() if inst.installed_at else None,
+                    "installed_by": inst.installed_by,
+                    "description": (skill.manifest or {}).get("description", ""),
+                })
+
+            return json.dumps({
+                "status": "success",
+                "skills": skills_data,
+                "total": len(skills_data),
+                "message": f"{len(skills_data)} skill(s) currently installed.",
+            })
+
+    except Exception as exc:
+        logger.error(f"dojo_list_installed failed: {exc}", exc_info=True)
         return json.dumps({"status": "error", "message": str(exc)})

@@ -332,6 +332,11 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
                 denied.append(name)
                 continue
 
+        # ── Dojo: Skill management tools ──
+        if name.startswith("dojo_") and not posture.get("skill_auto_install", False):
+            denied.append(name)
+            continue
+
         # ── Comms: Email tools ──
         if name in ("fetch_inbox", "read_email") and not posture.get("comms_read_email", True):
             denied.append(name)

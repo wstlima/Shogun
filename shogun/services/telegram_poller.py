@@ -174,6 +174,46 @@ def _update_topic_registry_from_message(msg: dict) -> None:
     _save_topic_registry(registry)
 
 
+def _register_group_from_member_update(update: dict) -> None:
+    """Learn about groups from my_chat_member / chat_member updates.
+
+    When the bot is added to a group, promoted, demoted, or removed,
+    Telegram sends a ``my_chat_member`` update.  We use it to populate
+    the topic registry so the bot knows which groups it belongs to.
+    """
+    chat = update.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    chat_type = chat.get("type") or ""
+    if not chat_id or chat_type not in ("group", "supergroup"):
+        return
+
+    new_member = (update.get("new_chat_member") or {})
+    status = new_member.get("status") or ""  # member, administrator, left, kicked, etc.
+
+    registry = _load_topic_registry()
+    chat_entry = registry.setdefault(chat_id, {
+        "chat_id": chat_id,
+        "chat_title": "",
+        "chat_type": "",
+        "topics": {},
+    })
+    chat_entry["chat_title"] = chat.get("title") or chat_entry.get("chat_title") or ""
+    chat_entry["chat_type"] = chat_type
+    chat_entry["bot_status"] = status
+
+    if status in ("left", "kicked"):
+        # Bot was removed from the group — keep the entry but mark it
+        chat_entry["bot_status"] = status
+        logger.info("[Telegram] Bot removed from group %s (%s)", chat_id, chat_entry.get("chat_title"))
+    else:
+        logger.info(
+            "[Telegram] Bot status in group %s (%s): %s",
+            chat_id, chat_entry.get("chat_title"), status,
+        )
+
+    _save_topic_registry(registry)
+
+
 def _telegram_context_from_message(msg: dict) -> dict:
     """Extract group and forum-topic context from a Telegram message."""
     chat = msg.get("chat") or {}
@@ -258,7 +298,7 @@ def _attachment_context_text(user_msg: str, attachments: list[dict]) -> str:
         size = att.get("size")
         size_text = f", {size} bytes" if isinstance(size, int) else ""
         lines.append(f"{index}. {label} ({mime_type}{size_text}) at {rel_path}")
-    lines.append("Use workspace tools to read files. If an attachment is an image, inspect the image content directly.")
+    lines.append("Use workspace tools to read files. For images use workspace_read_image, for PDFs use workspace_read_pdf.")
     return text + "\n".join(lines)
 
 
@@ -469,7 +509,7 @@ async def process_telegram_message(
                 "✅ *HARAKIRI RESET*\n\nThe kill switch is inactive. Posture is now TACTICAL.",
             )
         return
-    
+
     # ── Posture enforcement: kill switch gate ──────────────────
     try:
         from shogun.api.security import _get_agent_posture
@@ -505,7 +545,7 @@ async def process_telegram_message(
                 },
             )
             await session.commit()
-            
+
             # ── 1. Select the Telegram execution lane ──────────────
             # Telegram has no graphical mode selector, so default to the
             # tool-capable Mission lane. Torii still gates every tool call.
@@ -524,7 +564,7 @@ async def process_telegram_message(
                 "_Shogun is thinking..._",
                 message_thread_id=message_thread_id,
             )
-            
+
             # 3. Invoke the appropriate engine lane
             if mode == "fast":
                 from shogun.api.agents import _shogun_fast_chat
@@ -546,21 +586,21 @@ async def process_telegram_message(
                     user_msg=prompt_msg, history=history, svc=svc,
                     classification=classification, attachments=attachments,
                 )
-            
+
             # 4. Aggregate the SSE chunks and update Telegram periodically
             full_reply = ""
             current_action = ""
             last_update_text = ""
             last_update_time = datetime.now(timezone.utc)
             buffer = ""
-            
+
             try:
                 generator = getattr(response_stream, "body_iterator", response_stream)
-                
+
                 async for chunk in generator:
                     chunk_str = chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk)
                     buffer += chunk_str
-                    
+
                     while "\n\n" in buffer:
                         event_block, buffer = buffer.split("\n\n", 1)
                         for line in event_block.split("\n"):
@@ -572,7 +612,7 @@ async def process_telegram_message(
                                     data = json.loads(payload)
                                     if data.get("type") == "token":
                                         full_reply += data.get("content", "")
-                                        current_action = "" # Clear action when text resumes
+                                        current_action = ""  # Clear action when text resumes
                                     elif data.get("type") == "action":
                                         current_action = data.get("content", "")
                                     elif data.get("type") == "error":
@@ -581,7 +621,7 @@ async def process_telegram_message(
                                         current_action = ""
                                 except json.JSONDecodeError:
                                     pass
-                    
+
                     # Throttled update every 1.5 seconds (Telegram rate limit is ~1 msg/sec per chat)
                     now = datetime.now(timezone.utc)
                     if (now - last_update_time).total_seconds() > 1.5 or current_action:
@@ -591,7 +631,7 @@ async def process_telegram_message(
                                 display_text += f"\n\n⚙️ _{current_action}_"
                             else:
                                 display_text = f"⚙️ _{current_action}_"
-                                
+
                         if display_text and display_text != last_update_text:
                             # use_markdown=False for intermediate edits to avoid
                             # Telegram rejecting partial/unclosed markdown syntax
@@ -602,16 +642,16 @@ async def process_telegram_message(
                             )
                             last_update_text = display_text
                             last_update_time = now
-                
+
                 logger.info(f"[Telegram] AI response complete ({len(full_reply)} chars)")
             except Exception as e:
                 logger.error(f"[Telegram] Error reading SSE response stream: {e}\n{traceback.format_exc()}")
                 full_reply = "⚠️ Sorry, I encountered an internal error while processing your request."
-                
+
             if not full_reply.strip():
                 logger.warning("[Telegram] AI Engine returned empty response.")
                 full_reply = "I apologize, but I couldn't generate a response to that message."
-                
+
             # 5. Final update to the same message — HERE we enable Markdown for the finished text
             await edit_telegram_message(bot_token, chat_id, msg_id, full_reply, use_markdown=True)
             await append_chat_message(
@@ -633,6 +673,7 @@ async def process_telegram_message(
             message_thread_id=message_thread_id,
         )
 
+
 async def telegram_poller_task():
     """Continuous background loop for polling Long-Polling getUpdates API."""
     logger.info("[Telegram] Background listener task starting...")
@@ -646,22 +687,28 @@ async def telegram_poller_task():
                 logger.debug("[Telegram] No bushido settings found, sleeping...")
                 await asyncio.sleep(10)
                 continue
-                
+
             bot_token = cfg.get("bot_token")
             is_connected = cfg.get("connected", False)
             allowed_ids = cfg.get("allowed_chat_ids", [])
-            
+
             if not bot_token or not is_connected:
                 # If disconnected, just sleep for a while and check again later
                 await asyncio.sleep(10)
                 continue
-                
+
             # 2. Hit the Telegram Long-Polling endpoint (uses persistent client).
-            url = f"https://api.telegram.org/bot{bot_token}/getUpdates?timeout=30&offset={offset}"
-            
+            # Request my_chat_member updates so we learn about groups the bot is added to.
+            url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+            params = {
+                "timeout": "30",
+                "offset": str(offset),
+                "allowed_updates": json.dumps(["message", "my_chat_member", "chat_member"]),
+            }
+
             client = _get_tg_client()
             try:
-                resp = await client.get(url)
+                resp = await client.get(url, params=params)
             except httpx.ReadTimeout:
                 continue
             except Exception as e:
@@ -693,10 +740,10 @@ async def telegram_poller_task():
                     logger.warning(f"[Telegram] Polling failed: HTTP {resp.status_code} - {resp.text[:200]}")
                     await asyncio.sleep(10)
                 continue
-                
+
             data = resp.json()
             results = data.get("result", [])
-            
+
             if results:
                 logger.debug(f"[Telegram] Received {len(results)} updates")
 
@@ -704,17 +751,22 @@ async def telegram_poller_task():
                 update_id = update.get("update_id")
                 if update_id and update_id >= offset:
                     offset = update_id + 1
-                    
+
+                # ── Handle my_chat_member updates (bot added/removed/promoted in groups) ──
+                member_update = update.get("my_chat_member") or update.get("chat_member")
+                if member_update:
+                    _register_group_from_member_update(member_update)
+
                 msg = update.get("message")
                 if not msg:
                     continue
-                    
+
                 chat = msg.get("chat", {})
                 chat_id_str = str(chat.get("id"))
                 text = (msg.get("text") or msg.get("caption") or "").strip()
                 _update_topic_registry_from_message(msg)
                 telegram_context = _telegram_context_from_message(msg)
-                
+
                 # Check whitelist (allowing ID capture if empty)
                 if allowed_ids and chat_id_str not in allowed_ids:
                     logger.warning(f"[Telegram] Blocked unauthorized message from {chat_id_str}")
@@ -738,7 +790,7 @@ async def telegram_poller_task():
                     continue
 
                 attachments = await _extract_telegram_attachments(bot_token, chat_id_str, msg)
-                    
+
                 if text or attachments:
                     asyncio.create_task(
                         process_telegram_message(
@@ -756,7 +808,7 @@ async def telegram_poller_task():
         except Exception as e:
             logger.error(f"[Telegram] Unexpected exception in poller: {e}\n{traceback.format_exc()}")
             await asyncio.sleep(5)
-            
+
     # Clean up the persistent client on exit
     if _tg_client and not _tg_client.is_closed:
         await _tg_client.aclose()
