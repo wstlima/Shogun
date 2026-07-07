@@ -1,8 +1,8 @@
 {
   "version": "1.6.1",
   "name": "Shogun OS",
-  "build": 45,
+  "build": 46,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Telegram: agent can now read images (workspace_read_image), PDFs (workspace_read_pdf), see groups it belongs to (telegram_list_groups), and manage Dojo skills (dojo_browse/install/list) in Campaign/Ronin posture."
+  "changelog": "Katana: Added MCP Server Selector to Tool Connectors tab with curated catalog of 40 popular servers."
 }

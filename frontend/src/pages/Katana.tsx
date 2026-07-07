@@ -199,6 +199,73 @@ const PUBLIC_APIS: PublicApi[] = [
   { name: 'IPinfo',                 description: 'IP geolocation, ASN, carrier, and privacy detection data.', base_url: 'https://ipinfo.io', auth_type: 'api_key', connector_type: 'api', risk_level: 'low' },
 ];
 
+// ── Curated MCP server catalog ──────────────────────────────────
+interface McpServer {
+  name: string;
+  description: string;
+  command: string;
+  args: string[];
+  env_keys: string[];
+  transport: 'stdio' | 'sse';
+  category: string;
+  risk_level: RiskLevelVal;
+  github_url: string;
+  npm_package: string;
+}
+
+const MCP_SERVERS: McpServer[] = [
+  // ── Search ──────────────────────────────────────────────────
+  { name: 'Brave Search',        description: 'Web and local search via the Brave Search API.',                                    command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'],   env_keys: ['BRAVE_API_KEY'],                    transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-brave-search' },
+  { name: 'Tavily Search',       description: 'AI-optimized search engine for LLMs and RAG pipelines.',                            command: 'npx', args: ['-y', 'tavily-mcp@latest'],                        env_keys: ['TAVILY_API_KEY'],                   transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/tavily-ai/tavily-mcp',                          npm_package: 'tavily-mcp' },
+  { name: 'Exa Search',          description: 'Neural search engine for finding relevant content.',                                 command: 'npx', args: ['-y', '@exa-labs/exa-mcp-server'],                  env_keys: ['EXA_API_KEY'],                      transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/exa-labs/exa-mcp-server',                       npm_package: '@exa-labs/exa-mcp-server' },
+  { name: 'SerpAPI',             description: 'Google, Bing, Yahoo and other search engine results.',                               command: 'npx', args: ['-y', 'serpapi-mcp-server'],                       env_keys: ['SERPAPI_API_KEY'],                   transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/serpapi/serpapi-mcp',                            npm_package: 'serpapi-mcp-server' },
+  // ── Web Scraping ────────────────────────────────────────────
+  { name: 'Puppeteer',           description: 'Browser automation and web scraping using Puppeteer.',                               command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'],    env_keys: [],                                   transport: 'stdio', category: 'Web Scraping',  risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-puppeteer' },
+  { name: 'Playwright',          description: 'Browser automation across Chromium, Firefox, and WebKit.',                           command: 'npx', args: ['-y', '@executeautomation/playwright-mcp-server'],  env_keys: [],                                   transport: 'stdio', category: 'Web Scraping',  risk_level: 'medium', github_url: 'https://github.com/executeautomation/playwright-mcp-server',       npm_package: '@executeautomation/playwright-mcp-server' },
+  { name: 'Firecrawl',           description: 'Web scraping and crawling with AI-ready markdown output.',                           command: 'npx', args: ['-y', 'firecrawl-mcp'],                            env_keys: ['FIRECRAWL_API_KEY'],                transport: 'stdio', category: 'Web Scraping',  risk_level: 'medium', github_url: 'https://github.com/mendableai/firecrawl-mcp',                      npm_package: 'firecrawl-mcp' },
+  { name: 'Fetch',               description: 'Fetch and convert web pages to markdown or plain text.',                             command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'],        env_keys: [],                                   transport: 'stdio', category: 'Web Scraping',  risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-fetch' },
+  // ── Development ─────────────────────────────────────────────
+  { name: 'GitHub',              description: 'Repository management, file operations, issues, PRs, and more.',                     command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'],       env_keys: ['GITHUB_PERSONAL_ACCESS_TOKEN'],     transport: 'stdio', category: 'Development',   risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-github' },
+  { name: 'GitLab',              description: 'Project management, issues, merge requests, and CI/CD on GitLab.',                   command: 'npx', args: ['-y', '@modelcontextprotocol/server-gitlab'],       env_keys: ['GITLAB_PERSONAL_ACCESS_TOKEN', 'GITLAB_API_URL'], transport: 'stdio', category: 'Development',   risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-gitlab' },
+  { name: 'Context7',            description: 'Up-to-date, version-specific library docs and code examples.',                       command: 'npx', args: ['-y', '@upstash/context7-mcp@latest'],              env_keys: [],                                   transport: 'stdio', category: 'Development',   risk_level: 'low',    github_url: 'https://github.com/upstash/context7-mcp',                          npm_package: '@upstash/context7-mcp' },
+  { name: 'Sentry',              description: 'Error monitoring, performance data, and issue management.',                          command: 'npx', args: ['-y', '@sentry/mcp-server'],                       env_keys: ['SENTRY_AUTH_TOKEN'],                 transport: 'stdio', category: 'Development',   risk_level: 'low',    github_url: 'https://github.com/getsentry/sentry-mcp',                          npm_package: '@sentry/mcp-server' },
+  // ── Database ────────────────────────────────────────────────
+  { name: 'PostgreSQL',          description: 'Query and manage PostgreSQL databases with schema inspection.',                      command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres'],     env_keys: ['POSTGRES_CONNECTION_STRING'],        transport: 'stdio', category: 'Database',      risk_level: 'high',   github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-postgres' },
+  { name: 'SQLite',              description: 'Query and manage SQLite databases and run business analytics.',                      command: 'npx', args: ['-y', '@modelcontextprotocol/server-sqlite'],       env_keys: ['SQLITE_DB_PATH'],                   transport: 'stdio', category: 'Database',      risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-sqlite' },
+  { name: 'MySQL',               description: 'Query and manage MySQL databases.',                                                  command: 'npx', args: ['-y', '@benborla29/mcp-server-mysql'],              env_keys: ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_PASSWORD', 'MYSQL_DATABASE'], transport: 'stdio', category: 'Database', risk_level: 'high', github_url: 'https://github.com/benborla/mcp-server-mysql', npm_package: '@benborla29/mcp-server-mysql' },
+  { name: 'MongoDB',             description: 'CRUD operations, aggregation, and index management for MongoDB.',                    command: 'npx', args: ['-y', 'mongodb-mcp-server'],                       env_keys: ['MONGODB_URI'],                      transport: 'stdio', category: 'Database',      risk_level: 'high',   github_url: 'https://github.com/mongodb-js/mongodb-mcp-server',                 npm_package: 'mongodb-mcp-server' },
+  { name: 'Redis',               description: 'Key-value operations, pub/sub, and data structure management.',                      command: 'npx', args: ['-y', '@modelcontextprotocol/server-redis'],        env_keys: ['REDIS_URL'],                        transport: 'stdio', category: 'Database',      risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-redis' },
+  { name: 'Supabase',            description: 'Database, auth, storage, and edge functions on Supabase.',                           command: 'npx', args: ['-y', '@supabase/mcp-server-supabase@latest'],      env_keys: ['SUPABASE_ACCESS_TOKEN'],             transport: 'stdio', category: 'Database',      risk_level: 'high',   github_url: 'https://github.com/supabase-community/supabase-mcp',               npm_package: '@supabase/mcp-server-supabase' },
+  // ── Productivity ────────────────────────────────────────────
+  { name: 'Slack',               description: 'Send messages, manage channels, and search across workspaces.',                      command: 'npx', args: ['-y', '@modelcontextprotocol/server-slack'],        env_keys: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID'], transport: 'stdio', category: 'Productivity',  risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-slack' },
+  { name: 'Google Drive',        description: 'Search, read, and manage files in Google Drive.',                                    command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'],       env_keys: ['GDRIVE_CREDENTIALS_PATH'],          transport: 'stdio', category: 'Productivity',  risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-gdrive' },
+  { name: 'Notion',              description: 'Search, read, create, and update pages and databases in Notion.',                    command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'],              env_keys: ['NOTION_API_KEY'],                   transport: 'stdio', category: 'Productivity',  risk_level: 'medium', github_url: 'https://github.com/makenotion/notion-mcp-server',                  npm_package: '@notionhq/notion-mcp-server' },
+  { name: 'Linear',              description: 'Manage issues, projects, and teams in Linear.',                                      command: 'npx', args: ['-y', '@linear/mcp-server'],                       env_keys: ['LINEAR_API_KEY'],                   transport: 'stdio', category: 'Productivity',  risk_level: 'medium', github_url: 'https://github.com/linear/linear-mcp-server',                      npm_package: '@linear/mcp-server' },
+  { name: 'Todoist',             description: 'Manage tasks, projects, and labels in Todoist.',                                     command: 'npx', args: ['-y', '@abhiz123/todoist-mcp-server'],              env_keys: ['TODOIST_API_TOKEN'],                 transport: 'stdio', category: 'Productivity',  risk_level: 'low',    github_url: 'https://github.com/abhiz123/todoist-mcp-server',                   npm_package: '@abhiz123/todoist-mcp-server' },
+  { name: 'Atlassian',           description: 'Manage Jira issues, Confluence pages, and Opsgenie alerts.',                         command: 'npx', args: ['-y', '@anthropic/atlassian-mcp-server'],           env_keys: ['ATLASSIAN_API_TOKEN', 'ATLASSIAN_EMAIL', 'ATLASSIAN_DOMAIN'], transport: 'stdio', category: 'Productivity', risk_level: 'medium', github_url: 'https://github.com/atlassian/atlassian-mcp-server', npm_package: '@anthropic/atlassian-mcp-server' },
+  // ── Communication ───────────────────────────────────────────
+  { name: 'Gmail',               description: 'Send, read, search, and manage emails via Gmail API.',                               command: 'npx', args: ['-y', '@anthropic/gmail-mcp-server'],               env_keys: ['GMAIL_CREDENTIALS_PATH'],            transport: 'stdio', category: 'Communication', risk_level: 'high',   github_url: 'https://github.com/anthropics/gmail-mcp-server',                   npm_package: '@anthropic/gmail-mcp-server' },
+  { name: 'Discord',             description: 'Send and read messages, manage channels in Discord.',                                command: 'npx', args: ['-y', 'discord-mcp'],                              env_keys: ['DISCORD_BOT_TOKEN'],                 transport: 'stdio', category: 'Communication', risk_level: 'medium', github_url: 'https://github.com/v-3/discord-mcp',                               npm_package: 'discord-mcp' },
+  // ── Cloud Services ──────────────────────────────────────────
+  { name: 'AWS',                 description: 'Manage AWS resources and services via CLI commands.',                                 command: 'npx', args: ['-y', '@aws/aws-mcp-server'],                      env_keys: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION'], transport: 'stdio', category: 'Cloud', risk_level: 'critical', github_url: 'https://github.com/awslabs/mcp',                    npm_package: '@aws/aws-mcp-server' },
+  { name: 'Cloudflare',          description: 'Deploy and configure Workers, KV, R2, D1 on Cloudflare.',                            command: 'npx', args: ['-y', '@cloudflare/mcp-server-cloudflare'],         env_keys: ['CLOUDFLARE_API_TOKEN'],              transport: 'stdio', category: 'Cloud',         risk_level: 'high',   github_url: 'https://github.com/cloudflare/mcp-server-cloudflare',              npm_package: '@cloudflare/mcp-server-cloudflare' },
+  { name: 'Vercel',              description: 'Manage deployments, projects, and domains on Vercel.',                                command: 'npx', args: ['-y', '@vercel/mcp-adapter'],                      env_keys: ['VERCEL_TOKEN'],                      transport: 'stdio', category: 'Cloud',         risk_level: 'high',   github_url: 'https://github.com/vercel/mcp-adapter',                            npm_package: '@vercel/mcp-adapter' },
+  { name: 'Docker',              description: 'Manage containers, images, volumes, and networks.',                                   command: 'npx', args: ['-y', '@modelcontextprotocol/server-docker'],       env_keys: [],                                   transport: 'stdio', category: 'Cloud',         risk_level: 'high',   github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-docker' },
+  // ── File System ─────────────────────────────────────────────
+  { name: 'Filesystem',          description: 'Secure file operations with configurable access controls.',                           command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'],   env_keys: [],                                   transport: 'stdio', category: 'File System',   risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-filesystem' },
+  { name: 'Google Cloud Storage', description: 'Read and write files in Google Cloud Storage buckets.',                             command: 'npx', args: ['-y', '@modelcontextprotocol/server-gcs'],          env_keys: ['GCS_CREDENTIALS_PATH'],              transport: 'stdio', category: 'File System',   risk_level: 'medium', github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-gcs' },
+  // ── Finance ─────────────────────────────────────────────────
+  { name: 'Stripe',              description: 'Manage payments, customers, invoices, and subscriptions.',                            command: 'npx', args: ['-y', '@stripe/mcp@latest'],                       env_keys: ['STRIPE_SECRET_KEY'],                 transport: 'stdio', category: 'Finance',       risk_level: 'critical', github_url: 'https://github.com/stripe/agent-toolkit',                         npm_package: '@stripe/mcp' },
+  // ── AI / Memory ─────────────────────────────────────────────
+  { name: 'Qdrant',              description: 'Vector search, similarity queries, and collection management.',                       command: 'npx', args: ['-y', '@qdrant/mcp-server-qdrant'],                 env_keys: ['QDRANT_URL', 'QDRANT_API_KEY'],      transport: 'stdio', category: 'AI / Memory',   risk_level: 'medium', github_url: 'https://github.com/qdrant/mcp-server-qdrant',                      npm_package: '@qdrant/mcp-server-qdrant' },
+  { name: 'Memory',              description: 'Persistent memory using a local knowledge graph.',                                    command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'],       env_keys: [],                                   transport: 'stdio', category: 'AI / Memory',   risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-memory' },
+  // ── Utilities ───────────────────────────────────────────────
+  { name: 'Sequential Thinking', description: 'Dynamic, reflection-based problem-solving through thought sequences.',               command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], env_keys: [],                            transport: 'stdio', category: 'Utilities',     risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-sequential-thinking' },
+  { name: 'Everything',          description: 'Reference MCP server that demonstrates all protocol features.',                       command: 'npx', args: ['-y', '@modelcontextprotocol/server-everything'],   env_keys: [],                                   transport: 'stdio', category: 'Utilities',     risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-everything' },
+  { name: 'Time',                description: 'Get current time and convert between time zones.',                                    command: 'npx', args: ['-y', '@modelcontextprotocol/server-time'],         env_keys: [],                                   transport: 'stdio', category: 'Utilities',     risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-time' },
+];
+
+
 // ── Slug generator ───────────────────────────────────────────────
 const toSlug = (name: string) =>
   name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -454,6 +521,29 @@ export function Katana() {
     auth_type: 'api_key',
     risk_level: 'low',
   });
+
+
+  // ── MCP Server state ─────────────────────────────────────────
+  const [showRegisterMcp, setShowRegisterMcp] = useState(false);
+  const [mcpRegisterMode, setMcpRegisterMode] = useState<'quick' | 'manual'>('quick');
+  const [mcpSearch, setMcpSearch]             = useState('');
+  const [selectedMcp, setSelectedMcp]         = useState<McpServer | null>(null);
+  const [mcpEnvValues, setMcpEnvValues]       = useState<Record<string, string>>({});
+  const [newMcp, setNewMcp] = useState({
+    name: '',
+    command: '',
+    args: '',
+    transport: 'stdio' as 'stdio' | 'sse',
+    risk_level: 'medium' as RiskLevelVal
+  });
+
+  const filteredMcps = useMemo(() => {
+    if (!mcpSearch.trim()) return MCP_SERVERS;
+    const q = mcpSearch.toLowerCase();
+    return MCP_SERVERS.filter(m => 
+      m.name.toLowerCase().includes(q) || m.description.toLowerCase().includes(q) || m.category.toLowerCase().includes(q)
+    );
+  }, [mcpSearch]);
 
   // ── Routing profile state ────────────────────────────────────
   const [routingProfiles, setRoutingProfiles]   = useState<any[]>([]);
@@ -953,6 +1043,62 @@ export function Katana() {
     } catch {
       setStatusMessage({ type: 'error', text: 'Failed to delete provider.' });
     } finally {
+      setTimeout(() => setStatusMessage(null), 3000);
+    }
+  };
+
+
+  // ── MCP handlers ─────────────────────────────────────────────
+  const handleRegisterMcp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegisterSaving(true);
+
+    const payload = mcpRegisterMode === 'quick' && selectedMcp
+      ? {
+          name:           selectedMcp.name,
+          slug:           toSlug(selectedMcp.name),
+          connector_type: 'mcp',
+          source:         'manual',
+          base_url:       selectedMcp.transport === 'sse' ? selectedMcp.github_url : null,
+          auth_type:      'custom',
+          risk_level:     selectedMcp.risk_level,
+          config: {
+            command: selectedMcp.command,
+            args: selectedMcp.args,
+            env: mcpEnvValues,
+            transport: selectedMcp.transport,
+            npm_package: selectedMcp.npm_package
+          }
+        }
+      : {
+          name:           newMcp.name,
+          slug:           toSlug(newMcp.name),
+          connector_type: 'mcp',
+          source:         'manual',
+          base_url:       newMcp.transport === 'sse' ? newMcp.command : null,
+          auth_type:      'custom',
+          risk_level:     newMcp.risk_level,
+          config: {
+            command: newMcp.transport === 'stdio' ? newMcp.command : undefined,
+            args: newMcp.transport === 'stdio' ? newMcp.args.split(' ').filter(Boolean) : undefined,
+            env: mcpEnvValues,
+            transport: newMcp.transport
+          }
+        };
+
+    try {
+      await axios.post('/api/v1/tools', payload);
+      setStatusMessage({ type: 'success', text: `MCP Server "${payload.name}" registered.` });
+      setShowRegisterMcp(false);
+      setSelectedMcp(null);
+      setMcpSearch('');
+      setMcpEnvValues({});
+      setNewMcp({ name: '', command: '', args: '', transport: 'stdio', risk_level: 'medium' });
+      fetchData();
+    } catch {
+      setStatusMessage({ type: 'error', text: 'Failed to register MCP server.' });
+    } finally {
+      setRegisterSaving(false);
       setTimeout(() => setStatusMessage(null), 3000);
     }
   };
@@ -2243,6 +2389,347 @@ export function Katana() {
             </div>
           </div>
         )}
+
+        {/* ════════════════════════════════════════════════════════
+            MCP SERVERS TAB
+        ════════════════════════════════════════════════════════ */}
+        {activeTab === 'tools' && (
+          <div className="space-y-6 pt-12 mt-12 border-t border-shogun-border/30">
+            {/* ── Toolbar ──────────────────────────────────────── */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold flex items-center gap-2 text-shogun-text">
+                <Layers className="w-5 h-5 text-indigo-500" /> {t('katana.mcp_servers', 'MCP Servers')}
+                <span className="text-[10px] font-normal bg-shogun-card border border-shogun-border px-1.5 py-0.5 rounded text-shogun-subdued">
+                  {tools.filter(t => t.connector_type === 'mcp').length} active
+                </span>
+              </h3>
+              <button
+                onClick={() => setShowRegisterMcp((v) => !v)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all",
+                  showRegisterMcp
+                    ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-400"
+                    : "border-shogun-border text-shogun-subdued hover:text-indigo-400 hover:border-indigo-500/40 hover:bg-indigo-500/5"
+                )}
+              >
+                {showRegisterMcp ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                {showRegisterMcp ? t('common.cancel') : t('katana.register_mcp', 'Register MCP')}
+              </button>
+            </div>
+
+            {/* ── Register Panel ────────────────────────────────── */}
+            {showRegisterMcp && (
+              <div className="shogun-card border-indigo-500/30 animate-in slide-in-from-top-3 duration-300">
+                <div className="flex items-center justify-between mb-5">
+                  <h4 className="font-bold text-shogun-text flex items-center gap-2">
+                    <Puzzle className="w-4 h-4 text-indigo-500" /> {t('katana.register_mcp_server', 'Register MCP Server')}
+                  </h4>
+                  {/* Mode toggle */}
+                  <div className="flex items-center gap-1 p-1 bg-[#050508] border border-shogun-border rounded-lg">
+                    {(['quick', 'manual'] as const).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMcpRegisterMode(m)}
+                        className={cn(
+                          "px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest transition-all",
+                          mcpRegisterMode === m
+                            ? "bg-indigo-500 text-white shadow"
+                            : "text-shogun-subdued hover:text-shogun-text"
+                        )}
+                      >
+                        {m === 'quick' ? t('katana.quick_pick') : t('katana.manual')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <form onSubmit={handleRegisterMcp}>
+                  {/* ── QUICK PICK MODE ─────────────────────────── */}
+                  {mcpRegisterMode === 'quick' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      {/* Search + list */}
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-shogun-subdued" />
+                          <input
+                            type="text"
+                            placeholder="Search MCP servers..."
+                            value={mcpSearch}
+                            onChange={(e) => setMcpSearch(e.target.value)}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-indigo-500 outline-none"
+                          />
+                        </div>
+                        <div className="h-64 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-shogun-border scrollbar-track-transparent">
+                          {filteredMcps.length === 0 ? (
+                            <p className="text-xs text-shogun-subdued italic text-center py-8">No MCP servers match your search.</p>
+                          ) : filteredMcps.map((mcp) => (
+                            <button
+                              key={mcp.name}
+                              type="button"
+                              onClick={() => { setSelectedMcp(mcp); setMcpEnvValues({}); }}
+                              className={cn(
+                                "w-full text-left px-3 py-2.5 rounded-lg border transition-all group flex items-center justify-between gap-2",
+                                selectedMcp?.name === mcp.name
+                                  ? "border-indigo-500/40 bg-indigo-500/10 text-shogun-text"
+                                  : "border-transparent hover:border-shogun-border hover:bg-shogun-card text-shogun-subdued hover:text-shogun-text"
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold truncate">{mcp.name}</p>
+                                <p className="text-[10px] truncate opacity-70">{mcp.category}</p>
+                              </div>
+                              <ChevronRight className={cn(
+                                "w-3.5 h-3.5 shrink-0 transition-all",
+                                selectedMcp?.name === mcp.name ? "text-indigo-400 opacity-100" : "opacity-0 group-hover:opacity-50"
+                              )} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Preview panel */}
+                      <div className="flex flex-col">
+                        {selectedMcp ? (
+                          <div className="flex-1 bg-[#050508] border border-shogun-border rounded-xl p-5 space-y-4">
+                            <div>
+                              <h5 className="font-bold text-shogun-text text-base">{selectedMcp.name}</h5>
+                              <p className="text-xs text-shogun-subdued mt-1 leading-relaxed">{selectedMcp.description}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              {[
+                                { label: 'COMMAND',   value: selectedMcp.transport === 'stdio' ? `${selectedMcp.command} ${selectedMcp.args.join(' ')}` : selectedMcp.github_url },
+                                { label: 'TRANSPORT', value: selectedMcp.transport.toUpperCase() },
+                                { label: 'RISK',      value: selectedMcp.risk_level.toUpperCase() },
+                              ].map(({ label, value }) => (
+                                <div key={label} className={cn("space-y-0.5", label === 'COMMAND' && "col-span-2")}>
+                                  <p className="text-shogun-subdued uppercase tracking-widest font-bold">{label}</p>
+                                  <p className="text-shogun-text font-mono truncate">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2 pt-1">
+                              <Globe className="w-3 h-3 text-shogun-subdued shrink-0" />
+                              <a
+                                href={selectedMcp.github_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-indigo-400 hover:underline truncate"
+                              >
+                                View Repository →
+                              </a>
+                            </div>
+
+                            {selectedMcp.env_keys.length > 0 && (
+                              <div className="space-y-3 pt-3 border-t border-shogun-border/50">
+                                <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest flex items-center gap-1.5">
+                                  <ShieldCheck className="w-3 h-3 text-shogun-gold" />
+                                  Required Environment Variables
+                                </label>
+                                {selectedMcp.env_keys.map(key => (
+                                  <input
+                                    key={key}
+                                    type="password"
+                                    placeholder={key}
+                                    value={mcpEnvValues[key] || ''}
+                                    onChange={e => setMcpEnvValues({ ...mcpEnvValues, [key]: e.target.value })}
+                                    className="w-full bg-shogun-bg border border-shogun-border rounded-lg p-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 outline-none font-mono text-xs transition-all"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-center bg-[#050508] border border-dashed border-shogun-border rounded-xl p-8 gap-3">
+                            <Puzzle className="w-8 h-8 text-shogun-subdued opacity-40" />
+                            <p className="text-xs text-shogun-subdued">Select an MCP server from the catalog to configure it.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── MANUAL ENTRY MODE ───────────────────────── */}
+                  {mcpRegisterMode === 'manual' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Server Name *</label>
+                        <input
+                          required
+                          type="text"
+                          placeholder="e.g. My Custom MCP"
+                          value={newMcp.name}
+                          onChange={(e) => setNewMcp({ ...newMcp, name: e.target.value })}
+                          className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-indigo-500 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Transport</label>
+                        <select
+                          value={newMcp.transport}
+                          onChange={(e) => setNewMcp({ ...newMcp, transport: e.target.value as 'stdio' | 'sse' })}
+                          className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-indigo-500 outline-none"
+                        >
+                          <option value="stdio">STDIO (Local command)</option>
+                          <option value="sse">SSE (Remote URL)</option>
+                        </select>
+                      </div>
+                      
+                      {newMcp.transport === 'stdio' ? (
+                        <>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Command *</label>
+                            <input
+                              required
+                              type="text"
+                              placeholder="e.g. npx"
+                              value={newMcp.command}
+                              onChange={(e) => setNewMcp({ ...newMcp, command: e.target.value })}
+                              className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-indigo-500 outline-none font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Arguments</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. -y @modelcontextprotocol/server-postgres"
+                              value={newMcp.args}
+                              onChange={(e) => setNewMcp({ ...newMcp, args: e.target.value })}
+                              className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-indigo-500 outline-none font-mono"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-1.5 md:col-span-2">
+                          <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">SSE URL *</label>
+                          <input
+                            required
+                            type="text"
+                            placeholder="https://mcp.example.com/sse"
+                            value={newMcp.command}
+                            onChange={(e) => setNewMcp({ ...newMcp, command: e.target.value })}
+                            className="w-full bg-[#050508] border border-shogun-border rounded-lg p-3 text-sm focus:border-indigo-500 outline-none font-mono"
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-shogun-subdued uppercase tracking-widest">Risk Level</label>
+                        <div className="flex gap-2">
+                          {RISK_LEVELS.map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => setNewMcp({ ...newMcp, risk_level: r })}
+                              className={cn(
+                                "flex-1 py-2 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                newMcp.risk_level === r
+                                  ? riskColor(r) + ' border-opacity-100'
+                                  : 'border-shogun-border text-shogun-subdued hover:border-indigo-500/30'
+                              )}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Submit ─────────────────────────────────── */}
+                  <div className="flex items-center gap-3 mt-6 pt-5 border-t border-shogun-border">
+                    <button
+                      type="submit"
+                      disabled={registerSaving || (mcpRegisterMode === 'quick' && (!selectedMcp || selectedMcp.env_keys.some(k => !mcpEnvValues[k])))}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-lg text-sm transition-all"
+                    >
+                      {registerSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Register MCP Server
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRegisterMcp(false)}
+                      className="px-4 py-2.5 text-sm font-bold text-shogun-subdued hover:text-shogun-text transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── MCP cards grid ───────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {loading ? (
+                <div className="col-span-3 p-12 text-center shogun-card opacity-50">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-500 mb-4" />
+                  <p className="text-xs uppercase tracking-widest font-bold">Loading MCPs</p>
+                </div>
+              ) : tools.filter(t => t.connector_type === 'mcp').length === 0 ? (
+                <div className="col-span-3 p-12 text-center shogun-card border-dashed">
+                  <Layers className="w-8 h-8 text-shogun-subdued opacity-30 mx-auto mb-3" />
+                  <p className="text-shogun-subdued italic text-sm">No MCP servers registered</p>
+                  <button
+                    onClick={() => setShowRegisterMcp(true)}
+                    className="mt-4 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest transition-colors"
+                  >
+                    + Register your first MCP
+                  </button>
+                </div>
+              ) : tools.filter(t => t.connector_type === 'mcp').map((tool) => (
+                <div key={tool.id} className="shogun-card hover:border-indigo-500/30 transition-all group relative">
+                  <button
+                    onClick={() => handleDeleteTool(tool.id, tool.name)}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-red-500/50 hover:text-red-500 transition-all"
+                    title={t('katana.remove_connector')}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-lg bg-[#050508] border border-shogun-border flex items-center justify-center text-shogun-subdued group-hover:text-indigo-400 transition-colors shrink-0">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-shogun-text truncate">{tool.name}</h4>
+                      <p className="text-[10px] text-shogun-subdued font-mono truncate">{tool.config?.transport === 'sse' ? 'SSE' : 'STDIO'} • {tool.slug}</p>
+                    </div>
+                  </div>
+
+                  {tool.config?.command && (
+                    <p className="text-[10px] text-shogun-subdued font-mono truncate mb-3 bg-[#050508] px-2 py-1 rounded border border-shogun-border" title={tool.config.transport === 'stdio' ? `${tool.config.command} ${(tool.config.args || []).join(' ')}` : tool.base_url}>
+                      {tool.config.transport === 'stdio' ? `${tool.config.command} ${(tool.config.args || []).join(' ')}` : tool.base_url}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between pt-3 border-t border-shogun-border">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded bg-[#050508] border border-shogun-border text-shogun-subdued">
+                        MCP
+                      </span>
+                      <span className={cn(
+                        "text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded border",
+                        riskColor(tool.risk_level as RiskLevelVal || 'low')
+                      )}>
+                        {tool.risk_level || 'low'}
+                      </span>
+                    </div>
+                    <span className={cn(
+                      "text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded border",
+                      tool.status === 'connected' || tool.status === 'active'
+                        ? 'text-green-400 border-green-400/30 bg-green-400/5'
+                        : tool.status === 'disabled'
+                        ? 'text-shogun-subdued border-shogun-border bg-shogun-card'
+                        : 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5'
+                    )}>
+                      {tool.status || 'not_configured'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
 
         {/* ════════════════════════════════════════════════════════
             ROUTING TAB
