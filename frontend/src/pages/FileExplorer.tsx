@@ -147,7 +147,7 @@ export const FileExplorer = () => {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [info, setInfo] = useState<WorkspaceInfo | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [fileContent, setFileContent] = useState<string>('');
   const [editContent, setEditContent] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
@@ -400,6 +400,12 @@ export const FileExplorer = () => {
   };
 
   const displayTree = filterTree(tree, searchQuery);
+  const workspaceRootNode: TreeNode = {
+    name: 'Workspace',
+    path: '',
+    type: 'directory',
+    children: displayTree,
+  };
 
   // ── Error state ───────────────────────────────────────────────
   if (error) {
@@ -478,7 +484,7 @@ export const FileExplorer = () => {
               className="p-1.5 rounded hover:bg-shogun-card text-shogun-subdued hover:text-emerald-400 transition-colors">
               <Upload className={cn("w-4 h-4", uploading && "animate-bounce")} />
             </button>
-            {selectedNode && (
+            {selectedNode && selectedNode.path !== '' && (
               <>
                 <button onClick={() => { setRenameName(selectedNode.name); setShowRenameDialog(true); }} title="Rename"
                   className="p-1.5 rounded hover:bg-shogun-card text-shogun-subdued hover:text-shogun-text transition-colors">
@@ -517,22 +523,15 @@ export const FileExplorer = () => {
               <div className="flex items-center justify-center h-20">
                 <RefreshCw className="w-5 h-5 animate-spin text-shogun-subdued" />
               </div>
-            ) : displayTree.length === 0 ? (
-              <div className="text-center py-8 text-shogun-subdued text-xs">
-                {searchQuery ? 'No matches found' : 'Workspace is empty'}
-              </div>
             ) : (
-              displayTree.map(node => (
-                <TreeItem
-                  key={node.path}
-                  node={node}
-                  depth={0}
-                  selectedPath={selectedNode?.path || null}
-                  expandedPaths={expandedPaths}
-                  onSelect={handleSelect}
-                  onToggle={handleToggle}
-                />
-              ))
+              <TreeItem
+                node={workspaceRootNode}
+                depth={0}
+                selectedPath={selectedNode?.path ?? null}
+                expandedPaths={expandedPaths}
+                onSelect={handleSelect}
+                onToggle={handleToggle}
+              />
             )}
           </div>
 
@@ -597,7 +596,7 @@ export const FileExplorer = () => {
                 ) : (
                   <>
                     <FolderOpen className="w-4 h-4 text-shogun-gold" />
-                    <span className="text-sm font-medium text-shogun-text truncate">{selectedNode.path}/</span>
+                    <span className="text-sm font-medium text-shogun-text truncate">{selectedNode.path || 'Workspace'}/</span>
                     <span className="text-[10px] text-shogun-subdued">{selectedNode.children?.length || 0} items</span>
                   </>
                 )}
@@ -640,7 +639,7 @@ export const FileExplorer = () => {
                   )
                 ) : (
                   <div className="p-4 space-y-2">
-                    <h3 className="text-sm font-bold text-shogun-text mb-3">Contents of {selectedNode.name}/</h3>
+                    <h3 className="text-sm font-bold text-shogun-text mb-3">Contents of {selectedNode.path ? selectedNode.name : 'Workspace'}/</h3>
                     {selectedNode.children && selectedNode.children.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                         {selectedNode.children.map(child => {
