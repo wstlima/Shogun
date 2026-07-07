@@ -16,6 +16,17 @@ from shogun.config import settings
 # Calculate project root (assuming this file is in shogun/app.py)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+
+class NoCacheStaticFiles(StaticFiles):
+    """Serve desktop UI assets without browser cache stickiness."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown hooks."""
@@ -403,7 +414,7 @@ def create_app() -> FastAPI:
     # Static file serving for React frontend (anchored to PROJECT_ROOT)
     frontend_path = PROJECT_ROOT / "frontend" / "dist"
     if frontend_path.exists():
-        app.mount("/assets", StaticFiles(directory=str(frontend_path / "assets")), name="static")
+        app.mount("/assets", NoCacheStaticFiles(directory=str(frontend_path / "assets")), name="static")
 
         @app.get("/{full_path:path}")
         async def serve_frontend(full_path: str):

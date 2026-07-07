@@ -2228,7 +2228,9 @@ function AgentFlowCanvas({
   }, []);
 
   const onSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: Node[] }) => {
-    setSelectedNodeId(selectedNodes[0]?.id || null);
+    if (selectedNodes[0]) {
+      setSelectedNodeId(selectedNodes[0].id);
+    }
   }, []);
 
   // Update node data from inspector
@@ -2642,6 +2644,7 @@ function AgentFlowCanvas({
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeClick}
               onPaneClick={onPaneClick}
               onSelectionChange={onSelectionChange}
               onDrop={onDrop}

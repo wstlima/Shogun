@@ -58,8 +58,8 @@ echo.
 echo   Press Ctrl+C to stop the server.
 echo.
 
-:: Wait for backend to be ready, then open browser (background).
-start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\open_shogun_when_ready.ps1" -Url "http://localhost:8000" -HealthUrl "http://localhost:8000/api/v1/health" -TimeoutSeconds 180 -LogPath "%CD%\logs\launcher-browser.log"
+:: The Python server opens the browser as soon as it is ready.
+set "SHOGUN_BROWSER_URL=http://localhost:8000"
 
 :: Start the server (blocking; keeps the window open)
 python -m shogun

@@ -90,6 +90,75 @@ def _auto_bootstrap() -> None:
             print()
 
 
+def _browser_url(host: str, port: int) -> str:
+    import os
+
+    configured = os.environ.get("SHOGUN_BROWSER_URL")
+    if configured:
+        return configured
+    browser_host = "localhost" if host in {"0.0.0.0", "::"} else host
+    return f"http://{browser_host}:{port}"
+
+
+def _open_browser_when_ready(url: str, health_url: str, timeout_seconds: int = 180) -> None:
+    """Open the local UI as soon as the server responds."""
+    import os
+    import threading
+    import time
+    import urllib.request
+    import webbrowser
+    from datetime import datetime
+
+    if os.environ.get("SHOGUN_NO_BROWSER", "").lower() in {"1", "true", "yes"}:
+        return
+
+    project_root = Path(__file__).resolve().parent.parent
+    log_path = project_root / "logs" / "launcher-browser.log"
+
+    def log(message: str) -> None:
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"[{stamp}] {message}\n")
+        except Exception:
+            pass
+
+    def worker() -> None:
+        log(f"Server-side browser opener waiting. Url={url} HealthUrl={health_url}")
+        deadline = time.time() + timeout_seconds
+        ready = False
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(health_url, timeout=2) as response:
+                    if 200 <= response.status < 500:
+                        ready = True
+                        log(f"Ready probe succeeded: HTTP {response.status}")
+                        break
+            except Exception:
+                time.sleep(0.35)
+
+        if not ready:
+            log("Timed out waiting for readiness; opening URL anyway.")
+
+        try:
+            opened = webbrowser.open(url, new=2)
+            log(f"webbrowser.open returned {opened}")
+            if not opened and hasattr(os, "startfile"):
+                os.startfile(url)  # type: ignore[attr-defined]
+                log("Opened via os.startfile fallback.")
+        except Exception as exc:
+            log(f"webbrowser.open failed: {exc}")
+            if hasattr(os, "startfile"):
+                try:
+                    os.startfile(url)  # type: ignore[attr-defined]
+                    log("Opened via os.startfile fallback after webbrowser error.")
+                except Exception as fallback_exc:
+                    log(f"os.startfile fallback failed: {fallback_exc}")
+
+    threading.Thread(target=worker, name="shogun-browser-opener", daemon=True).start()
+
+
 def main() -> None:
     _reexec_in_project_venv()
 
@@ -107,7 +176,12 @@ def main() -> None:
     # Step 3: Auto-bootstrap if needed
     _auto_bootstrap()
     
-    # Step 4: Run Server
+    # Step 4: Open browser once the server is actually ready
+    url = _browser_url(settings.api_host, settings.api_port)
+    health_url = f"http://localhost:{settings.api_port}/api/v1/health"
+    _open_browser_when_ready(url, health_url)
+
+    # Step 5: Run Server
     print("=" * 60)
     print("  SHOGUN — The Tenshu (FastAPI + React)")
     print("=" * 60)
@@ -128,7 +202,7 @@ def main() -> None:
         )
     else:
         print("  [PRODUCTION MODE]")
-        print(f"  - Serving Shogun at http://{settings.api_host}:{settings.api_port}")
+        print(f"  - Serving Shogun at {url}")
         print("-" * 60)
         
         uvicorn.run(

@@ -154,8 +154,8 @@ echo  :                                                          :
 echo  +----------------------------------------------------------+
 echo.
 
-:: Wait for backend to be ready, then open browser to setup (background)
-start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\scripts\open_shogun_when_ready.ps1" -Url "http://localhost:8000/setup" -HealthUrl "http://localhost:8000/api/v1/health" -TimeoutSeconds 180 -LogPath "%CD%\logs\launcher-browser.log"
+:: The Python server opens setup as soon as it is ready.
+set "SHOGUN_BROWSER_URL=http://localhost:8000/setup"
 
 :: Start the server (blocking)
 python -m shogun

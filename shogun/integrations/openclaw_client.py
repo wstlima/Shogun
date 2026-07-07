@@ -508,13 +508,55 @@ class OpenClawClient:
             payload["agentName"] = agent_name
         if model_id:
             payload["modelId"] = model_id
-        resp = await self.client.post(
-            f"{self.base_url}/v1/tests/{test_id}/results",
-            json=payload,
-            headers=self._auth_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+
+        header_candidates: list[dict[str, str]] = []
+        seen: set[tuple[tuple[str, str], ...]] = set()
+
+        def add_headers(headers: dict[str, str]) -> None:
+            key = tuple(sorted(headers.items()))
+            if key not in seen:
+                seen.add(key)
+                header_candidates.append(headers)
+
+        add_headers(self._auth_headers())
+
+        if self.api_key != OPENCLAW_API_KEY:
+            platform_client = OpenClawClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                actor_id=self.actor_id,
+                api_key=OPENCLAW_API_KEY,
+            )
+            add_headers(platform_client._auth_headers())
+
+        if self.api_key:
+            actor_only_client = OpenClawClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                actor_id=self.actor_id,
+                api_key=None,
+            )
+            add_headers(actor_only_client._auth_headers())
+
+        last_auth_error: httpx.HTTPStatusError | None = None
+        for headers in header_candidates:
+            resp = await self.client.post(
+                f"{self.base_url}/v1/tests/{test_id}/results",
+                json=payload,
+                headers=headers,
+            )
+            if resp.status_code in {401, 403}:
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    last_auth_error = exc
+                continue
+            resp.raise_for_status()
+            return resp.json()
+
+        if last_auth_error:
+            raise last_auth_error
+        raise RuntimeError("OpenClaw exam result submission failed before receiving a response")
 
     async def get_test_result(self, result_id: str) -> dict[str, Any] | None:
         """Check the verification status of a specific test submission.
@@ -589,4 +631,3 @@ def get_openclaw_client(
     Pass actor_id and api_key to enable authenticated exam endpoints.
     """
     return OpenClawClient(actor_id=actor_id, api_key=api_key)
-
