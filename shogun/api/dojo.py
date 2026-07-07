@@ -538,6 +538,7 @@ async def install_openclaw_skill(
     # Create the installation record
     installation = SkillInstallation(
         skill_id=skill.id,
+        openclaw_skill_id=body.openclaw_skill_id,
         target_type="global",
         status="installed",
         installed_version=body.version,

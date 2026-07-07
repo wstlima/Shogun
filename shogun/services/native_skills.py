@@ -3440,6 +3440,7 @@ async def _dojo_install_skill(args: dict[str, Any]) -> str:
             # Create the installation record
             installation = SkillInstallation(
                 skill_id=skill.id,
+                openclaw_skill_id=openclaw_skill_id,
                 target_type="global",
                 status="installed",
                 installed_version="1.0.0",
@@ -3497,6 +3498,7 @@ async def _dojo_list_installed() -> str:
                     continue
                 skills_data.append({
                     "skill_id": str(skill.id),
+                    "openclaw_skill_id": inst.openclaw_skill_id or (skill.manifest or {}).get("openclaw_id", ""),
                     "name": skill.name,
                     "slug": skill.slug,
                     "version": inst.installed_version or skill.version,

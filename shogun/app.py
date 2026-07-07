@@ -55,6 +55,54 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Non-fatal — don't block startup
 
+    # ── Auto-migrate skill_installations: add openclaw_skill_id ───
+    try:
+        from shogun.db.engine import engine
+        from sqlalchemy import text, inspect as sa_inspect
+        async with engine.begin() as conn:
+            columns = await conn.run_sync(
+                lambda c: [col["name"] for col in sa_inspect(c).get_columns("skill_installations")]
+                if "skill_installations" in sa_inspect(c).get_table_names() else []
+            )
+            if columns and "openclaw_skill_id" not in columns:
+                await conn.execute(text(
+                    "ALTER TABLE skill_installations ADD COLUMN openclaw_skill_id VARCHAR(255)"
+                ))
+                import logging
+                logging.getLogger(__name__).info("Migrated skill_installations: added openclaw_skill_id column")
+    except Exception:
+        pass  # Non-fatal
+
+    # ── Backfill openclaw_skill_id from skill.manifest for existing rows ──
+    try:
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.skill_installation import SkillInstallation
+        from shogun.db.models.skill import Skill
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(SkillInstallation)
+                .where(SkillInstallation.openclaw_skill_id.is_(None))
+                .options(joinedload(SkillInstallation.skill))
+            )
+            installations = list(result.scalars().all())
+            patched = 0
+            for inst in installations:
+                if inst.skill and inst.skill.manifest:
+                    oc_id = inst.skill.manifest.get("openclaw_id")
+                    if oc_id:
+                        inst.openclaw_skill_id = oc_id
+                        patched += 1
+            if patched:
+                await session.commit()
+                import logging
+                logging.getLogger(__name__).info(
+                    f"Backfilled openclaw_skill_id for {patched} existing installation(s)"
+                )
+    except Exception:
+        pass  # Non-fatal
+
     # ── Ensure bushido_schedules table exists and presets are seeded
     try:
         from shogun.services.bushido_engine import ensure_preset_schedules

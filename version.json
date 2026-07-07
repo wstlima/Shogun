@@ -1,8 +1,8 @@
 {
   "version": "1.6.1",
   "name": "Shogun OS",
-  "build": 46,
+  "build": 47,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Katana: Added MCP Server Selector to Tool Connectors tab with curated catalog of 40 popular servers."
+  "changelog": "Dojo: Fixed skill installation tracking — openclaw_skill_id now stored on SkillInstallation records with auto-migration and backfill."
 }

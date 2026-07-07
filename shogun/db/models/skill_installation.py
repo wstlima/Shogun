@@ -15,6 +15,7 @@ class SkillInstallation(Base, UUIDMixin):
     __tablename__ = "skill_installations"
 
     skill_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("skills.id"), nullable=False)
+    openclaw_skill_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     target_type: Mapped[str] = mapped_column(String(50), nullable=False, default="global")
     target_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="installed")
@@ -26,3 +27,4 @@ class SkillInstallation(Base, UUIDMixin):
     installed_by: Mapped[str] = mapped_column(String(255), nullable=False, default="operator")
 
     skill = relationship("Skill", lazy="joined")
+
