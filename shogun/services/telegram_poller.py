@@ -3,13 +3,17 @@
 import asyncio
 import json
 import logging
+import mimetypes
+import re
 import time
 import traceback
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
 from shogun.api.agents import _classify_chat_mode, _shogun_chat_internal
+from shogun.config import settings
 from shogun.db.engine import async_session_factory
 from shogun.db.models.agent import Agent
 from shogun.services.agent_service import AgentService
@@ -98,6 +102,133 @@ def invalidate_telegram_config_cache():
 # ── Telegram API helpers (use persistent client) ──────────────────────────
 
 
+_IMAGE_MIME_PREFIX = "image/"
+_FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_upload_filename(name: str, fallback: str) -> str:
+    """Return a local filename safe for the workspace."""
+    clean = Path(name or "").name.strip() or fallback
+    clean = _FILENAME_SAFE.sub("_", clean).strip("._")
+    return (clean or fallback)[:120]
+
+
+def _attachment_context_text(user_msg: str, attachments: list[dict]) -> str:
+    """Add saved Telegram uploads to the prompt as workspace references."""
+    text = user_msg.strip()
+    if not attachments:
+        return text
+
+    if not text:
+        text = "Please review the uploaded attachment(s)."
+
+    lines = ["", "", "Uploaded attachment(s) saved in the Shogun workspace:"]
+    for index, att in enumerate(attachments, start=1):
+        label = att.get("filename") or att.get("kind") or f"attachment-{index}"
+        rel_path = att.get("workspace_path") or att.get("path") or ""
+        mime_type = att.get("mime_type") or "unknown type"
+        size = att.get("size")
+        size_text = f", {size} bytes" if isinstance(size, int) else ""
+        lines.append(f"{index}. {label} ({mime_type}{size_text}) at {rel_path}")
+    lines.append("Use workspace tools to read files. If an attachment is an image, inspect the image content directly.")
+    return text + "\n".join(lines)
+
+
+async def _download_telegram_file(
+    bot_token: str,
+    *,
+    file_id: str,
+    chat_id: str,
+    kind: str,
+    filename: str,
+    mime_type: str | None = None,
+) -> dict | None:
+    """Download a Telegram file into the persistent agent workspace."""
+    client = _get_tg_client()
+    info_resp = await client.get(f"https://api.telegram.org/bot{bot_token}/getFile", params={"file_id": file_id})
+    if not info_resp.is_success:
+        logger.warning("[Telegram] getFile failed for %s: %s", file_id, info_resp.text[:200])
+        return None
+
+    file_path = info_resp.json().get("result", {}).get("file_path")
+    if not file_path:
+        logger.warning("[Telegram] getFile response had no file_path for %s", file_id)
+        return None
+
+    data_resp = await client.get(f"https://api.telegram.org/file/bot{bot_token}/{file_path}")
+    if not data_resp.is_success:
+        logger.warning("[Telegram] file download failed for %s: %s", file_id, data_resp.text[:200])
+        return None
+
+    suffix = Path(filename).suffix
+    guessed_mime, guessed_encoding = mimetypes.guess_type(filename)
+    effective_mime = mime_type or guessed_mime or data_resp.headers.get("content-type") or "application/octet-stream"
+    if not suffix:
+        suffix = mimetypes.guess_extension(effective_mime) or ".bin"
+        filename = f"{filename}{suffix}"
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    workspace_root = settings.workspace_path.resolve()
+    target_dir = workspace_root / "Telegram" / day / _safe_upload_filename(chat_id, "chat")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_upload_filename(filename, f"{kind}-{file_id}{suffix}")
+    target = target_dir / safe_name
+
+    if target.exists():
+        target = target.with_name(f"{target.stem}-{int(time.time())}{target.suffix}")
+
+    content = data_resp.content
+    target.write_bytes(content)
+    rel_path = target.relative_to(workspace_root).as_posix()
+    return {
+        "source": "telegram",
+        "kind": kind,
+        "file_id": file_id,
+        "filename": target.name,
+        "mime_type": effective_mime,
+        "encoding": guessed_encoding,
+        "size": len(content),
+        "workspace_path": rel_path,
+        "path": str(target),
+        "is_image": effective_mime.startswith(_IMAGE_MIME_PREFIX),
+    }
+
+
+async def _extract_telegram_attachments(bot_token: str, chat_id: str, msg: dict) -> list[dict]:
+    """Collect supported Telegram message uploads and save them locally."""
+    attachments: list[dict] = []
+
+    photos = msg.get("photo") or []
+    if photos:
+        photo = max(photos, key=lambda item: item.get("file_size", 0))
+        file_unique_id = photo.get("file_unique_id") or photo.get("file_id") or "photo"
+        attachment = await _download_telegram_file(
+            bot_token,
+            file_id=photo["file_id"],
+            chat_id=chat_id,
+            kind="photo",
+            filename=_safe_upload_filename(f"{file_unique_id}.jpg", "telegram-photo.jpg"),
+            mime_type="image/jpeg",
+        )
+        if attachment:
+            attachments.append(attachment)
+
+    document = msg.get("document")
+    if document and document.get("file_id"):
+        attachment = await _download_telegram_file(
+            bot_token,
+            file_id=document["file_id"],
+            chat_id=chat_id,
+            kind="document",
+            filename=_safe_upload_filename(document.get("file_name", ""), f"telegram-document-{document['file_id']}"),
+            mime_type=document.get("mime_type"),
+        )
+        if attachment:
+            attachments.append(attachment)
+
+    return attachments
+
+
 async def send_chat_action(bot_token: str, chat_id: str, action: str = "typing"):
     """Send a chat action indicator (e.g. 'typing...') — instant user feedback."""
     url = f"https://api.telegram.org/bot{bot_token}/sendChatAction"
@@ -160,8 +291,10 @@ async def edit_telegram_message(
         logger.error(f"Network error editing Telegram message: {e}")
 
 
-async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
+async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str, attachments: list[dict] | None = None):
     """Pipe an incoming message into the Shogun AI engine, capturing its SSE streaming output."""
+    attachments = attachments or []
+    prompt_msg = _attachment_context_text(user_msg, attachments)
     logger.info(f"[Telegram] Received: '{user_msg[:50]}...' from {chat_id}")
 
     # ── 0. Immediate typing indicator — user sees feedback in <100ms ──
@@ -221,15 +354,16 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                 session,
                 channel="telegram",
                 role="user",
-                content=user_msg,
+                content=prompt_msg,
                 external_chat_id=chat_id,
+                message_data={"attachments": attachments} if attachments else {},
             )
             await session.commit()
             
             # ── 1. Select the Telegram execution lane ──────────────
             # Telegram has no graphical mode selector, so default to the
             # tool-capable Mission lane. Torii still gates every tool call.
-            user_msg, mode, classification = _select_telegram_chat_mode(user_msg, history)
+            prompt_msg, mode, classification = _select_telegram_chat_mode(prompt_msg, history)
             logger.info(
                 "[Telegram] Mode classified: %s (reason=%s, matched=%s)",
                 mode,
@@ -245,21 +379,21 @@ async def process_telegram_message(bot_token: str, chat_id: str, user_msg: str):
                 from shogun.api.agents import _shogun_fast_chat
                 logger.info("[Telegram] Routing to Fast Chat lane...")
                 response_stream = await _shogun_fast_chat(
-                    user_msg=user_msg, history=history, svc=svc,
+                    user_msg=prompt_msg, history=history, svc=svc,
                     classification=classification,
                 )
             elif mode == "governed":
                 from shogun.api.governed_chat import _shogun_governed_chat
                 logger.info("[Telegram] Routing to Governed Chat lane...")
                 response_stream = await _shogun_governed_chat(
-                    user_msg=user_msg, history=history, svc=svc,
+                    user_msg=prompt_msg, history=history, svc=svc,
                     classification=classification,
                 )
             else:
                 logger.info("[Telegram] Routing to Mission lane...")
                 response_stream = await _shogun_chat_internal(
-                    user_msg=user_msg, history=history, svc=svc,
-                    classification=classification,
+                    user_msg=prompt_msg, history=history, svc=svc,
+                    classification=classification, attachments=attachments,
                 )
             
             # 4. Aggregate the SSE chunks and update Telegram periodically
@@ -421,7 +555,7 @@ async def telegram_poller_task():
                     
                 chat = msg.get("chat", {})
                 chat_id_str = str(chat.get("id"))
-                text = msg.get("text", "").strip()
+                text = (msg.get("text") or msg.get("caption") or "").strip()
                 
                 # Check whitelist (allowing ID capture if empty)
                 if allowed_ids and chat_id_str not in allowed_ids:
@@ -444,9 +578,11 @@ async def telegram_poller_task():
                         "⚠️ Harakiri control is disabled until this chat ID is added to Telegram's allowed chat IDs.",
                     )
                     continue
+
+                attachments = await _extract_telegram_attachments(bot_token, chat_id_str, msg)
                     
-                if text:
-                    asyncio.create_task(process_telegram_message(bot_token, chat_id_str, text))
+                if text or attachments:
+                    asyncio.create_task(process_telegram_message(bot_token, chat_id_str, text, attachments))
 
         except asyncio.CancelledError:
             logger.info("[Telegram] Listener task cancelled.")
