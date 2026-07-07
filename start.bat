@@ -54,7 +54,7 @@ echo   Press Ctrl+C to stop the server.
 echo.
 
 :: Wait for backend to be ready, then open browser (background)
-start "" powershell -WindowStyle Hidden -Command "$ok=$false; for($i=0;$i -lt 90;$i++){try{$r=Invoke-WebRequest -Uri 'http://localhost:8000/api/v1/health' -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop; if($r.StatusCode -eq 200){Start-Process 'http://localhost:8000'; $ok=$true; break}}catch{}; Start-Sleep -Seconds 1}; if(-not $ok){Write-Host 'Server did not respond in time. Open http://localhost:8000 manually.'}"
+start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\scripts\open_shogun_when_ready.ps1" -Url "http://localhost:8000" -HealthUrl "http://localhost:8000/api/v1/health" -TimeoutSeconds 120
 
 :: Start the server (blocking — keeps the window open)
 python -m shogun
