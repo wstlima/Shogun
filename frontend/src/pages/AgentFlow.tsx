@@ -2648,6 +2648,8 @@ function AgentFlowCanvas({
               fitView={!flow.nodes?.length ? false : true}
               snapToGrid
               snapGrid={[16, 16]}
+              nodeDragThreshold={5}
+              selectNodesOnDrag={false}
               deleteKeyCode={null}
               proOptions={{ hideAttribution: true }}
               style={{ background: '#060810' }}

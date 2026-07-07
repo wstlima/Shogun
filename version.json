@@ -1,8 +1,8 @@
 {
   "version": "1.6.1",
   "name": "Shogun OS",
-  "build": 47,
+  "build": 48,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Dojo: Fixed skill installation tracking — openclaw_skill_id now stored on SkillInstallation records with auto-migration and backfill."
+  "changelog": "AgentFlow: Fixed node click not opening properties panel on some hardware (trackpads, high-DPI). Added nodeDragThreshold."
 }
