@@ -1,8 +1,8 @@
 {
   "version": "1.6.0",
   "name": "Shogun OS",
-  "build": 42,
+  "build": 43,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Telegram: Shogun now receives uploaded photos/files, can inspect images, saves attachments into the workspace, preserves group/topic context, and replies inside the same Telegram topic."
+  "changelog": "Launcher: Windows Tenshu startup now opens localhost:8000 more reliably, waits longer for readiness, and writes browser-launch diagnostics to logs/launcher-browser.log."
 }
