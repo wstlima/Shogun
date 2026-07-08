@@ -2322,8 +2322,16 @@ function AgentFlowCanvas({
     openNodeInspector(node.id);
   }, [openNodeInspector]);
 
-  const onPaneClick = useCallback(() => {
-    logSamuraiDiagnostic('agent_flow.reactflow.on_pane_click', { selectedNodeId });
+  const onPaneClick = useCallback((event: React.MouseEvent) => {
+    const target = event.target;
+    const clickedNode = target instanceof HTMLElement
+      ? target.closest('.react-flow__node, [title="Node Properties"], [aria-label^="Open properties"]')
+      : null;
+    logSamuraiDiagnostic('agent_flow.reactflow.on_pane_click', {
+      selectedNodeId,
+      ignoredBecauseNodeClick: Boolean(clickedNode),
+    });
+    if (clickedNode) return;
     setSelectedNodeId(null);
   }, [selectedNodeId]);
 

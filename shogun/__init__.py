@@ -1,3 +1,3 @@
 """Shogun — AI Agent Framework."""
 
-__version__ = "1.6.11"
+__version__ = "1.6.12"

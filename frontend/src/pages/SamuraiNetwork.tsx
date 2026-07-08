@@ -261,6 +261,13 @@ export const SamuraiNetwork = () => {
     a.slug.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const openTab = (tab: 'fleet' | 'agent-flow') => {
+    logSamuraiDiagnostic('samurai.tab_click', { tab });
+    setActiveTab(tab);
+    window.history.replaceState(null, '', tab === 'agent-flow' ? '#agent-flow' : window.location.pathname);
+    window.setTimeout(() => captureSamuraiSnapshot(`tab-click-${tab}`), 0);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       {/* Header */}
@@ -309,42 +316,30 @@ export const SamuraiNetwork = () => {
       </div>
 
       {/* Tab Bar */}
-      <div className="flex items-center gap-1 border-b border-shogun-border">
+      <div className="flex items-center gap-2 border border-shogun-border bg-shogun-card p-1 rounded-lg w-fit">
         <button
-          onClick={() => {
-            logSamuraiDiagnostic('samurai.tab_click', { tab: 'fleet' });
-            setActiveTab('fleet');
-          }}
+          onClick={() => openTab('fleet')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            "flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all rounded-md border",
             activeTab === 'fleet'
-              ? "text-shogun-gold"
-              : "text-shogun-subdued hover:text-shogun-text"
+              ? "text-black bg-shogun-gold border-shogun-gold shadow-shogun"
+              : "text-shogun-subdued border-transparent hover:text-shogun-text hover:border-shogun-border"
           )}
         >
-          <Users className="w-3.5 h-3.5" />
+          <Users className="w-4 h-4" />
           {t('samurai_network.tab_fleet', 'Fleet')}
-          {activeTab === 'fleet' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
-          )}
         </button>
         <button
-          onClick={() => {
-            logSamuraiDiagnostic('samurai.tab_click', { tab: 'agent-flow' });
-            setActiveTab('agent-flow');
-          }}
+          onClick={() => openTab('agent-flow')}
           className={cn(
-            "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
+            "flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all rounded-md border",
             activeTab === 'agent-flow'
-              ? "text-shogun-gold"
-              : "text-shogun-subdued hover:text-shogun-text"
+              ? "text-black bg-shogun-gold border-shogun-gold shadow-shogun"
+              : "text-shogun-subdued border-transparent hover:text-shogun-text hover:border-shogun-border"
           )}
         >
-          <GitBranch className="w-3.5 h-3.5" />
+          <GitBranch className="w-4 h-4" />
           {t('samurai_network.tab_agent_flow', 'Agent Flow')}
-          {activeTab === 'agent-flow' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-shogun-gold rounded-full" />
-          )}
         </button>
       </div>
 

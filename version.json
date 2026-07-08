@@ -1,8 +1,8 @@
 {
-  "version": "1.6.11",
+  "version": "1.6.12",
   "name": "Shogun OS",
-  "build": 58,
+  "build": 59,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Samurai: Add visual diagnostics snapshots for tab visibility, overlays, and Agent Flow node Properties."
+  "changelog": "Samurai: Make Fleet and Agent Flow tabs more prominent and prevent Agent Flow pane clicks from immediately closing node Properties."
 }
