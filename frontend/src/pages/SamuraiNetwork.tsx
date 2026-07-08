@@ -25,6 +25,7 @@ import { AgentFlow } from './AgentFlow';
 import {
   clearSamuraiDiagnostics,
   copySamuraiDiagnostics,
+  captureSamuraiSnapshot,
   downloadSamuraiDiagnostics,
   getSamuraiDiagnosticBuild,
   installSamuraiDiagnostics,
@@ -77,6 +78,13 @@ export const SamuraiNetwork = () => {
       width: window.innerWidth,
       height: window.innerHeight,
     });
+    captureSamuraiSnapshot('mount-immediate');
+    window.setTimeout(() => captureSamuraiSnapshot('mount-500ms'), 500);
+    window.setTimeout(() => captureSamuraiSnapshot('mount-2000ms'), 2000);
+    if (window.location.hash === '#agent-flow') {
+      logSamuraiDiagnostic('samurai.hash_open_agent_flow');
+      setActiveTab('agent-flow');
+    }
     fetchAll();
   }, []);
 
@@ -92,6 +100,7 @@ export const SamuraiNetwork = () => {
         foundTabs: tabText,
         tabCount: tabText.length,
       });
+      captureSamuraiSnapshot(`active-tab-${activeTab}`);
     }, 0);
   }, [activeTab]);
 

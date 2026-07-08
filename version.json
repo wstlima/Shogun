@@ -1,8 +1,8 @@
 {
-  "version": "1.6.10",
+  "version": "1.6.11",
   "name": "Shogun OS",
-  "build": 57,
+  "build": 58,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Samurai: Add pasteable diagnostics for first-load tabs and Agent Flow node Properties behavior."
+  "changelog": "Samurai: Add visual diagnostics snapshots for tab visibility, overlays, and Agent Flow node Properties."
 }

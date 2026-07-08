@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'shogun.samuraiDiagnostics';
 const MAX_EVENTS = 250;
-const DIAGNOSTIC_BUILD = '1.6.10-build57';
+const DIAGNOSTIC_BUILD = '1.6.11-build58';
 
 type DiagnosticEvent = {
   ts: string;
@@ -41,6 +41,52 @@ function cleanValue(value: unknown): unknown {
   return value;
 }
 
+function elementSnapshot(element: Element, index: number) {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const topElement = rect.width > 0 && rect.height > 0
+    ? document.elementFromPoint(centerX, centerY)
+    : null;
+
+  return {
+    index,
+    tag: element.tagName.toLowerCase(),
+    text: element.textContent?.trim().replace(/\s+/g, ' ').slice(0, 80) || '',
+    className: element.getAttribute('class') || '',
+    rect: {
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      right: Math.round(rect.right),
+      bottom: Math.round(rect.bottom),
+    },
+    style: {
+      display: style.display,
+      visibility: style.visibility,
+      opacity: style.opacity,
+      pointerEvents: style.pointerEvents,
+      zIndex: style.zIndex,
+      color: style.color,
+      backgroundColor: style.backgroundColor,
+    },
+    topElementAtCenter: topElement ? {
+      tag: topElement.tagName.toLowerCase(),
+      text: topElement.textContent?.trim().replace(/\s+/g, ' ').slice(0, 80) || '',
+      className: topElement.getAttribute('class') || '',
+      sameElement: topElement === element || element.contains(topElement),
+    } : null,
+  };
+}
+
+function findButtonsByText(text: string): Element[] {
+  return Array.from(document.querySelectorAll('button, a')).filter(
+    (element) => element.textContent?.trim().replace(/\s+/g, ' ') === text
+  );
+}
+
 export function logSamuraiDiagnostic(event: string, details: Record<string, unknown> = {}) {
   if (typeof window === 'undefined') return;
   const entry: DiagnosticEvent = {
@@ -52,6 +98,42 @@ export function logSamuraiDiagnostic(event: string, details: Record<string, unkn
   };
   writeEvents([...readEvents(), entry]);
   console.info('[SamuraiDiagnostics]', entry);
+}
+
+export function captureSamuraiSnapshot(reason: string) {
+  if (typeof window === 'undefined') return;
+  const fleetButtons = findButtonsByText('Fleet');
+  const agentFlowButtons = findButtonsByText('Agent Flow');
+  const nodePropertyButtons = Array.from(
+    document.querySelectorAll('[title="Node Properties"], [aria-label^="Open properties"]')
+  );
+  const reactFlowNodes = Array.from(document.querySelectorAll('.react-flow__node'));
+  const inspectorTitles = Array.from(document.querySelectorAll('h3')).filter(
+    (element) => element.textContent?.trim() === 'Node Properties'
+  );
+
+  logSamuraiDiagnostic('samurai.snapshot', {
+    reason,
+    url: window.location.href,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    document: {
+      readyState: document.readyState,
+      bodyClass: document.body.className,
+      rootChildren: document.getElementById('root')?.children.length || 0,
+    },
+    counts: {
+      fleetButtons: fleetButtons.length,
+      agentFlowButtons: agentFlowButtons.length,
+      nodePropertyButtons: nodePropertyButtons.length,
+      reactFlowNodes: reactFlowNodes.length,
+      inspectorTitles: inspectorTitles.length,
+    },
+    fleetButtons: fleetButtons.map(elementSnapshot),
+    agentFlowButtons: agentFlowButtons.map(elementSnapshot),
+    nodePropertyButtons: nodePropertyButtons.slice(0, 10).map(elementSnapshot),
+    reactFlowNodes: reactFlowNodes.slice(0, 10).map(elementSnapshot),
+    inspectorTitles: inspectorTitles.map(elementSnapshot),
+  });
 }
 
 export function installSamuraiDiagnostics() {
@@ -95,6 +177,7 @@ export function getSamuraiDiagnosticsText(): string {
 }
 
 export async function copySamuraiDiagnostics(): Promise<boolean> {
+  captureSamuraiSnapshot('copy');
   const text = getSamuraiDiagnosticsText();
   try {
     await navigator.clipboard.writeText(text);
@@ -107,6 +190,7 @@ export async function copySamuraiDiagnostics(): Promise<boolean> {
 }
 
 export function downloadSamuraiDiagnostics() {
+  captureSamuraiSnapshot('download');
   const text = getSamuraiDiagnosticsText();
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
