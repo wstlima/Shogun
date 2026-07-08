@@ -1,8 +1,8 @@
 {
-  "version": "1.6.12",
+  "version": "1.6.13",
   "name": "Shogun OS",
-  "build": 59,
+  "build": 60,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Samurai: Make Fleet and Agent Flow tabs more prominent and prevent Agent Flow pane clicks from immediately closing node Properties."
+  "changelog": "Agent Flow: Pin Node Properties inside the visible canvas so the inspector cannot open off-screen."
 }

@@ -926,7 +926,7 @@ function NodeInspector({
   };
 
   return (
-    <div className="w-[420px] bg-[#050508] border-l border-[#1a2040] h-full flex flex-col overflow-hidden">
+    <div className="w-full bg-[#050508] border-l border-[#1a2040] h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-[#1a2040] flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -2590,9 +2590,9 @@ function AgentFlowCanvas({
   }, [selectedNodeId, inspectorNode, nodes.length]);
 
   return (
-    <div className="relative flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040]">
+    <div className="relative flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040] min-w-0">
       {/* Canvas */}
-      <div className="flex-1 flex flex-col bg-[#060810]">
+      <div className="flex-1 min-w-0 flex flex-col bg-[#060810]">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-3 py-2 bg-[#0a0e1a] border-b border-[#1a2040]">
           <div className="flex items-center gap-3">
@@ -2758,7 +2758,7 @@ function AgentFlowCanvas({
         )}
 
         {/* React Flow Canvas */}
-        <div ref={reactFlowWrapper} className="flex-1">
+        <div ref={reactFlowWrapper} className="flex-1 min-w-0">
           <OutputResultViewerContext.Provider value={outputResultContext}>
             <ReactFlow
               nodes={renderedNodes}
@@ -2826,14 +2826,16 @@ function AgentFlowCanvas({
 
       {/* Inspector Panel */}
       {inspectorNode && (
-        <NodeInspector
-          node={inspectorNode}
-          onUpdate={onNodeDataUpdate}
-          onClose={() => setSelectedNodeId(null)}
-          agents={agents}
-          routingProfiles={routingProfiles}
-          flowId={flow.id}
-        />
+        <div className="absolute top-0 right-0 bottom-0 z-[60] w-[min(420px,calc(100vw-320px))] min-w-[320px] max-w-[420px] shadow-[-20px_0_40px_rgba(0,0,0,0.35)]">
+          <NodeInspector
+            node={inspectorNode}
+            onUpdate={onNodeDataUpdate}
+            onClose={() => setSelectedNodeId(null)}
+            agents={agents}
+            routingProfiles={routingProfiles}
+            flowId={flow.id}
+          />
+        </div>
       )}
 
       {/* Run History Panel — rendered into #portal-root (outside React #root) */}
