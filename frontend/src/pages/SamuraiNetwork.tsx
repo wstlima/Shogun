@@ -15,11 +15,21 @@ import {
   Zap,
   GitBranch,
   Camera,
+  Clipboard,
+  Download,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { AgentFlow } from './AgentFlow';
+import {
+  clearSamuraiDiagnostics,
+  copySamuraiDiagnostics,
+  downloadSamuraiDiagnostics,
+  getSamuraiDiagnosticBuild,
+  installSamuraiDiagnostics,
+  logSamuraiDiagnostic,
+} from '../lib/samuraiDiagnostics';
 
 export const SamuraiNetwork = () => {
   const { t } = useTranslation();
@@ -45,6 +55,7 @@ export const SamuraiNetwork = () => {
   const createAvatarRef = useRef<HTMLInputElement>(null);
   const [createAvatarFile, setCreateAvatarFile] = useState<File | null>(null);
   const [createAvatarPreview, setCreateAvatarPreview] = useState<string | null>(null);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   
   const [newAgent, setNewAgent] = useState({
     name: '',
@@ -58,11 +69,35 @@ export const SamuraiNetwork = () => {
   });
 
   useEffect(() => {
+    installSamuraiDiagnostics();
+    logSamuraiDiagnostic('samurai.mount', {
+      build: getSamuraiDiagnosticBuild(),
+      path: window.location.pathname,
+      href: window.location.href,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
     fetchAll();
   }, []);
 
+  useEffect(() => {
+    logSamuraiDiagnostic('samurai.active_tab', { activeTab });
+    window.setTimeout(() => {
+      const tabText = Array.from(document.querySelectorAll('button'))
+        .map((button) => button.textContent?.trim())
+        .filter(Boolean)
+        .filter((text) => text === 'Fleet' || text === 'Agent Flow');
+      logSamuraiDiagnostic('samurai.tab_dom_check', {
+        activeTab,
+        foundTabs: tabText,
+        tabCount: tabText.length,
+      });
+    }, 0);
+  }, [activeTab]);
+
   const fetchAll = async () => {
     setLoading(true);
+    logSamuraiDiagnostic('samurai.fetch_all.start');
     try {
       const [agentRes, missionRes, roleRes, routingRes] = await Promise.all([
         axios.get('/api/v1/agents?agent_type=samurai'),
@@ -74,11 +109,25 @@ export const SamuraiNetwork = () => {
       if (missionRes.data.data) setMissions(missionRes.data.data);
       if (roleRes.data.data)    setSamuraiRoles(roleRes.data.data);
       if (routingRes.data.data) setRoutingProfiles(routingRes.data.data);
+      logSamuraiDiagnostic('samurai.fetch_all.success', {
+        agents: agentRes.data?.data?.length || 0,
+        missions: missionRes.data?.data?.length || 0,
+        roles: roleRes.data?.data?.length || 0,
+        routingProfiles: routingRes.data?.data?.length || 0,
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
+      logSamuraiDiagnostic('samurai.fetch_all.error', { error });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopyDiagnostics = async () => {
+    const copied = await copySamuraiDiagnostics();
+    if (!copied) downloadSamuraiDiagnostics();
+    setDiagnosticsCopied(copied);
+    window.setTimeout(() => setDiagnosticsCopied(false), 2000);
   };
 
   const getAgentMission = (agentId: string) =>
@@ -215,6 +264,28 @@ export const SamuraiNetwork = () => {
           <p className="text-shogun-subdued text-sm mt-1">{t('samurai_network.subtitle', 'Orchestrate specialized sub-agents across the mission grid.')}</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleCopyDiagnostics}
+            className="flex items-center gap-2 bg-shogun-card border border-shogun-border hover:border-shogun-blue text-shogun-subdued hover:text-shogun-blue font-bold py-2.5 px-3 rounded-lg transition-all text-[10px] uppercase tracking-widest"
+            title="Copy Samurai diagnostics"
+          >
+            <Clipboard className="w-3.5 h-3.5" />
+            {diagnosticsCopied ? 'Copied' : 'Copy Diagnostics'}
+          </button>
+          <button
+            onClick={downloadSamuraiDiagnostics}
+            className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors"
+            title="Download Samurai diagnostics"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button
+            onClick={clearSamuraiDiagnostics}
+            className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-red-400 transition-colors text-[10px] font-bold"
+            title="Clear Samurai diagnostics"
+          >
+            CLR
+          </button>
           {activeTab === 'fleet' && (
             <>
               <button onClick={fetchAll} className="p-2.5 bg-shogun-card border border-shogun-border rounded-lg text-shogun-subdued hover:text-shogun-gold transition-colors">
@@ -231,7 +302,10 @@ export const SamuraiNetwork = () => {
       {/* Tab Bar */}
       <div className="flex items-center gap-1 border-b border-shogun-border">
         <button
-          onClick={() => setActiveTab('fleet')}
+          onClick={() => {
+            logSamuraiDiagnostic('samurai.tab_click', { tab: 'fleet' });
+            setActiveTab('fleet');
+          }}
           className={cn(
             "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
             activeTab === 'fleet'
@@ -246,7 +320,10 @@ export const SamuraiNetwork = () => {
           )}
         </button>
         <button
-          onClick={() => setActiveTab('agent-flow')}
+          onClick={() => {
+            logSamuraiDiagnostic('samurai.tab_click', { tab: 'agent-flow' });
+            setActiveTab('agent-flow');
+          }}
           className={cn(
             "flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative",
             activeTab === 'agent-flow'

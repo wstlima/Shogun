@@ -70,6 +70,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
+import { logSamuraiDiagnostic } from '../lib/samuraiDiagnostics';
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -223,10 +224,22 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
       )}
       onClick={(event) => {
         if (isInspectorInteractiveTarget(event.target)) return;
+        logSamuraiDiagnostic('agent_flow.node.click', {
+          nodeId: id,
+          type,
+          label: data.label,
+          selected,
+        });
         data.onOpenInspector?.(id);
       }}
       onPointerUp={(event) => {
         if (isInspectorInteractiveTarget(event.target)) return;
+        logSamuraiDiagnostic('agent_flow.node.pointer_up', {
+          nodeId: id,
+          type,
+          label: data.label,
+          selected,
+        });
         data.onOpenInspector?.(id);
       }}
       style={{
@@ -279,11 +292,21 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
           onPointerUp={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            logSamuraiDiagnostic('agent_flow.node.properties_button.pointer_up', {
+              nodeId: id,
+              type,
+              label: data.label,
+            });
             data.onOpenInspector?.(id);
           }}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            logSamuraiDiagnostic('agent_flow.node.properties_button.click', {
+              nodeId: id,
+              type,
+              label: data.label,
+            });
             data.onOpenInspector?.(id);
           }}
         >
@@ -2070,6 +2093,17 @@ function AgentFlowCanvas({
   const [flowName, setFlowName] = useState(flow.name);
   const [editingName, setEditingName] = useState(false);
 
+  useEffect(() => {
+    logSamuraiDiagnostic('agent_flow.canvas.mount', {
+      flowId: flow.id,
+      flowName: flow.name,
+      nodes: flow.nodes?.length || 0,
+      edges: flow.edges?.length || 0,
+      agents: agents.length,
+      routingProfiles: routingProfiles.length,
+    });
+  }, [flow.id]);
+
   // ── Execution state ──────────────────────────────────────
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string | null>(null);
@@ -2218,8 +2252,16 @@ function AgentFlowCanvas({
   useEffect(() => { setDirty(true); }, [nodes, edges]);
 
   const openNodeInspector = useCallback((nodeId: string) => {
+    const node = nodes.find((item) => item.id === nodeId);
+    logSamuraiDiagnostic('agent_flow.inspector.open_request', {
+      nodeId,
+      foundNode: Boolean(node),
+      type: node?.type,
+      label: node?.data?.label,
+      totalNodes: nodes.length,
+    });
     setSelectedNodeId(nodeId);
-  }, []);
+  }, [nodes]);
 
   const renderedNodes = useMemo(
     () => nodes.map((node) => ({
@@ -2272,15 +2314,26 @@ function AgentFlowCanvas({
 
   // Handle node selection
   const onNodeClick = useCallback((_: any, node: Node) => {
+    logSamuraiDiagnostic('agent_flow.reactflow.on_node_click', {
+      nodeId: node.id,
+      type: node.type,
+      label: node.data?.label,
+    });
     openNodeInspector(node.id);
   }, [openNodeInspector]);
 
   const onPaneClick = useCallback(() => {
+    logSamuraiDiagnostic('agent_flow.reactflow.on_pane_click', { selectedNodeId });
     setSelectedNodeId(null);
-  }, []);
+  }, [selectedNodeId]);
 
   const onSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: Node[] }) => {
     if (selectedNodes[0]) {
+      logSamuraiDiagnostic('agent_flow.reactflow.selection_change', {
+        nodeId: selectedNodes[0].id,
+        type: selectedNodes[0].type,
+        label: selectedNodes[0].data?.label,
+      });
       setSelectedNodeId(selectedNodes[0].id);
     }
   }, []);
@@ -2517,6 +2570,16 @@ function AgentFlowCanvas({
 
   // Find the actual selected node object for inspector
   const inspectorNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) || null : null;
+
+  useEffect(() => {
+    logSamuraiDiagnostic('agent_flow.inspector.state', {
+      selectedNodeId,
+      inspectorVisible: Boolean(inspectorNode),
+      nodeType: inspectorNode?.type,
+      nodeLabel: inspectorNode?.data?.label,
+      totalNodes: nodes.length,
+    });
+  }, [selectedNodeId, inspectorNode, nodes.length]);
 
   return (
     <div className="relative flex h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-[#1a2040]">
@@ -3521,14 +3584,31 @@ export const AgentFlow = () => {
   const [agents, setAgents] = useState<any[]>([]);
   const [routingProfiles, setRoutingProfiles] = useState<any[]>([]);
 
+  useEffect(() => {
+    logSamuraiDiagnostic('agent_flow.mount', {
+      path: window.location.pathname,
+      href: window.location.href,
+    });
+  }, []);
+
   // Fetch flows list
   const fetchFlows = useCallback(async () => {
     setLoading(true);
+    logSamuraiDiagnostic('agent_flow.fetch_flows.start');
     try {
       const res = await axios.get('/api/v1/agent-flows');
-      if (res.data.data) setFlows(res.data.data);
+      if (res.data.data) {
+        setFlows(res.data.data);
+        logSamuraiDiagnostic('agent_flow.fetch_flows.success', {
+          count: res.data.data.length,
+          ids: res.data.data.slice(0, 10).map((flow: FlowListItem) => flow.id),
+        });
+      } else {
+        logSamuraiDiagnostic('agent_flow.fetch_flows.empty_response', { response: res.data });
+      }
     } catch (err) {
       console.error('Failed to fetch flows:', err);
+      logSamuraiDiagnostic('agent_flow.fetch_flows.error', { error: err });
     } finally {
       setLoading(false);
     }
@@ -3536,6 +3616,7 @@ export const AgentFlow = () => {
 
   // Fetch supporting data
   const fetchSupportData = useCallback(async () => {
+    logSamuraiDiagnostic('agent_flow.fetch_support.start');
     try {
       const [agentRes, routingRes] = await Promise.all([
         axios.get('/api/v1/agents?agent_type=samurai'),
@@ -3543,8 +3624,13 @@ export const AgentFlow = () => {
       ]);
       if (agentRes.data.data) setAgents(agentRes.data.data);
       if (routingRes.data.data) setRoutingProfiles(routingRes.data.data);
+      logSamuraiDiagnostic('agent_flow.fetch_support.success', {
+        agents: agentRes.data?.data?.length || 0,
+        routingProfiles: routingRes.data?.data?.length || 0,
+      });
     } catch (err) {
       console.error('Failed to fetch support data:', err);
+      logSamuraiDiagnostic('agent_flow.fetch_support.error', { error: err });
     }
   }, []);
 
@@ -3555,11 +3641,22 @@ export const AgentFlow = () => {
 
   // Load a specific flow
   const loadFlow = useCallback(async (flowId: string) => {
+    logSamuraiDiagnostic('agent_flow.load_flow.start', { flowId });
     try {
       const res = await axios.get(`/api/v1/agent-flows/${flowId}`);
-      if (res.data.data) setActiveFlow(res.data.data);
+      if (res.data.data) {
+        logSamuraiDiagnostic('agent_flow.load_flow.success', {
+          flowId,
+          nodes: res.data.data.nodes?.length || 0,
+          edges: res.data.data.edges?.length || 0,
+        });
+        setActiveFlow(res.data.data);
+      } else {
+        logSamuraiDiagnostic('agent_flow.load_flow.empty_response', { flowId, response: res.data });
+      }
     } catch (err) {
       console.error('Failed to load flow:', err);
+      logSamuraiDiagnostic('agent_flow.load_flow.error', { flowId, error: err });
     }
   }, []);
 
