@@ -17,6 +17,41 @@ from typing import Any, Awaitable, Callable
 
 
 ToolHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+MAX_PAGE_SIZE = 200
+
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _record_payload(record: Any) -> dict[str, Any]:
+    if is_dataclass(record):
+        return asdict(record)
+    if isinstance(record, dict):
+        return dict(record)
+    return dict(getattr(record, "__dict__", {}))
+
+
+def _page_args(args: dict[str, Any], default_per_page: int = 50) -> tuple[int, int]:
+    page = max(1, int(args.get("page") or 1))
+    per_page = min(MAX_PAGE_SIZE, max(1, int(args.get("per_page") or default_per_page)))
+    return page, per_page
+
+
+def _paged_response(key: str, items: list[Any], page: int, per_page: int) -> dict[str, Any]:
+    total = len(items)
+    start = (page - 1) * per_page
+    page_items = items[start:start + per_page]
+    return {
+        "status": "success",
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "has_more": start + per_page < total,
+        key: page_items,
+    }
 
 
 def _text_response(payload: Any) -> dict[str, Any]:
@@ -70,8 +105,7 @@ def _skill_payload(skill: Any) -> dict[str, Any]:
 async def openclaw_search_skills(args: dict[str, Any]) -> dict[str, Any]:
     from shogun.integrations.openclaw_client import get_openclaw_client
 
-    page = max(1, int(args.get("page") or 1))
-    per_page = min(200, max(1, int(args.get("per_page") or 50)))
+    page, per_page = _page_args(args)
     async with get_openclaw_client() as client:
         skills = await client.get_skills(
             faculty=args.get("faculty") or None,
@@ -80,17 +114,7 @@ async def openclaw_search_skills(args: dict[str, Any]) -> dict[str, Any]:
             search=args.get("search") or None,
             limit=None,
         )
-    total = len(skills)
-    start = (page - 1) * per_page
-    page_items = skills[start:start + per_page]
-    return {
-        "status": "success",
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "has_more": start + per_page < total,
-        "skills": [_skill_payload(skill) for skill in page_items],
-    }
+    return _paged_response("skills", [_skill_payload(skill) for skill in skills], page, per_page)
 
 
 async def openclaw_get_skill(args: dict[str, Any]) -> dict[str, Any]:
@@ -114,20 +138,32 @@ async def openclaw_get_bundles(args: dict[str, Any]) -> dict[str, Any]:
     return {"status": "success", "total": len(bundles), "bundles": [asdict(b) for b in bundles]}
 
 
-async def openclaw_get_specializations(_args: dict[str, Any]) -> dict[str, Any]:
+async def openclaw_get_specializations(args: dict[str, Any]) -> dict[str, Any]:
     from shogun.integrations.openclaw_client import get_openclaw_client
 
+    page, per_page = _page_args(args)
     async with get_openclaw_client() as client:
         specs = await client.get_specializations()
-    return {"status": "success", "total": len(specs), "specializations": [asdict(s) for s in specs]}
+    return _paged_response(
+        "specializations",
+        [_record_payload(s) for s in specs],
+        page,
+        per_page,
+    )
 
 
-async def openclaw_get_badges(_args: dict[str, Any]) -> dict[str, Any]:
+async def openclaw_get_badges(args: dict[str, Any]) -> dict[str, Any]:
     from shogun.integrations.openclaw_client import get_openclaw_client
 
+    page, per_page = _page_args(args)
     async with get_openclaw_client() as client:
         badges = await client.get_badges()
-    return {"status": "success", "total": len(badges), "badges": badges}
+    return _paged_response(
+        "badges",
+        [_record_payload(b) for b in badges],
+        page,
+        per_page,
+    )
 
 
 async def openclaw_list_installed(_args: dict[str, Any]) -> dict[str, Any]:
@@ -188,13 +224,25 @@ TOOLS: dict[str, dict[str, Any]] = {
         "handler": openclaw_get_bundles,
     },
     "openclaw_get_specializations": {
-        "description": "List OpenClaw certification specializations.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "Page through OpenClaw certification specializations.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "page": {"type": "integer", "default": 1},
+                "per_page": {"type": "integer", "default": 50, "maximum": 200},
+            },
+        },
         "handler": openclaw_get_specializations,
     },
     "openclaw_get_badges": {
-        "description": "List OpenClaw badge catalog entries.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "Page through OpenClaw badge catalog entries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "page": {"type": "integer", "default": 1},
+                "per_page": {"type": "integer", "default": 50, "maximum": 200},
+            },
+        },
         "handler": openclaw_get_badges,
     },
     "openclaw_list_installed": {
@@ -250,9 +298,9 @@ async def _read_resource(uri: str) -> dict[str, Any]:
     elif uri == "openclaw://agent/transcript":
         data = await openclaw_get_transcript({})
     elif uri == "openclaw://badges":
-        data = await openclaw_get_badges({})
+        data = await openclaw_get_badges({"page": 1, "per_page": 100})
     elif uri == "openclaw://specializations":
-        data = await openclaw_get_specializations({})
+        data = await openclaw_get_specializations({"page": 1, "per_page": 100})
     elif uri.startswith("openclaw://skills/"):
         data = await openclaw_get_skill({"skill_id": uri.rsplit("/", 1)[-1]})
     else:
@@ -332,4 +380,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

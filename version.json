@@ -1,8 +1,8 @@
 {
-  "version": "1.6.13",
+  "version": "1.6.14",
   "name": "Shogun OS",
-  "build": 60,
+  "build": 61,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Agent Flow: Pin Node Properties inside the visible canvas so the inspector cannot open off-screen."
+  "changelog": "Dojo MCP: Force UTF-8 stdio and paginate specializations and badges to avoid oversized or encoding-sensitive responses."
 }
