@@ -51,6 +51,9 @@ const StatCard = ({ title, value, status, icon: Icon, colorClass, trend, to }: a
       </div>
     </div>
   );
+  if (to === '/samurai') {
+    return <a href="/samurai" className="block">{content}</a>;
+  }
   return to ? <Link to={to} className="block">{content}</Link> : content;
 };
 
@@ -210,9 +213,9 @@ export const Dashboard = () => {
                   <LayoutGrid className="w-4 h-4 text-shogun-blue" />
                   {t('dashboard.active_deployment', 'Active Deployment Registry')}
                 </h3>
-                <Link to="/samurai" className="text-[10px] font-bold text-shogun-blue hover:text-shogun-gold uppercase tracking-widest transition-colors flex items-center gap-1">
+                <a href="/samurai" className="text-[10px] font-bold text-shogun-blue hover:text-shogun-gold uppercase tracking-widest transition-colors flex items-center gap-1">
                    {t('dashboard.full_fleet', 'Full Fleet')} <ChevronRight className="w-3 h-3" />
-                </Link>
+                </a>
              </div>
              <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -262,10 +265,10 @@ export const Dashboard = () => {
                    <Zap className="w-4 h-4 text-shogun-gold" /> {t('dashboard.quick_actions', 'Quick Actions')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
-                   <Link to="/samurai" className="flex flex-col items-center justify-center p-4 bg-[#050508] border border-shogun-border rounded-xl hover:border-shogun-gold transition-all group">
+                   <a href="/samurai" className="flex flex-col items-center justify-center p-4 bg-[#050508] border border-shogun-border rounded-xl hover:border-shogun-gold transition-all group">
                       <Plus className="w-5 h-5 text-shogun-subdued group-hover:text-shogun-gold mb-2" />
                       <span className="text-[9px] font-bold uppercase tracking-widest text-shogun-subdued group-hover:text-shogun-text">{t('dashboard.new_samurai', 'New Samurai')}</span>
-                   </Link>
+                   </a>
                    <Link to="/katana" className="flex flex-col items-center justify-center p-4 bg-[#050508] border border-shogun-border rounded-xl hover:border-shogun-blue transition-all group">
                       <Settings className="w-5 h-5 text-shogun-subdued group-hover:text-shogun-blue mb-2" />
                       <span className="text-[9px] font-bold uppercase tracking-widest text-shogun-subdued group-hover:text-shogun-text">{t('dashboard.model_setup', 'Model Setup')}</span>
