@@ -112,6 +112,10 @@ TOOL_RISK_REGISTRY: dict[str, dict[str, str]] = {
     "spawn_samurai":          {"risk": "medium",   "category": "agents"},
     # Workflows
     "create_agent_flow":      {"risk": "medium",   "category": "workflow"},
+    "mcp_list_tools":         {"risk": "low",      "category": "mcp"},
+    "mcp_call_tool":          {"risk": "high",     "category": "mcp"},
+    "mcp_list_resources":     {"risk": "low",      "category": "mcp"},
+    "mcp_read_resource":      {"risk": "low",      "category": "mcp"},
     # Office — Excel (Katana)
     "office_excel_open":          {"risk": "low",      "category": "office"},
     "office_excel_read_range":    {"risk": "low",      "category": "office"},

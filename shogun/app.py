@@ -114,7 +114,44 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Non-fatal
 
-    # ── Ensure bushido_schedules table exists and presets are seeded
+    # Ensure built-in OpenClaw Dojo MCP connector exists for agent tools
+    try:
+        import uuid
+        from sqlalchemy import select
+        from shogun.db.engine import async_session_factory
+        from shogun.db.models.tool_connector import ToolConnector
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(ToolConnector).where(ToolConnector.slug == "openclaw-dojo")
+            )
+            if not result.scalars().first():
+                session.add(ToolConnector(
+                    id=uuid.uuid4(),
+                    name="OpenClaw Dojo",
+                    slug="openclaw-dojo",
+                    connector_type="mcp",
+                    source="builtin",
+                    status="connected",
+                    auth_type="custom",
+                    scope="dojo openclaw skills badges achievements transcript",
+                    risk_level="medium",
+                    config={
+                        "command": "shogun-python",
+                        "args": ["-m", "shogun.mcp.openclaw_dojo"],
+                        "env": {},
+                        "transport": "stdio",
+                        "builtin": True,
+                    },
+                    health_status="unknown",
+                    created_by="startup",
+                    updated_by="startup",
+                ))
+                await session.commit()
+    except Exception:
+        pass  # Non-fatal
+
+    # Ensure bushido_schedules table exists and presets are seeded
     try:
         from shogun.services.bushido_engine import ensure_preset_schedules
         await ensure_preset_schedules()

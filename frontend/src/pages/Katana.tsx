@@ -214,6 +214,7 @@ interface McpServer {
 }
 
 const MCP_SERVERS: McpServer[] = [
+  { name: 'OpenClaw Dojo',       description: 'Browse OpenClaw skills, badges, specializations, achievements, transcripts, installs, and exams through Shogun.', command: 'shogun-python', args: ['-m', 'shogun.mcp.openclaw_dojo'], env_keys: [], transport: 'stdio', category: 'Shogun', risk_level: 'medium', github_url: 'https://github.com/AlphaHorizon-AI/Shogun', npm_package: '' },
   // ── Search ──────────────────────────────────────────────────
   { name: 'Brave Search',        description: 'Web and local search via the Brave Search API.',                                    command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'],   env_keys: ['BRAVE_API_KEY'],                    transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/modelcontextprotocol/servers',                   npm_package: '@modelcontextprotocol/server-brave-search' },
   { name: 'Tavily Search',       description: 'AI-optimized search engine for LLMs and RAG pipelines.',                            command: 'npx', args: ['-y', 'tavily-mcp@latest'],                        env_keys: ['TAVILY_API_KEY'],                   transport: 'stdio', category: 'Search',        risk_level: 'low',    github_url: 'https://github.com/tavily-ai/tavily-mcp',                          npm_package: 'tavily-mcp' },

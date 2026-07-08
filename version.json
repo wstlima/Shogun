@@ -1,8 +1,8 @@
 {
-  "version": "1.6.6",
+  "version": "1.6.7",
   "name": "Shogun OS",
-  "build": 53,
+  "build": 54,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Updater: Ship the compiled frontend with the release and prevent successful-looking updates when the frontend build fails. This fixes external installs serving stale Agent Flow UI after the Telegram node update."
+  "changelog": "Dojo: Add an OpenClaw MCP server and Shogun MCP bridge so agents can discover and call richer Dojo/OpenClaw tools through Katana."
 }

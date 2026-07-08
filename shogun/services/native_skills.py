@@ -1532,7 +1532,7 @@ NATIVE_TOOLS = [
     },
     {
         "type": "function",
-        "risk": "medium",
+        "risk": "high",
         "category": "dojo",
         "function": {
             "name": "dojo_take_exam",
@@ -1572,6 +1572,94 @@ NATIVE_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "mcp",
+        "function": {
+            "name": "mcp_list_tools",
+            "description": "List callable tools exposed by a registered Katana MCP connector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "connector_slug": {
+                        "type": "string",
+                        "description": "The Katana MCP connector slug, e.g. 'openclaw-dojo'.",
+                    },
+                },
+                "required": ["connector_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "high",
+        "category": "mcp",
+        "function": {
+            "name": "mcp_call_tool",
+            "description": "Call a tool exposed by a registered Katana MCP connector. Use mcp_list_tools first to discover tool names and input schemas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "connector_slug": {
+                        "type": "string",
+                        "description": "The Katana MCP connector slug, e.g. 'openclaw-dojo'.",
+                    },
+                    "tool_name": {
+                        "type": "string",
+                        "description": "The MCP tool name to call.",
+                    },
+                    "arguments": {
+                        "type": "object",
+                        "description": "JSON arguments for the MCP tool.",
+                    },
+                },
+                "required": ["connector_slug", "tool_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "mcp",
+        "function": {
+            "name": "mcp_list_resources",
+            "description": "List resources exposed by a registered Katana MCP connector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "connector_slug": {
+                        "type": "string",
+                        "description": "The Katana MCP connector slug, e.g. 'openclaw-dojo'.",
+                    },
+                },
+                "required": ["connector_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "risk": "low",
+        "category": "mcp",
+        "function": {
+            "name": "mcp_read_resource",
+            "description": "Read a resource exposed by a registered Katana MCP connector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "connector_slug": {
+                        "type": "string",
+                        "description": "The Katana MCP connector slug, e.g. 'openclaw-dojo'.",
+                    },
+                    "uri": {
+                        "type": "string",
+                        "description": "The MCP resource URI to read.",
+                    },
+                },
+                "required": ["connector_slug", "uri"],
             },
         },
     },
@@ -2367,6 +2455,9 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
         elif name == "telegram_list_groups":
             return await _execute_telegram_list_groups()
 
+        elif name.startswith("mcp_"):
+            return await _execute_mcp_tool(name, args, db_session)
+
         # ── Dojo / Skill Tools ────────────────────────────────────────
         elif name.startswith("dojo_"):
             return await _execute_dojo_tool(name, args)
@@ -2382,6 +2473,51 @@ async def execute_native_tool(name: str, args: dict[str, Any], db_session) -> st
 # ── Office Tool Executor ─────────────────────────────────────────────
 # Tracks open workbook/document/presentation handles across tool calls.
 _open_handles: dict[str, Any] = {}  # file_path → handle object
+
+
+async def _execute_mcp_tool(name: str, args: dict[str, Any], db_session) -> str:
+    """Execute tools and resources from registered Katana MCP connectors."""
+    from shogun.services.mcp_bridge import (
+        call_mcp_tool,
+        list_mcp_resources,
+        list_mcp_tools,
+        read_mcp_resource,
+    )
+
+    connector_slug = str(args.get("connector_slug") or "").strip()
+    if not connector_slug:
+        return json.dumps({"status": "error", "message": "connector_slug is required."})
+
+    try:
+        if name == "mcp_list_tools":
+            result = await list_mcp_tools(db_session, connector_slug)
+        elif name == "mcp_call_tool":
+            tool_name = str(args.get("tool_name") or "").strip()
+            if not tool_name:
+                return json.dumps({"status": "error", "message": "tool_name is required."})
+            arguments = args.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                return json.dumps({"status": "error", "message": "arguments must be a JSON object."})
+            result = await call_mcp_tool(db_session, connector_slug, tool_name, arguments)
+        elif name == "mcp_list_resources":
+            result = await list_mcp_resources(db_session, connector_slug)
+        elif name == "mcp_read_resource":
+            uri = str(args.get("uri") or "").strip()
+            if not uri:
+                return json.dumps({"status": "error", "message": "uri is required."})
+            result = await read_mcp_resource(db_session, connector_slug, uri)
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown MCP tool: {name}"})
+
+        return json.dumps({
+            "status": "success",
+            "connector": result.connector,
+            "tool": result.tool,
+            "response": result.response,
+        })
+    except Exception as exc:
+        logger.error("MCP tool execution failed: %s", exc, exc_info=True)
+        return json.dumps({"status": "error", "message": str(exc)})
 
 
 async def _execute_office_tool(name: str, args: dict[str, Any]) -> str:

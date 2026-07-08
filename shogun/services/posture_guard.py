@@ -333,7 +333,7 @@ def filter_tools_by_posture(tools: list[dict], posture: dict) -> tuple[list[dict
                 continue
 
         # ── Dojo: Skill management tools ──
-        if name.startswith("dojo_") and not posture.get("skill_auto_install", False):
+        if (name.startswith("dojo_") or name.startswith("mcp_")) and not posture.get("skill_auto_install", False):
             denied.append(name)
             continue
 

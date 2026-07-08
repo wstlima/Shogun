@@ -54,6 +54,7 @@ async def _seed_defaults():
     from shogun.db.models.persona import Persona
     from shogun.db.models.model_routing import ModelRoutingProfile
     from shogun.db.models.samurai_role import SamuraiRole
+    from shogun.db.models.tool_connector import ToolConnector
     from sqlalchemy import select
 
     async with async_session_factory() as session:
@@ -79,6 +80,37 @@ async def _seed_defaults():
             print("   OK: Seeded: OpenClaw College skill source")
         else:
             print("   INFO: OpenClaw College source already exists")
+
+        result = await session.execute(
+            select(ToolConnector).where(ToolConnector.slug == "openclaw-dojo")
+        )
+        if not result.scalars().first():
+            connector = ToolConnector(
+                id=uuid.uuid4(),
+                name="OpenClaw Dojo",
+                slug="openclaw-dojo",
+                connector_type="mcp",
+                source="builtin",
+                base_url=None,
+                status="connected",
+                auth_type="custom",
+                scope="dojo openclaw skills badges achievements transcript",
+                risk_level="medium",
+                config={
+                    "command": "shogun-python",
+                    "args": ["-m", "shogun.mcp.openclaw_dojo"],
+                    "env": {},
+                    "transport": "stdio",
+                    "builtin": True,
+                },
+                health_status="unknown",
+                created_by="bootstrap",
+                updated_by="bootstrap",
+            )
+            session.add(connector)
+            print("   OK: Seeded: OpenClaw Dojo MCP connector")
+        else:
+            print("   INFO: OpenClaw Dojo MCP connector already exists")
 
         # ── Default security policies ─────────────────────────
         for slug, name, tier in [
