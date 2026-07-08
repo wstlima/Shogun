@@ -59,6 +59,14 @@ export const Sidebar = () => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const { t } = useTranslation();
 
+  const openSamurai = () => {
+    if (location.pathname === '/samurai') {
+      window.location.reload();
+      return;
+    }
+    window.location.href = '/samurai';
+  };
+
   // Check for updates on mount (non-blocking)
   useEffect(() => {
     fetch('/api/v1/updates/check')
@@ -110,7 +118,7 @@ export const Sidebar = () => {
             subLabel={t('nav.samurai_sub', 'Sub-Agents')} 
             active={location.pathname === '/samurai'}
             badge={activeRuns > 0 ? `${activeRuns} RUNNING` : null}
-            onClick={() => navigate('/samurai')}
+            onClick={openSamurai}
           />
           <NavItem 
             icon={MessageSquare} 

@@ -66,6 +66,7 @@ import {
   Sparkles,
   LayoutGrid,
   MessageSquare,
+  Settings,
 } from 'lucide-react';
 import axios from 'axios';
 import { cn } from '../lib/utils';
@@ -224,6 +225,10 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
         if (isInspectorInteractiveTarget(event.target)) return;
         data.onOpenInspector?.(id);
       }}
+      onPointerUp={(event) => {
+        if (isInspectorInteractiveTarget(event.target)) return;
+        data.onOpenInspector?.(id);
+      }}
       style={{
         background: isRunning
           ? `linear-gradient(135deg, ${color}0a 0%, #0e1225 42%, ${color}06 100%)`
@@ -262,6 +267,28 @@ function FlowNode({ id, data, selected, type }: { id: string; data: Record<strin
             {type.replace('_', ' ')}
           </div>
         </div>
+        <button
+          type="button"
+          title="Node Properties"
+          aria-label={`Open properties for ${data.label || 'node'}`}
+          className="nodrag nopan shrink-0 w-6 h-6 rounded border border-[#1a2040] bg-[#0a0e1a] text-[#7a8899] hover:text-[#d4a017] hover:border-[#d4a017]/50 flex items-center justify-center transition-colors"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onPointerUp={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onOpenInspector?.(id);
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onOpenInspector?.(id);
+          }}
+        >
+          <Settings className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Body — type-specific preview */}

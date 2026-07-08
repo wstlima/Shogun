@@ -1,8 +1,8 @@
 {
-  "version": "1.6.7",
+  "version": "1.6.8",
   "name": "Shogun OS",
-  "build": 54,
+  "build": 55,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Dojo: Add an OpenClaw MCP server and Shogun MCP bridge so agents can discover and call richer Dojo/OpenClaw tools through Katana."
+  "changelog": "Samurai: Force clean navigation into the Samurai page and add an explicit node Properties button plus pointer fallback for Agent Flow nodes."
 }
