@@ -12,6 +12,8 @@ __pycache__/
 dist/
 build/
 *.egg
+!frontend/dist/
+!frontend/dist/**
 
 # ── Virtual Environment ──────────────────────────────────────
 .venv/

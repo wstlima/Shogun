@@ -1,8 +1,8 @@
 {
-  "version": "1.6.5",
+  "version": "1.6.6",
   "name": "Shogun OS",
-  "build": 52,
+  "build": 53,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Agent Flow: Nodes directly open their properties panel from the node click target, including template-created flows. Frontend: Detect server build changes and refresh stale pages automatically."
+  "changelog": "Updater: Ship the compiled frontend with the release and prevent successful-looking updates when the frontend build fails. This fixes external installs serving stale Agent Flow UI after the Telegram node update."
 }

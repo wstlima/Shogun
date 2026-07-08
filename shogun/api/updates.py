@@ -128,6 +128,49 @@ async def apply_update():
         if not extracted_dirs or not extracted_dirs[0].is_dir():
             raise HTTPException(status_code=500, detail="ZIP extraction produced no files")
         source = extracted_dirs[0]
+        warnings: list[str] = []
+
+        source_frontend_dir = source / "frontend"
+        if (source_frontend_dir / "package.json").exists():
+            logger.info("Building frontend from update package...")
+            try:
+                npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
+                npm_install = subprocess.run(
+                    [npm_cmd, "install", "--silent"],
+                    cwd=str(source_frontend_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                if npm_install.returncode != 0:
+                    logger.error("Frontend npm install failed: %s", npm_install.stderr[-4000:])
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Frontend update build failed during npm install. Shogun was not changed.",
+                    )
+
+                npm_build = subprocess.run(
+                    [npm_cmd, "run", "build", "--silent"],
+                    cwd=str(source_frontend_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                if npm_build.returncode != 0:
+                    logger.error("Frontend npm build failed: %s", npm_build.stderr[-4000:])
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Frontend update build failed. Shogun was not changed.",
+                    )
+                logger.info("Frontend package built successfully.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error("Frontend update build failed before copy: %s", e, exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail="Frontend update build failed before files were changed.",
+                )
 
         # Step 4: Copy files (skip top-level data/, venv/, node_modules/, .env)
         # Only skip these at the top level — nested dirs like shogun/data/ must be copied.
@@ -142,6 +185,8 @@ async def apply_update():
 
             # Skip protected top-level directories only
             if rel.parts[0] in skip_toplevel:
+                continue
+            if "node_modules" in rel.parts or "__pycache__" in rel.parts:
                 continue
 
             dest = root / rel
@@ -158,8 +203,7 @@ async def apply_update():
 
         logger.info("Update applied: %d files updated", updated_files)
 
-        # Step 6: Rebuild frontend
-        warnings: list[str] = []
+        # Step 6: Refresh Python dependencies
         dependency_result = subprocess.run(
             [sys.executable, "-m", "pip", "install", ".[office]", "--disable-pip-version-check"],
             cwd=str(root),
@@ -170,36 +214,6 @@ async def apply_update():
         if dependency_result.returncode != 0:
             warnings.append("Python dependency refresh failed; see server logs.")
             logger.warning("Dependency refresh failed: %s", dependency_result.stderr[-2000:])
-
-        frontend_dir = root / "frontend"
-        if (frontend_dir / "package.json").exists():
-            logger.info("Rebuilding frontend...")
-            try:
-                npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
-                npm_install = subprocess.run(
-                    [npm_cmd, "install", "--silent"],
-                    cwd=str(frontend_dir),
-                    capture_output=True,
-                    timeout=120,
-                )
-                npm_build = subprocess.run(
-                    [npm_cmd, "run", "build", "--silent"],
-                    cwd=str(frontend_dir),
-                    capture_output=True,
-                    timeout=120,
-                )
-                if npm_install.returncode or npm_build.returncode:
-                    warnings.append("Frontend rebuild failed; see server logs.")
-                    logger.warning(
-                        "Frontend update failed: install=%s build=%s",
-                        npm_install.returncode,
-                        npm_build.returncode,
-                    )
-                else:
-                    logger.info("Frontend rebuilt successfully.")
-            except Exception as e:
-                warnings.append("Frontend rebuild failed; see server logs.")
-                logger.warning("Frontend rebuild failed: %s", e)
 
         # Read the new version
         new_version = json.loads((root / "version.json").read_text(encoding="utf-8"))
