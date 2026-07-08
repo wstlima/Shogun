@@ -1260,7 +1260,7 @@ function NodeInspector({
 
                 <div className="bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg p-2.5">
                   <p className="text-[9px] text-[#22c55e]/80 leading-relaxed">
-                    <strong>Note:</strong> The flow must be <strong>Activated</strong> for the schedule to register with the job scheduler. Save → then Activate from the flow list.
+                    <strong>Note:</strong> Saving a scheduled trigger activates the flow and registers it with the job scheduler.
                   </p>
                 </div>
               </>

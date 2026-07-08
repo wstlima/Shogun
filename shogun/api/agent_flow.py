@@ -53,7 +53,18 @@ async def create_flow(
     svc: AgentFlowService = Depends(get_agent_flow_service),
 ):
     """Create a new Agent Flow."""
-    record = await svc.create(**body.model_dump())
+    data = body.model_dump()
+    if data.get("trigger_type") == "scheduled":
+        data["schedule_config"] = _normalized_schedule_config(data.get("schedule_config") or {})
+        data["status"] = "active"
+    record = await svc.create(**data)
+    try:
+        await _sync_live_flow_schedule(record)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"AgentFlow schedule could not be synchronized: {exc}",
+        ) from exc
     return ApiResponse(data=AgentFlowResponse.model_validate(record))
 
 
@@ -73,6 +84,22 @@ async def _sync_live_flow_schedule(flow) -> None:
         await register_flow_schedule(flow)
     else:
         await deregister_flow_schedule(flow.id)
+
+
+def _normalized_schedule_config(config: dict | None) -> dict:
+    """Return a complete schedule_config for Agent Flow cron registration."""
+    normalized = dict(config or {})
+    frequency = normalized.get("frequency") or "nightly"
+    normalized["frequency"] = frequency
+    if frequency == "hourly":
+        normalized["minute_offset"] = int(normalized.get("minute_offset") or 0)
+    else:
+        normalized["schedule_time"] = normalized.get("schedule_time") or "07:00"
+    if frequency == "weekly":
+        normalized["schedule_days"] = normalized.get("schedule_days") or ["mon", "tue", "wed", "thu", "fri"]
+    if frequency == "monthly":
+        normalized["schedule_day"] = int(normalized.get("schedule_day") or 1)
+    return normalized
 
 
 def _load_templates() -> dict:
@@ -158,12 +185,13 @@ async def create_from_template(
 
     # Create the flow
     flow_name = body.get("name") or template["name"]
+    trigger_type = template.get("trigger_type", "manual")
     flow = await svc.create(
         name=flow_name,
         description=template.get("description", ""),
-        trigger_type=template.get("trigger_type", "manual"),
-        schedule_config=template.get("schedule_config", {}),
-        status="draft",
+        trigger_type=trigger_type,
+        schedule_config=_normalized_schedule_config(template.get("schedule_config", {})) if trigger_type == "scheduled" else template.get("schedule_config", {}),
+        status="active" if trigger_type == "scheduled" else "draft",
     )
 
     # Save the graph (nodes + edges) from the template
@@ -186,6 +214,14 @@ async def create_from_template(
                 flow = saved
         except Exception as exc:
             _log.error("FROM-TEMPLATE: save_flow_graph FAILED: %s", exc, exc_info=True)
+
+    try:
+        await _sync_live_flow_schedule(flow)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"AgentFlow schedule could not be synchronized: {exc}",
+        ) from exc
 
     return ApiResponse(data=AgentFlowResponse.model_validate(flow))
 
@@ -227,10 +263,19 @@ async def update_flow(
     svc: AgentFlowService = Depends(get_agent_flow_service),
 ):
     """Update Agent Flow metadata (name, description, trigger, status)."""
-    update_data = body.model_dump(exclude_unset=True)
-    record = await svc.update(flow_id, **update_data)
-    if not record:
+    current = await svc.get_by_id(flow_id)
+    if not current or current.is_deleted:
         raise HTTPException(status_code=404, detail="Agent Flow not found")
+
+    update_data = body.model_dump(exclude_unset=True)
+    next_trigger = update_data.get("trigger_type", current.trigger_type)
+    if next_trigger == "scheduled":
+        update_data["schedule_config"] = _normalized_schedule_config(
+            update_data.get("schedule_config") or current.schedule_config or {}
+        )
+        update_data.setdefault("status", "active")
+
+    record = await svc.update(flow_id, **update_data)
     try:
         await _sync_live_flow_schedule(record)
     except Exception as exc:

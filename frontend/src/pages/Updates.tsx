@@ -14,6 +14,11 @@ interface UpdateStatus {
   error?: string;
   auth_required?: boolean;
   token_configured?: boolean;
+  installed_version?: string;
+  installed_build?: number;
+  running_version?: string;
+  running_build?: number;
+  restart_required?: boolean;
 }
 
 export const Updates = () => {
@@ -84,6 +89,7 @@ export const Updates = () => {
         const warningText = data.warnings?.length ? ` Warnings: ${data.warnings.join(' ')}` : '';
         setInstallResult(`✅ Updated to v${data.new_version} (build ${data.new_build}). ${data.files_updated} files updated. Please restart Shogun.${warningText}`);
         checkForUpdates(true);
+        window.setTimeout(() => window.location.reload(), 1800);
       } else {
         setInstallResult(`❌ ${data.detail || 'Update failed'}`);
       }
@@ -155,6 +161,12 @@ export const Updates = () => {
           </div>
         )}
       </div>
+
+      {status?.restart_required && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-sm text-amber-200">
+          Installed build {status.installed_build} is ready, but Shogun is still running build {status.running_build}. Restart Shogun to finish switching over.
+        </div>
+      )}
 
       {status?.auth_required && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 space-y-3">

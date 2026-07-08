@@ -1,8 +1,8 @@
 {
-  "version": "1.6.14",
+  "version": "1.6.15",
   "name": "Shogun OS",
-  "build": 61,
+  "build": 62,
   "channel": "stable",
   "released": "2026-07-07T00:00:00Z",
-  "changelog": "Dojo MCP: Force UTF-8 stdio and paginate specializations and badges to avoid oversized or encoding-sensitive responses."
+  "changelog": "Agent Flow schedules now activate when saved, updates show restart-pending state, and the update page refreshes itself after install."
 }

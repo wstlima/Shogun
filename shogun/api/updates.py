@@ -21,6 +21,19 @@ from shogun.services.update_checker import (
 
 logger = logging.getLogger("shogun.api.updates")
 router = APIRouter(prefix="/updates", tags=["updates"])
+RUNNING_VERSION = get_local_version_sync()
+
+
+def _with_runtime_version_status(payload: dict) -> dict:
+    """Attach whether the running server still needs a restart after update."""
+    installed = get_local_version_sync()
+    result = dict(payload)
+    result["installed_version"] = installed.get("version", "0.0.0")
+    result["installed_build"] = installed.get("build", 0)
+    result["running_version"] = RUNNING_VERSION.get("version", "0.0.0")
+    result["running_build"] = RUNNING_VERSION.get("build", 0)
+    result["restart_required"] = installed.get("build", 0) != RUNNING_VERSION.get("build", 0)
+    return result
 
 
 @router.get("/check")
@@ -32,13 +45,13 @@ async def check_updates(force: bool = False):
       - force: bypass the cache and check immediately
     """
     result = await check_for_updates(force=force)
-    return result
+    return _with_runtime_version_status(result)
 
 
 @router.get("/version")
 async def get_version():
     """Return the current local version info."""
-    return get_local_version_sync()
+    return _with_runtime_version_status(get_local_version_sync())
 
 
 @router.get("/credentials")

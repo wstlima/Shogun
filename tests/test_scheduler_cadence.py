@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,10 +9,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from shogun.api.agent_flow import _sync_live_flow_schedule
+from shogun.api.agent_flow import _sync_live_flow_schedule, update_flow
 from shogun.api.bushido import create_schedule, list_schedules
 from shogun.db.models.agent_flow import AgentFlow
 from shogun.db.models.bushido import BushidoSchedule
+from shogun.schemas.agent_flow import AgentFlowUpdate
 from shogun.schemas.bushido import BushidoScheduleCreate
 from shogun.services.bushido_service import BushidoScheduleService
 
@@ -131,6 +133,66 @@ async def test_agent_flow_activation_and_pause_share_scheduler_lifecycle(monkeyp
     await _sync_live_flow_schedule(paused)
 
     assert calls == [("register", flow_id), ("deregister", flow_id)]
+
+
+@pytest.mark.asyncio
+async def test_saving_scheduled_agentflow_activates_and_registers(monkeypatch):
+    import shogun.scheduler as scheduler_module
+
+    flow_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    flow = SimpleNamespace(
+        id=flow_id,
+        name="Scheduled briefing",
+        description="",
+        status="draft",
+        trigger_type="manual",
+        schedule_config={},
+        viewport={},
+        is_deleted=False,
+        created_at=now,
+        updated_at=now,
+        created_by=None,
+        nodes=[],
+        edges=[],
+    )
+    calls: list[tuple[str, uuid.UUID]] = []
+
+    class FakeFlowService:
+        async def get_by_id(self, requested_id):
+            assert requested_id == flow_id
+            return flow
+
+        async def update(self, requested_id, **kwargs):
+            assert requested_id == flow_id
+            for key, value in kwargs.items():
+                setattr(flow, key, value)
+            flow.updated_at = datetime.now(timezone.utc)
+            return flow
+
+        async def get_flow_full(self, requested_id):
+            assert requested_id == flow_id
+            return flow
+
+    async def register(saved_flow):
+        calls.append(("register", saved_flow.id))
+
+    async def deregister(saved_flow_id):
+        calls.append(("deregister", saved_flow_id))
+
+    monkeypatch.setattr(scheduler_module, "register_flow_schedule", register)
+    monkeypatch.setattr(scheduler_module, "deregister_flow_schedule", deregister)
+
+    body = AgentFlowUpdate(
+        trigger_type="scheduled",
+        schedule_config={"frequency": "nightly", "schedule_time": "08:30"},
+    )
+    response = await update_flow(flow_id, body, FakeFlowService())
+
+    assert response.data.status == "active"
+    assert response.data.trigger_type == "scheduled"
+    assert response.data.schedule_config["schedule_time"] == "08:30"
+    assert calls == [("register", flow_id)]
 
 
 @pytest.mark.asyncio
