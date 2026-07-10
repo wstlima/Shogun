@@ -1,0 +1,16 @@
+{
+  "name": "shogun-afm-installer",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Docker installer for Shogun AFM (Shogun + Gensui). Runs inside a Node container — see ../Shogun-AFM-Docker-Install.sh / .bat for the shim that invokes it.",
+  "type": "module",
+  "main": "install.mjs",
+  "scripts": {
+    "install-shogun": "node install.mjs"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "enquirer": "^2.4.1",
+    "picocolors": "^1.1.1"
+  }
+}

@@ -1,0 +1,73 @@
+# Centralized Docker Compose for Shogun (Tenshu) + Gensui (fleet management)
+# — IMAGE mode: pulls prebuilt images from Docker Hub instead of building
+# from source. See docker-compose.yml for the build-from-source variant.
+#
+# Run from this directory:
+#   SHOGUN_IMAGE_TAG=1.0.0.1 docker compose -f docker-compose.image.yml up -d
+# (defaults to "latest" if SHOGUN_IMAGE_TAG is unset)
+#
+# Uses the same external volumes as docker-compose.yml (repo_shogun_*,
+# gensui_gensui_*), so switching between build mode and image mode does
+# not lose data — both compose files point at the same named volumes.
+
+services:
+  shogun:
+    image: agenciasupermix/shogun-afm:${SHOGUN_IMAGE_TAG:-latest}
+    container_name: shogun-afm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - shogun_data:/app/data
+      - shogun_logs:/app/logs
+      - shogun_configs:/app/configs
+      - shogun_vault:/app/vault
+
+  gensui:
+    image: agenciasupermix/gensui-afm:${SHOGUN_IMAGE_TAG:-latest}
+    container_name: gensui-afm
+    restart: unless-stopped
+    env_file:
+      - ../gensui/.env
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - gensui_data:/app/data
+      - gensui_logs:/app/logs
+
+  gensui-nginx:
+    image: nginx:1.27-alpine
+    container_name: gensui-nginx
+    profiles:
+      - server
+    restart: unless-stopped
+    depends_on:
+      - gensui
+    volumes:
+      - ../gensui/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../gensui/certs:/etc/nginx/certs:ro
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+
+volumes:
+  # Same external volumes as docker-compose.yml — see that file's comment
+  # for why `external: true` + explicit `name:` matters here.
+  shogun_data:
+    external: true
+    name: repo_shogun_data
+  shogun_logs:
+    external: true
+    name: repo_shogun_logs
+  shogun_configs:
+    external: true
+    name: repo_shogun_configs
+  shogun_vault:
+    external: true
+    name: repo_shogun_vault
+  gensui_data:
+    external: true
+    name: gensui_gensui_data
+  gensui_logs:
+    external: true
+    name: gensui_gensui_logs
