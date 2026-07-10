@@ -13,18 +13,55 @@ not the venv-based `install.sh` path, which is documented in the main
 ## Directory layout
 
 ```text
-docker/docker-compose.yml   # centralized compose: shogun + gensui + optional nginx
-Dockerfile                  # Shogun (Tenshu) image — build context: repo root
-gensui/Dockerfile           # Gensui image — build context: repo root (not gensui/, see below)
-gensui/.env                 # Gensui config (copy from gensui/.env.example)
+docker/docker-compose.yml        # build mode: builds shogun + gensui from source
+docker/docker-compose.image.yml  # image mode: pulls agenciasupermix/{shogun-afm,gensui-afm}
+docker/docker-compose.slim.yml   # slim mode: smallest Shogun image, torch installs into a volume on first run
+Dockerfile                       # Shogun (Tenshu) image — build context: repo root
+Dockerfile.slim                  # Shogun slim image (no Python deps baked in) — used by docker-compose.slim.yml
+gensui/Dockerfile                # Gensui image — build context: repo root (not gensui/, see below)
+gensui/.env                      # Gensui config (copy from gensui/.env.example)
 ```
 
-`docker/docker-compose.yml` is the single entry point for both services.
-Both Dockerfiles stay at their original locations — repo root and
-`gensui/` — because their `COPY` instructions are relative to those
-paths. Do not move a Dockerfile without re-checking every `COPY` line;
-see "History: path bugs fixed" below for what happens when this goes
-wrong.
+Three ways to run the stack — pick one compose file:
+
+| Mode | File | Shogun image size | Trade-off |
+| --- | --- | --- | --- |
+| Build | `docker-compose.yml` | ~2.7GB | Builds locally; longest first build, no network dependency after |
+| Image | `docker-compose.image.yml` | ~2.7GB | Fastest to start; pulls prebuilt images from Docker Hub |
+| Slim | `docker-compose.slim.yml` | ~500MB image + ~800MB–5GB on first run | Smallest published image, but not self-contained — a `torch-init` service installs Python deps (including torch) into a shared volume the first time it runs |
+
+Both non-slim Dockerfiles stay at their original locations — repo root
+and `gensui/` — because their `COPY` instructions are relative to
+those paths. Do not move a Dockerfile without re-checking every `COPY`
+line; see "History: path bugs fixed" below for what happens when this
+goes wrong.
+
+### Slim mode details
+
+`docker-compose.slim.yml` trades image size for a slower (or
+network-dependent) first startup. A one-shot `torch-init` service
+installs Python dependencies — including `torch` — into the
+`repo_shogun_venv` volume before the `shogun` service starts
+(`depends_on: torch-init: condition: service_completed_successfully`).
+`Dockerfile.slim` ships with no Python packages baked in; its
+entrypoint (`docker/slim-entrypoint.sh`) activates `/venv` (the same
+volume) at container start.
+
+Choose the torch variant with `TORCH_VARIANT`:
+
+```bash
+TORCH_VARIANT=cpu docker compose -f docker-compose.slim.yml up -d --build   # default
+TORCH_VARIANT=gpu docker compose -f docker-compose.slim.yml up -d --build
+```
+
+GPU mode requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+on the host, and the commented-out `deploy.resources.reservations.devices`
+block under the `shogun` service in `docker-compose.slim.yml` uncommented.
+
+Once `repo_shogun_venv` is populated, subsequent `docker compose up`
+runs skip reinstalling (torch-init checks for `/venv/bin/python` and
+exits early if found). To force a reinstall (e.g. to switch from CPU
+to GPU torch), remove the volume first: `docker volume rm repo_shogun_venv`.
 
 ## First-time setup
 

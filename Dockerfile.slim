@@ -6,11 +6,11 @@ RUN npm ci --silent
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Python Runtime ───────────────────────────────────
+# ── Stage 2: Python Runtime (slim — no Python deps baked in) ──
 FROM python:3.12-slim
 
 LABEL maintainer="AlphaHorizon AI"
-LABEL description="Shogun — GUI-first AI agent framework (The Tenshu)"
+LABEL description="Shogun — GUI-first AI agent framework (The Tenshu) — slim variant, deps installed into an external volume by the torch-init service"
 
 # System deps (curl for healthcheck; playwright/chromium deps for Mado browser automation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,19 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies first (better layer caching)
+# Copy application code (no Python deps installed in this image — see
+# docker-compose.slim.yml's torch-init service, which populates
+# /venv on first run in a shared volume this container mounts at runtime)
 COPY pyproject.toml ./
-# torch's default PyPI wheel bundles full CUDA support (~5GB) even though
-# this container has no GPU and torch.cuda.is_available() is always False
-# here — install the CPU-only build from PyTorch's own index first so the
-# subsequent `pip install .` picks it up instead of pulling the CUDA wheel.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir ".[office]"
-
-# Mado browser engine (Playwright Chromium) — same as install.sh step 4
-RUN python -m playwright install chromium
-
-# Copy application code
 COPY shogun/ ./shogun/
 COPY main.py ./main.py
 COPY version.json ./version.json
@@ -45,16 +36,20 @@ COPY .env.example ./.env.example
 # Copy built frontend from stage 1 (PROJECT_ROOT/frontend/dist, see shogun/app.py)
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+COPY docker/slim-entrypoint.sh /entrypoint.sh
+
 # Non-root user (see gensui/Dockerfile for the same pattern / migration notes)
 RUN groupadd --gid 1000 shogun \
     && useradd --uid 1000 --gid shogun --shell /bin/bash --create-home shogun \
-    && mkdir -p /app/data /app/logs /app/configs /app/vault \
-    && chown -R shogun:shogun /app
+    && mkdir -p /app/data /app/logs /app/configs /app/vault /venv \
+    && chown -R shogun:shogun /app /venv \
+    && chmod +x /entrypoint.sh
 USER shogun
 
 EXPOSE 8000
 
 VOLUME /app/data
+VOLUME /venv
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
@@ -62,4 +57,5 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 ENV API_HOST=0.0.0.0
 ENV API_PORT=8000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "shogun"]

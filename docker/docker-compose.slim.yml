@@ -1,0 +1,128 @@
+# Centralized Docker Compose for Shogun (Tenshu) + Gensui (fleet management)
+# — SLIM mode: the Shogun image ships with no Python dependencies baked
+# in. A one-shot torch-init service installs them (including torch,
+# CPU or GPU build) into a shared volume on first run, which the shogun
+# service then mounts and activates via docker/slim-entrypoint.sh.
+#
+# Trade-off vs docker-compose.yml (build mode) / docker-compose.image.yml
+# (pull mode): smaller published image (~500MB vs 2.73GB), but first
+# startup on a fresh volume takes as long as `pip install` does (CPU
+# build ~800MB download; GPU build ~5GB), and the image is no longer
+# fully self-contained — see docs/RUNBOOK.md before choosing this mode.
+#
+# Run from this directory:
+#   TORCH_VARIANT=cpu docker compose -f docker-compose.slim.yml up -d
+#   TORCH_VARIANT=gpu docker compose -f docker-compose.slim.yml up -d
+# (defaults to "cpu" if TORCH_VARIANT is unset)
+#
+# GPU mode requires the NVIDIA Container Toolkit on the host and the
+# `deploy.resources.reservations.devices` block below active (commented
+# out by default — uncomment if TORCH_VARIANT=gpu).
+
+services:
+  torch-init:
+    image: python:3.12-slim
+    container_name: shogun-torch-init
+    volumes:
+      - shogun_venv:/venv
+      - ../pyproject.toml:/src/pyproject.toml:ro
+      - ../shogun:/src/shogun:ro
+    environment:
+      TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ -x /venv/bin/python ]; then
+          echo "torch-init: /venv already populated, skipping (delete the shogun_venv volume to force reinstall)."
+          exit 0
+        fi
+        python -m venv /venv
+        /venv/bin/pip install --no-cache-dir --upgrade pip
+        if [ "$$TORCH_VARIANT" = "gpu" ]; then
+          echo "torch-init: installing GPU (CUDA) build of torch..."
+          /venv/bin/pip install --no-cache-dir torch
+        else
+          echo "torch-init: installing CPU-only build of torch..."
+          /venv/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+        fi
+        cd /src && /venv/bin/pip install --no-cache-dir ".[office]"
+        echo "torch-init: done."
+
+  shogun:
+    build:
+      context: ..
+      dockerfile: Dockerfile.slim
+    container_name: shogun-afm
+    restart: unless-stopped
+    depends_on:
+      torch-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - shogun_venv:/venv
+      - shogun_data:/app/data
+      - shogun_logs:/app/logs
+      - shogun_configs:/app/configs
+      - shogun_vault:/app/vault
+    # Uncomment for TORCH_VARIANT=gpu (requires NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  gensui:
+    build:
+      context: ..
+      dockerfile: gensui/Dockerfile
+    container_name: gensui-afm
+    restart: unless-stopped
+    env_file:
+      - ../gensui/.env
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - gensui_data:/app/data
+      - gensui_logs:/app/logs
+
+  gensui-nginx:
+    image: nginx:1.27-alpine
+    container_name: gensui-nginx
+    profiles:
+      - server
+    restart: unless-stopped
+    depends_on:
+      - gensui
+    volumes:
+      - ../gensui/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../gensui/certs:/etc/nginx/certs:ro
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+
+volumes:
+  shogun_venv:
+    external: true
+    name: repo_shogun_venv
+  shogun_data:
+    external: true
+    name: repo_shogun_data
+  shogun_logs:
+    external: true
+    name: repo_shogun_logs
+  shogun_configs:
+    external: true
+    name: repo_shogun_configs
+  shogun_vault:
+    external: true
+    name: repo_shogun_vault
+  gensui_data:
+    external: true
+    name: gensui_gensui_data
+  gensui_logs:
+    external: true
+    name: gensui_gensui_logs

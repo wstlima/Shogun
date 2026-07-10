@@ -19,12 +19,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies first (better layer caching)
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
-
-# Copy application code
+# Install Python dependencies first (better layer caching).
+# Uses gensui/pyproject.toml (its own lean dependency list — fastapi,
+# sqlalchemy, bcrypt, pyjwt, httpx), NOT the repo-root pyproject.toml,
+# which also declares torch/transformers/playwright for the main Shogun
+# app. Installing the root one here pulled ~5.7GB of unused CUDA/torch
+# wheels into this image for no reason — gensui never imports torch.
 COPY gensui/ ./gensui/
+RUN pip install --no-cache-dir ./gensui
+
 COPY .env.example ./.env.example
 
 # Copy built frontend from stage 1
