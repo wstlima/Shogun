@@ -23,6 +23,11 @@ WORKDIR /app
 
 # Install Python dependencies first (better layer caching)
 COPY pyproject.toml ./
+# torch's default PyPI wheel bundles full CUDA support (~5GB) even though
+# this container has no GPU and torch.cuda.is_available() is always False
+# here — install the CPU-only build from PyTorch's own index first so the
+# subsequent `pip install .` picks it up instead of pulling the CUDA wheel.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir ".[office]"
 
 # Mado browser engine (Playwright Chromium) — same as install.sh step 4
