@@ -1,9 +1,9 @@
 # ── Stage 1: Build Admin UI ──────────────────────────────────
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
-COPY frontend/package*.json ./
+COPY gensui/frontend/package*.json ./
 RUN npm ci --silent
-COPY frontend/ ./
+COPY gensui/frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Python Runtime ─────────────────────────────────
@@ -30,8 +30,12 @@ COPY .env.example ./.env.example
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Create data directory
-RUN mkdir -p /app/data /app/logs
+# Create data directory and drop root privileges
+RUN groupadd --gid 1000 gensui \
+    && useradd --uid 1000 --gid gensui --shell /bin/bash --create-home gensui \
+    && mkdir -p /app/data /app/logs \
+    && chown -R gensui:gensui /app
+USER gensui
 
 # Expose port
 EXPOSE 8787
