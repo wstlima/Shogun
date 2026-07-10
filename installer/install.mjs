@@ -104,7 +104,7 @@ async function main() {
         message: 'Which image tag?',
         choices: [
           { name: 'latest', message: `latest — most recently published image` },
-          { name: 'specific', message: 'Specific version (e.g. 1.0.0.1-shogun-afm)' },
+          { name: 'specific', message: 'Specific version (e.g. 1.0.0.1)' },
         ],
       });
       if (tagChoice === 'specific') {

@@ -3,8 +3,8 @@
 # from source. See docker-compose.yml for the build-from-source variant.
 #
 # Run from this directory:
-#   SHOGUN_IMAGE_TAG=1.0.0.1-shogun-afm docker compose -f docker-compose.image.yml up -d
-# (defaults to 1.0.0.1-shogun-afm if SHOGUN_IMAGE_TAG is unset)
+#   SHOGUN_IMAGE_TAG=1.0.0.1 docker compose -f docker-compose.image.yml up -d
+# (defaults to "latest" if SHOGUN_IMAGE_TAG is unset)
 #
 # Uses the same external volumes as docker-compose.yml (repo_shogun_*,
 # gensui_gensui_*), so switching between build mode and image mode does
@@ -12,7 +12,7 @@
 
 services:
   shogun:
-    image: agenciasupermix/shogun-afm:${SHOGUN_IMAGE_TAG:-1.0.0.1-shogun-afm}
+    image: agenciasupermix/shogun-afm:${SHOGUN_IMAGE_TAG:-latest}
     container_name: shogun-afm
     restart: unless-stopped
     ports:
@@ -24,7 +24,7 @@ services:
       - shogun_vault:/app/vault
 
   gensui:
-    image: agenciasupermix/gensui-afm:${SHOGUN_IMAGE_TAG:-1.0.0.1-shogun-afm}
+    image: agenciasupermix/gensui-afm:${SHOGUN_IMAGE_TAG:-latest}
     container_name: gensui-afm
     restart: unless-stopped
     env_file:
