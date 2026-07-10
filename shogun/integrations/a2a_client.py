@@ -27,6 +27,8 @@ from typing import Any
 
 import httpx
 
+from shogun.services.ssrf_guard import SSRFValidationError, assert_safe_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,6 +103,8 @@ class A2AClient:
         if not inbound_url.endswith("/a2a/inbound"):
             inbound_url = inbound_url.rstrip("/api/v1").rstrip("/") + "/api/v1/a2a/inbound"
 
+        assert_safe_url(inbound_url)
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(
                 inbound_url,
@@ -124,10 +128,14 @@ class A2AClient:
                 break
         identity_url = base.rstrip("/") + "/api/v1/a2a/identity"
         try:
+            assert_safe_url(identity_url)
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(identity_url)
                 resp.raise_for_status()
                 return resp.json()
+        except SSRFValidationError as exc:
+            logger.warning("A2A ping blocked for %s: %s", peer_url, exc)
+            return None
         except Exception as exc:
             logger.debug("A2A ping failed for %s: %s", peer_url, exc)
             return None
