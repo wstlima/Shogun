@@ -28,7 +28,7 @@ Three ways to run the stack — pick one compose file:
 | --- | --- | --- | --- |
 | Build | `docker-compose.yml` | ~2.7GB | Builds locally; longest first build, no network dependency after |
 | Image | `docker-compose.image.yml` | ~2.7GB | Fastest to start; pulls prebuilt images from Docker Hub |
-| Slim | `docker-compose.slim.yml` | ~500MB image + ~800MB–5GB on first run | Smallest published image, but not self-contained — a `torch-init` service installs Python deps (including torch) into a shared volume the first time it runs |
+| Slim | `docker-compose.slim.yml` | ~300MB image + per-module install on first run | Smallest published image, modular — each heavy dependency group (torch, Playwright) is independently optional |
 
 Both non-slim Dockerfiles stay at their original locations — repo root
 and `gensui/` — because their `COPY` instructions are relative to
@@ -38,30 +38,53 @@ goes wrong.
 
 ### Slim mode details
 
-`docker-compose.slim.yml` trades image size for a slower (or
-network-dependent) first startup. A one-shot `torch-init` service
-installs Python dependencies — including `torch` — into the
-`repo_shogun_venv` volume before the `shogun` service starts
-(`depends_on: torch-init: condition: service_completed_successfully`).
-`Dockerfile.slim` ships with no Python packages baked in; its
-entrypoint (`docker/slim-entrypoint.sh`) activates `/venv` (the same
-volume) at container start.
+`docker-compose.slim.yml` ships a Shogun image with **zero Python
+dependencies baked in** — only application code, the built frontend,
+and the apt system libraries Chromium needs to run (small and stable,
+so they stay in the image rather than being modularized). Three
+one-shot init services populate independent volumes on first run:
 
-Choose the torch variant with `TORCH_VARIANT`:
+| Service | Volume | Controlled by | Always runs? |
+| --- | --- | --- | --- |
+| `core-init` | `shogun_afm_venv_core` | — | Yes — fastapi, sqlalchemy, and everything else the app needs just to boot |
+| `torch-init` | `shogun_afm_venv_torch` | `SHOGUN_TORCH=cpu\|gpu\|skip` (default `cpu`) | Optional — torch + sentence-transformers, for vector memory/RAG |
+| `playwright-init` | `shogun_afm_venv_playwright` | `SHOGUN_PLAYWRIGHT=on\|skip` (default `on`) | Optional — playwright + downloads the Chromium browser, for Mado browser automation |
+
+`docker/slim-entrypoint.sh` assembles `PYTHONPATH` at container start
+from whichever of `/venv_core`, `/venv_torch`, `/venv_playwright` are
+present and populated. `core` is the only hard requirement — the
+container refuses to start without it. Skipping `torch` or
+`playwright` just means those specific features are unavailable at
+runtime (RAG / Mado respectively); the rest of the app works fine.
 
 ```bash
-TORCH_VARIANT=cpu docker compose -f docker-compose.slim.yml up -d --build   # default
-TORCH_VARIANT=gpu docker compose -f docker-compose.slim.yml up -d --build
+# Everything (default)
+docker compose -f docker-compose.slim.yml up -d --build
+
+# GPU torch instead of CPU
+SHOGUN_TORCH=gpu docker compose -f docker-compose.slim.yml up -d --build
+
+# Skip torch and Playwright entirely (smallest runtime footprint,
+# no RAG, no browser automation)
+SHOGUN_TORCH=skip SHOGUN_PLAYWRIGHT=skip docker compose -f docker-compose.slim.yml up -d --build
 ```
 
 GPU mode requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 on the host, and the commented-out `deploy.resources.reservations.devices`
 block under the `shogun` service in `docker-compose.slim.yml` uncommented.
 
-Once `repo_shogun_venv` is populated, subsequent `docker compose up`
-runs skip reinstalling (torch-init checks for `/venv/bin/python` and
-exits early if found). To force a reinstall (e.g. to switch from CPU
-to GPU torch), remove the volume first: `docker volume rm repo_shogun_venv`.
+Each init service skips reinstalling if its volume is already
+populated (checks for `<volume>/bin/python`). To force a reinstall of
+one module (e.g. to switch torch from CPU to GPU), remove just that
+volume: `docker volume rm shogun_afm_venv_torch`. The other two
+modules are untouched.
+
+Why system apt packages (`libnss3` etc, needed by Chromium) aren't
+also modularized: they'd have to be installed as root into a volume at
+runtime and exposed via a custom `LD_LIBRARY_PATH`, which is fragile —
+some libraries assume standard system paths. They're small (~250MB)
+and stable across versions, so they stay baked into the image
+unconditionally, whether or not `playwright-init` actually runs.
 
 ## First-time setup
 

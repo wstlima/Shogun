@@ -30,8 +30,9 @@ program
   .description('Shogun AFM — Docker Installer (Shogun + Gensui)')
   .option('--clean', 'Build images from source (docker-compose.yml)')
   .option('--image [tag]', 'Use a published image from Docker Hub (docker-compose.image.yml)')
-  .option('--slim', 'Build a slim Shogun image; Python deps (incl. torch) install into a shared volume on first run (docker-compose.slim.yml)')
-  .option('--torch <variant>', 'With --slim: "cpu" (default, no GPU/CUDA required) or "gpu" (requires NVIDIA Container Toolkit)')
+  .option('--slim', 'Build a slim Shogun image; each dependency group (core, torch, playwright) installs into its own volume on first run (docker-compose.slim.yml)')
+  .option('--torch <variant>', 'With --slim: "cpu" (default), "gpu" (requires NVIDIA Container Toolkit), or "skip" (no vector memory/RAG)')
+  .option('--playwright <variant>', 'With --slim: "on" (default) or "skip" (no Mado browser automation)')
   .option('--profile <name>', 'Enable a compose profile (e.g. server for Gensui TLS/nginx)')
   .addHelpText('after', `
 Examples:
@@ -39,8 +40,9 @@ Examples:
   shogun-afm-install --clean                       build from source
   shogun-afm-install --image                       pull ${DEFAULT_IMAGE_TAG}
   shogun-afm-install --image=1.2.0 --profile server
-  shogun-afm-install --slim --torch=cpu            smallest Shogun image, torch installed on first run
+  shogun-afm-install --slim                        smallest Shogun image, all modules on first run (CPU torch)
   shogun-afm-install --slim --torch=gpu            same, but with CUDA torch (needs NVIDIA Container Toolkit)
+  shogun-afm-install --slim --torch=skip --playwright=skip   core only — no RAG, no browser automation
 `);
 program.parse();
 const opts = program.opts();
@@ -90,7 +92,7 @@ async function main() {
       choices: [
         { name: 'clean', message: 'Clean install — build full images from source' },
         { name: 'image', message: 'Published image — pull agenciasupermix/{shogun-afm,gensui-afm} from Docker Hub' },
-        { name: 'slim', message: 'Slim build — smallest Shogun image, torch installs into a volume on first run' },
+        { name: 'slim', message: 'Slim build — smallest Shogun image, modules (torch/playwright) install on first run' },
       ],
     });
     mode = chosenMode;
@@ -98,6 +100,7 @@ async function main() {
 
   let imageTag = null;
   let torchVariant = null;
+  let playwrightVariant = null;
   let composeFile;
 
   if (mode === 'image') {
@@ -129,23 +132,41 @@ async function main() {
     console.log(pc.green(`  Using published image: ${pc.bold(imageTag)}`));
   } else if (mode === 'slim') {
     composeFile = 'docker-compose.slim.yml';
-    if (opts.torch === 'cpu' || opts.torch === 'gpu') {
+
+    if (opts.torch === 'cpu' || opts.torch === 'gpu' || opts.torch === 'skip') {
       torchVariant = opts.torch;
     } else {
       const { variant } = await prompt({
         type: 'select',
         name: 'variant',
-        message: 'Torch variant for the shared venv',
+        message: 'Torch module (vector memory / RAG)',
         choices: [
           { name: 'cpu', message: 'CPU-only (default — no GPU/CUDA required)' },
           { name: 'gpu', message: 'GPU (CUDA) — requires NVIDIA Container Toolkit on the host' },
+          { name: 'skip', message: 'Skip — no vector memory/RAG' },
         ],
       });
       torchVariant = variant;
     }
-    console.log(pc.green(`  Slim build, torch variant: ${pc.bold(torchVariant)}`));
-    console.log(pc.gray('  Note: first startup installs Python deps into a volume — this takes'));
-    console.log(pc.gray(`  as long as pip install normally does (${torchVariant === 'gpu' ? '~5GB download for CUDA torch' : '~800MB for CPU torch'}).`));
+
+    if (opts.playwright === 'on' || opts.playwright === 'skip') {
+      playwrightVariant = opts.playwright;
+    } else {
+      const { variant } = await prompt({
+        type: 'select',
+        name: 'variant',
+        message: 'Playwright module (Mado browser automation)',
+        choices: [
+          { name: 'on', message: 'Install — downloads the Chromium browser (~120MB)' },
+          { name: 'skip', message: 'Skip — no browser automation' },
+        ],
+      });
+      playwrightVariant = variant;
+    }
+
+    console.log(pc.green(`  Slim build — torch: ${pc.bold(torchVariant)}, playwright: ${pc.bold(playwrightVariant)}`));
+    console.log(pc.gray('  Note: first startup installs each enabled module into its own volume —'));
+    console.log(pc.gray('  this takes as long as pip install / playwright install normally do.'));
   } else {
     composeFile = 'docker-compose.yml';
     console.log(pc.green('  Building images from source.'));
@@ -191,7 +212,7 @@ async function main() {
   if (mode === 'image') {
     runCmd = `SHOGUN_IMAGE_TAG=${imageTag} docker compose -f ${composeFile}${profileFlag} up -d`;
   } else if (mode === 'slim') {
-    runCmd = `TORCH_VARIANT=${torchVariant} docker compose -f ${composeFile}${profileFlag} up -d --build`;
+    runCmd = `SHOGUN_TORCH=${torchVariant} SHOGUN_PLAYWRIGHT=${playwrightVariant} docker compose -f ${composeFile}${profileFlag} up -d --build`;
   } else {
     runCmd = `docker compose -f ${composeFile}${profileFlag} up -d --build`;
   }
@@ -211,6 +232,13 @@ async function main() {
     console.log(pc.gray('  GPU mode requires the NVIDIA Container Toolkit on the host, and the'));
     console.log(pc.gray('  commented-out deploy.resources block in docker-compose.slim.yml'));
     console.log(pc.gray('  (shogun service) uncommented — see docs/RUNBOOK.md.'));
+    console.log('');
+  }
+  if (mode === 'slim' && (torchVariant === 'skip' || playwrightVariant === 'skip')) {
+    const skipped = [torchVariant === 'skip' && 'vector memory/RAG', playwrightVariant === 'skip' && 'Mado browser automation']
+      .filter(Boolean)
+      .join(' and ');
+    console.log(pc.gray(`  Note: ${skipped} will be unavailable — the modules were skipped.`));
     console.log('');
   }
   console.log(pc.green('  Shogun will be available at http://127.0.0.1:8000'));
