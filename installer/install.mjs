@@ -28,21 +28,25 @@ const program = new Command();
 program
   .name('shogun-afm-install')
   .description('Shogun AFM — Docker Installer (Shogun + Gensui)')
-  .option('--clean', 'Build images from source (docker-compose.yml)')
-  .option('--image [tag]', 'Use a published image from Docker Hub (docker-compose.image.yml)')
-  .option('--slim', 'Build a slim Shogun image; each dependency group (core, torch, playwright) installs into its own volume on first run (docker-compose.slim.yml)')
-  .option('--torch <variant>', 'With --slim: "cpu" (default), "gpu" (requires NVIDIA Container Toolkit), or "skip" (no vector memory/RAG)')
-  .option('--playwright <variant>', 'With --slim: "on" (default) or "skip" (no Mado browser automation)')
+  .option('--clean', 'Build the Shogun image from source (docker-compose.yml)')
+  .option('--image [tag]', 'Pull a published Shogun image from Docker Hub (docker-compose.image.yml)')
+  .option('--torch <variant>', '"cpu" (default), "gpu" (requires NVIDIA Container Toolkit), or "skip" (no vector memory/RAG)')
+  .option('--playwright <variant>', '"on" (default) or "skip" (no Mado browser automation)')
   .option('--profile <name>', 'Enable a compose profile (e.g. server for Gensui TLS/nginx)')
   .addHelpText('after', `
+The Shogun image always ships with zero Python dependencies baked in —
+core, torch, and playwright each install into their own volume on
+first run, whether you build from source (--clean) or pull the
+published image (--image). --torch/--playwright control which
+optional modules get installed; core always installs.
+
 Examples:
   shogun-afm-install                              interactive prompt
-  shogun-afm-install --clean                       build from source
-  shogun-afm-install --image                       pull ${DEFAULT_IMAGE_TAG}
+  shogun-afm-install --clean                       build from source, all modules (CPU torch)
+  shogun-afm-install --image                       pull ${DEFAULT_IMAGE_TAG}, all modules
   shogun-afm-install --image=1.2.0 --profile server
-  shogun-afm-install --slim                        smallest Shogun image, all modules on first run (CPU torch)
-  shogun-afm-install --slim --torch=gpu            same, but with CUDA torch (needs NVIDIA Container Toolkit)
-  shogun-afm-install --slim --torch=skip --playwright=skip   core only — no RAG, no browser automation
+  shogun-afm-install --clean --torch=gpu           CUDA torch (needs NVIDIA Container Toolkit)
+  shogun-afm-install --image --torch=skip --playwright=skip   core only — no RAG, no browser automation
 `);
 program.parse();
 const opts = program.opts();
@@ -73,16 +77,15 @@ async function main() {
     process.exit(1);
   }
 
-  // ── [1/3] Install mode ──────────────────────────────────────
-  section('[1/3] Install mode');
+  // ── [1/4] Install mode ──────────────────────────────────────
+  section('[1/4] Install mode');
 
-  const modeFlags = [opts.clean, opts.image !== undefined, opts.slim].filter(Boolean).length;
-  if (modeFlags > 1) {
-    console.log(pc.red('  --clean, --image, and --slim are mutually exclusive.'));
+  if (opts.clean && opts.image !== undefined) {
+    console.log(pc.red('  --clean and --image are mutually exclusive.'));
     process.exit(1);
   }
 
-  let mode = opts.clean ? 'clean' : opts.image !== undefined ? 'image' : opts.slim ? 'slim' : null;
+  let mode = opts.clean ? 'clean' : opts.image !== undefined ? 'image' : null;
 
   if (!mode) {
     const { chosenMode } = await prompt({
@@ -90,17 +93,14 @@ async function main() {
       name: 'chosenMode',
       message: 'Choose install mode',
       choices: [
-        { name: 'clean', message: 'Clean install — build full images from source' },
-        { name: 'image', message: 'Published image — pull agenciasupermix/{shogun-afm,gensui-afm} from Docker Hub' },
-        { name: 'slim', message: 'Slim build — smallest Shogun image, modules (torch/playwright) install on first run' },
+        { name: 'clean', message: 'Build the Shogun image from source' },
+        { name: 'image', message: 'Pull a published Shogun image from Docker Hub (agenciasupermix/shogun-afm)' },
       ],
     });
     mode = chosenMode;
   }
 
   let imageTag = null;
-  let torchVariant = null;
-  let playwrightVariant = null;
   let composeFile;
 
   if (mode === 'image') {
@@ -130,47 +130,54 @@ async function main() {
       }
     }
     console.log(pc.green(`  Using published image: ${pc.bold(imageTag)}`));
-  } else if (mode === 'slim') {
-    composeFile = 'docker-compose.slim.yml';
-
-    if (opts.torch === 'cpu' || opts.torch === 'gpu' || opts.torch === 'skip') {
-      torchVariant = opts.torch;
-    } else {
-      const { variant } = await prompt({
-        type: 'select',
-        name: 'variant',
-        message: 'Torch module (vector memory / RAG)',
-        choices: [
-          { name: 'cpu', message: 'CPU-only (default — no GPU/CUDA required)' },
-          { name: 'gpu', message: 'GPU (CUDA) — requires NVIDIA Container Toolkit on the host' },
-          { name: 'skip', message: 'Skip — no vector memory/RAG' },
-        ],
-      });
-      torchVariant = variant;
-    }
-
-    if (opts.playwright === 'on' || opts.playwright === 'skip') {
-      playwrightVariant = opts.playwright;
-    } else {
-      const { variant } = await prompt({
-        type: 'select',
-        name: 'variant',
-        message: 'Playwright module (Mado browser automation)',
-        choices: [
-          { name: 'on', message: 'Install — downloads the Chromium browser (~120MB)' },
-          { name: 'skip', message: 'Skip — no browser automation' },
-        ],
-      });
-      playwrightVariant = variant;
-    }
-
-    console.log(pc.green(`  Slim build — torch: ${pc.bold(torchVariant)}, playwright: ${pc.bold(playwrightVariant)}`));
-    console.log(pc.gray('  Note: first startup installs each enabled module into its own volume —'));
-    console.log(pc.gray('  this takes as long as pip install / playwright install normally do.'));
   } else {
     composeFile = 'docker-compose.yml';
-    console.log(pc.green('  Building images from source.'));
+    console.log(pc.green('  Building the Shogun image from source.'));
   }
+  console.log('');
+
+  // ── [2/4] Optional modules ──────────────────────────────────
+  section('[2/4] Optional modules (torch, playwright)');
+  console.log(pc.gray('  The Shogun image has no Python dependencies baked in. core always'));
+  console.log(pc.gray('  installs (required); torch and playwright are independently optional'));
+  console.log(pc.gray('  and install into their own volume on first startup.'));
+  console.log('');
+
+  let torchVariant;
+  if (opts.torch === 'cpu' || opts.torch === 'gpu' || opts.torch === 'skip') {
+    torchVariant = opts.torch;
+  } else {
+    const { variant } = await prompt({
+      type: 'select',
+      name: 'variant',
+      message: 'Torch module (vector memory / RAG)',
+      choices: [
+        { name: 'cpu', message: 'CPU-only (default — no GPU/CUDA required)' },
+        { name: 'gpu', message: 'GPU (CUDA) — requires NVIDIA Container Toolkit on the host' },
+        { name: 'skip', message: 'Skip — no vector memory/RAG' },
+      ],
+    });
+    torchVariant = variant;
+  }
+
+  let playwrightVariant;
+  if (opts.playwright === 'on' || opts.playwright === 'skip') {
+    playwrightVariant = opts.playwright;
+  } else {
+    const { variant } = await prompt({
+      type: 'select',
+      name: 'variant',
+      message: 'Playwright module (Mado browser automation)',
+      choices: [
+        { name: 'on', message: 'Install — downloads the Chromium browser (~120MB)' },
+        { name: 'skip', message: 'Skip — no browser automation' },
+      ],
+    });
+    playwrightVariant = variant;
+  }
+
+  console.log(pc.green(`  torch: ${pc.bold(torchVariant)}, playwright: ${pc.bold(playwrightVariant)}`));
+  console.log('');
 
   let profileServer = opts.profile === 'server';
   if (!profileServer) {
@@ -184,8 +191,8 @@ async function main() {
   }
   console.log('');
 
-  // ── [2/3] Gensui environment ────────────────────────────────
-  section('[2/3] Configuring Gensui environment');
+  // ── [3/4] Gensui environment ────────────────────────────────
+  section('[3/4] Configuring Gensui environment');
 
   const gensuiEnvPath = path.join(REPO_ROOT, 'gensui', '.env');
   const gensuiEnvExamplePath = path.join(REPO_ROOT, 'gensui', '.env.example');
@@ -204,18 +211,15 @@ async function main() {
   }
   console.log('');
 
-  // ── [3/3] Ready to launch ───────────────────────────────────
-  section('[3/3] Ready to launch');
+  // ── [4/4] Ready to launch ───────────────────────────────────
+  section('[4/4] Ready to launch');
 
   const profileFlag = profileServer ? ' --profile server' : '';
-  let runCmd;
-  if (mode === 'image') {
-    runCmd = `SHOGUN_IMAGE_TAG=${imageTag} docker compose -f ${composeFile}${profileFlag} up -d`;
-  } else if (mode === 'slim') {
-    runCmd = `SHOGUN_TORCH=${torchVariant} SHOGUN_PLAYWRIGHT=${playwrightVariant} docker compose -f ${composeFile}${profileFlag} up -d --build`;
-  } else {
-    runCmd = `docker compose -f ${composeFile}${profileFlag} up -d --build`;
-  }
+  const envPrefix = `SHOGUN_TORCH=${torchVariant} SHOGUN_PLAYWRIGHT=${playwrightVariant}`;
+  const runCmd =
+    mode === 'image'
+      ? `${envPrefix} SHOGUN_IMAGE_TAG=${imageTag} docker compose -f ${composeFile}${profileFlag} up -d`
+      : `${envPrefix} docker compose -f ${composeFile}${profileFlag} up -d --build`;
 
   console.log(pc.gray('  This script does not start anything automatically.'));
   console.log(pc.gray('  Review the command below, then run it yourself from docker/:'));
@@ -228,13 +232,13 @@ async function main() {
     console.log(pc.gray('  and gensui/certs/gensui.key before running the command above.'));
     console.log('');
   }
-  if (mode === 'slim' && torchVariant === 'gpu') {
+  if (torchVariant === 'gpu') {
     console.log(pc.gray('  GPU mode requires the NVIDIA Container Toolkit on the host, and the'));
-    console.log(pc.gray('  commented-out deploy.resources block in docker-compose.slim.yml'));
-    console.log(pc.gray('  (shogun service) uncommented — see docs/RUNBOOK.md.'));
+    console.log(pc.gray('  commented-out deploy.resources block in the compose file (shogun'));
+    console.log(pc.gray('  service) uncommented — see docs/RUNBOOK.md.'));
     console.log('');
   }
-  if (mode === 'slim' && (torchVariant === 'skip' || playwrightVariant === 'skip')) {
+  if (torchVariant === 'skip' || playwrightVariant === 'skip') {
     const skipped = [torchVariant === 'skip' && 'vector memory/RAG', playwrightVariant === 'skip' && 'Mado browser automation']
       .filter(Boolean)
       .join(' and ');

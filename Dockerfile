@@ -6,13 +6,18 @@ RUN npm ci --silent
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Python Runtime ───────────────────────────────────
+# ── Stage 2: Python Runtime (modular — no Python deps baked in) ──
 FROM python:3.12-slim
 
 LABEL maintainer="AlphaHorizon AI"
 LABEL description="Shogun — GUI-first AI agent framework (The Tenshu)"
 
-# System deps (curl for healthcheck; playwright/chromium deps for Mado browser automation)
+# System deps stay baked into the image — they're small (~250MB),
+# stable across versions, and don't modularize well (installing apt
+# packages into a volume at runtime would need LD_LIBRARY_PATH tricks
+# that are fragile and easy to break). curl for healthcheck; the
+# libXXX packages are what Chromium (via Playwright) needs to run,
+# whether or not the playwright-init module is actually used.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
@@ -21,19 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies first (better layer caching)
+# Application code only — no Python deps installed in this image.
+# core-init (always), torch-init (optional, cpu/gpu/skip),
+# playwright-init (optional) each populate their own volume in
+# docker-compose.yml / docker-compose.image.yml; docker/entrypoint.sh
+# assembles PYTHONPATH from whichever of /venv_core, /venv_torch,
+# /venv_playwright are present at container start.
 COPY pyproject.toml ./
-# torch's default PyPI wheel bundles full CUDA support (~5GB) even though
-# this container has no GPU and torch.cuda.is_available() is always False
-# here — install the CPU-only build from PyTorch's own index first so the
-# subsequent `pip install .` picks it up instead of pulling the CUDA wheel.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir ".[office]"
-
-# Mado browser engine (Playwright Chromium) — same as install.sh step 4
-RUN python -m playwright install chromium
-
-# Copy application code
 COPY shogun/ ./shogun/
 COPY main.py ./main.py
 COPY version.json ./version.json
@@ -45,16 +44,23 @@ COPY .env.example ./.env.example
 # Copy built frontend from stage 1 (PROJECT_ROOT/frontend/dist, see shogun/app.py)
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+COPY docker/entrypoint.sh /entrypoint.sh
+
 # Non-root user (see gensui/Dockerfile for the same pattern / migration notes)
 RUN groupadd --gid 1000 shogun \
     && useradd --uid 1000 --gid shogun --shell /bin/bash --create-home shogun \
     && mkdir -p /app/data /app/logs /app/configs /app/vault \
-    && chown -R shogun:shogun /app
+    /venv_core /venv_torch /venv_playwright \
+    && chown -R shogun:shogun /app /venv_core /venv_torch /venv_playwright \
+    && chmod +x /entrypoint.sh
 USER shogun
 
 EXPOSE 8000
 
 VOLUME /app/data
+VOLUME /venv_core
+VOLUME /venv_torch
+VOLUME /venv_playwright
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
@@ -62,4 +68,5 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 ENV API_HOST=0.0.0.0
 ENV API_PORT=8000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "shogun"]

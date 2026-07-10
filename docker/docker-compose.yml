@@ -1,29 +1,156 @@
 # Centralized Docker Compose for Shogun (Tenshu) + Gensui (fleet management)
-# — BUILD mode: builds images from source. See docker-compose.image.yml for
-# the variant that pulls prebuilt images from Docker Hub instead.
+# — BUILD mode: builds both images from source. See docker-compose.image.yml
+# for the variant that pulls a prebuilt Shogun image from Docker Hub instead
+# (Gensui always builds from source in both — it's small and fast to build).
 #
-# Run from this directory: `cd docker && docker compose up -d --build`
-# (or `docker compose -f docker/docker-compose.yml up -d --build` from the repo root)
+# The Shogun image ships with zero Python dependencies baked in. Three
+# independent one-shot init services populate separate volumes on first run:
 #
-# Both Dockerfiles stay at their original locations (repo root and gensui/)
-# because their COPY instructions are relative to those paths — see
-# docs/RUNBOOK.md for the history of path bugs that were fixed by keeping
-# build contexts anchored at the repo root.
+#   core-init        always runs — fastapi, sqlalchemy, everything the
+#                     app needs to boot at all. Not optional.
+#   torch-init        optional (SHOGUN_TORCH=cpu|gpu|skip, default cpu) —
+#                     torch + sentence-transformers, for vector memory/RAG
+#   playwright-init   optional (SHOGUN_PLAYWRIGHT=on|skip, default on) —
+#                     playwright + downloads the Chromium browser, for
+#                     Mado browser automation
+#
+# docker/entrypoint.sh assembles PYTHONPATH at container start from
+# whichever of /venv_core, /venv_torch, /venv_playwright are populated.
+# Skipping torch or playwright means those features are unavailable at
+# runtime, not that the app fails to start — core is the only hard
+# requirement.
+#
+# Run from this directory, e.g.:
+#   docker compose up -d --build
+#   SHOGUN_TORCH=gpu docker compose up -d --build
+#   SHOGUN_TORCH=skip SHOGUN_PLAYWRIGHT=skip docker compose up -d --build
+#
+# GPU mode requires the NVIDIA Container Toolkit on the host and the
+# `deploy.resources.reservations.devices` block below (commented out
+# by default) active on the shogun service.
+#
+# Both Dockerfiles stay at their original locations (repo root and
+# gensui/) because their COPY instructions are relative to those
+# paths — see docs/RUNBOOK.md for the history of path bugs that were
+# fixed by keeping build contexts anchored at the repo root.
 
 services:
+  core-init:
+    image: python:3.12-slim
+    container_name: shogun-core-init
+    volumes:
+      - shogun_venv_core:/venv
+      - ../pyproject.toml:/src/pyproject.toml:ro
+      - ../shogun:/src/shogun:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ -x /venv/bin/python ]; then
+          echo "core-init: /venv already populated, skipping (delete the shogun_afm_venv_core volume to force reinstall)."
+          exit 0
+        fi
+        python -m venv /venv
+        /venv/bin/pip install --no-cache-dir --upgrade pip
+        echo "core-init: installing core dependencies..."
+        /venv/bin/pip install --no-cache-dir \
+          fastapi "uvicorn[standard]" pydantic pydantic-settings \
+          "sqlalchemy[asyncio]" aiosqlite alembic greenlet \
+          qdrant-client reflex cryptography python-dotenv bcrypt pyjwt \
+          apscheduler httpx python-multipart orjson psutil caldav pypdf \
+          openpyxl python-docx python-pptx
+        cd /src && /venv/bin/pip install --no-cache-dir --no-deps .
+        echo "core-init: done."
+
+  torch-init:
+    image: python:3.12-slim
+    container_name: shogun-torch-init
+    volumes:
+      - shogun_venv_torch:/venv
+    environment:
+      SHOGUN_TORCH: ${SHOGUN_TORCH:-cpu}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ "$$SHOGUN_TORCH" = "skip" ]; then
+          echo "torch-init: SHOGUN_TORCH=skip, not installing torch. Vector memory/RAG will be unavailable."
+          exit 0
+        fi
+        if [ -x /venv/bin/python ]; then
+          echo "torch-init: /venv already populated, skipping (delete the shogun_afm_venv_torch volume to force reinstall)."
+          exit 0
+        fi
+        python -m venv /venv
+        /venv/bin/pip install --no-cache-dir --upgrade pip
+        if [ "$$SHOGUN_TORCH" = "gpu" ]; then
+          echo "torch-init: installing GPU (CUDA) build of torch..."
+          /venv/bin/pip install --no-cache-dir torch
+        else
+          echo "torch-init: installing CPU-only build of torch..."
+          /venv/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+        fi
+        /venv/bin/pip install --no-cache-dir sentence-transformers
+        echo "torch-init: done."
+
+  playwright-init:
+    image: python:3.12-slim
+    container_name: shogun-playwright-init
+    volumes:
+      - shogun_venv_playwright:/venv
+    environment:
+      SHOGUN_PLAYWRIGHT: ${SHOGUN_PLAYWRIGHT:-on}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ "$$SHOGUN_PLAYWRIGHT" = "skip" ]; then
+          echo "playwright-init: SHOGUN_PLAYWRIGHT=skip, not installing. Mado browser automation will be unavailable."
+          exit 0
+        fi
+        if [ -x /venv/bin/python ]; then
+          echo "playwright-init: /venv already populated, skipping (delete the shogun_afm_venv_playwright volume to force reinstall)."
+          exit 0
+        fi
+        python -m venv /venv
+        /venv/bin/pip install --no-cache-dir --upgrade pip
+        echo "playwright-init: installing playwright..."
+        /venv/bin/pip install --no-cache-dir playwright
+        mkdir -p /venv/browsers
+        PLAYWRIGHT_BROWSERS_PATH=/venv/browsers /venv/bin/python -m playwright install chromium
+        echo "playwright-init: done."
+
   shogun:
     build:
       context: ..
       dockerfile: Dockerfile
     container_name: shogun-afm
     restart: unless-stopped
+    depends_on:
+      core-init:
+        condition: service_completed_successfully
+      torch-init:
+        condition: service_completed_successfully
+      playwright-init:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
+      - shogun_venv_core:/venv_core
+      - shogun_venv_torch:/venv_torch
+      - shogun_venv_playwright:/venv_playwright
       - shogun_data:/app/data
       - shogun_logs:/app/logs
       - shogun_configs:/app/configs
       - shogun_vault:/app/vault
+    # Uncomment for SHOGUN_TORCH=gpu (requires NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   gensui:
     build:
@@ -55,13 +182,15 @@ services:
       - "127.0.0.1:443:443"
 
 volumes:
-  # External: true + explicit `name:` pins these to the volumes already
-  # created by the previous per-service compose files (docker-compose.yml
-  # at the repo root, gensui/docker-compose.yml), so switching to this
-  # centralized file does NOT create fresh (empty) volumes or orphan
-  # existing data. Compose's default project-name-based prefix would
-  # otherwise differ here (this file lives in docker/), producing new
-  # volume names and silently losing access to existing data.
+  shogun_venv_core:
+    external: true
+    name: shogun_afm_venv_core
+  shogun_venv_torch:
+    external: true
+    name: shogun_afm_venv_torch
+  shogun_venv_playwright:
+    external: true
+    name: shogun_afm_venv_playwright
   shogun_data:
     external: true
     name: repo_shogun_data
