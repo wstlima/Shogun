@@ -11,6 +11,8 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from shogun.services.ssrf_guard import SSRFValidationError, assert_safe_url
+
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/gensui", tags=["gensui-config"])
 
@@ -75,6 +77,11 @@ async def get_gensui_status():
 async def connect_to_gensui(req: ConnectRequest):
     """Configure and connect to a Gensui server."""
     server_url = req.server_url.rstrip("/")
+
+    try:
+        assert_safe_url(server_url, allow_private=True)
+    except SSRFValidationError as exc:
+        raise HTTPException(400, str(exc))
 
     # Test connectivity first
     try:
@@ -141,6 +148,11 @@ async def disconnect_from_gensui():
 async def test_gensui_connection(req: TestRequest):
     """Test connectivity to a Gensui server without enrolling."""
     server_url = req.server_url.rstrip("/")
+
+    try:
+        assert_safe_url(server_url, allow_private=True)
+    except SSRFValidationError as exc:
+        return {"reachable": False, "error": str(exc)}
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
