@@ -13,7 +13,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/react-router-dom": "^5.3.3",
     "@xyflow/react": "^12.10.2",
-    "axios": "^1.15.0",
+    "axios": "^1.16.0",
     "clsx": "^2.1.1",
     "js-yaml": "^4.1.1",
     "lucide-react": "^1.8.0",
