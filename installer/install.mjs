@@ -36,7 +36,7 @@ Examples:
   shogun-afm-install                              interactive prompt
   shogun-afm-install --clean                       build from source
   shogun-afm-install --image                       pull ${DEFAULT_IMAGE_TAG}
-  shogun-afm-install --image=1.2.0-shogun-afm --profile server
+  shogun-afm-install --image=1.2.0 --profile server
 `);
 program.parse();
 const opts = program.opts();
