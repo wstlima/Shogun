@@ -1,13 +1,13 @@
 #!/bin/sh
 # ═══════════════════════════════════════════════════════════════
-#  Shogun (slim variant) — modular entrypoint
+#  Shogun — modular entrypoint
 #
 #  Assembles PYTHONPATH from whichever per-module venv volumes are
 #  present and populated (/venv_core, /venv_torch, /venv_playwright),
 #  then execs the real command. /venv_core is required — the app
 #  can't run without fastapi/sqlalchemy/etc; the other two are
-#  optional depending on which init services were enabled in
-#  docker-compose.slim.yml (SHOGUN_MODULES).
+#  optional depending on the SHOGUN_TORCH / SHOGUN_PLAYWRIGHT
+#  settings used when the init services ran (see docker-compose.yml).
 # ═══════════════════════════════════════════════════════════════
 set -e
 
@@ -33,7 +33,7 @@ add_module /venv_playwright playwright
 if [ -z "$PYTHONPATH_PARTS" ]; then
     echo "ERROR: no venv modules found (checked /venv_core, /venv_torch, /venv_playwright)." >&2
     echo "core-init must complete before this container starts — check 'docker compose" >&2
-    echo "logs core-init' and docker-compose.slim.yml's depends_on." >&2
+    echo "logs core-init' and docker-compose.yml's depends_on." >&2
     exit 1
 fi
 

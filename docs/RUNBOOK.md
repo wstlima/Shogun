@@ -15,34 +15,33 @@ not the venv-based `install.sh` path, which is documented in the main
 ```text
 docker/docker-compose.yml        # build mode: builds shogun + gensui from source
 docker/docker-compose.image.yml  # image mode: pulls agenciasupermix/{shogun-afm,gensui-afm}
-docker/docker-compose.slim.yml   # slim mode: smallest Shogun image, torch installs into a volume on first run
+docker/entrypoint.sh              # Shogun entrypoint — assembles PYTHONPATH from the init volumes below
 Dockerfile                       # Shogun (Tenshu) image — build context: repo root
-Dockerfile.slim                  # Shogun slim image (no Python deps baked in) — used by docker-compose.slim.yml
 gensui/Dockerfile                # Gensui image — build context: repo root (not gensui/, see below)
 gensui/.env                      # Gensui config (copy from gensui/.env.example)
 ```
 
-Three ways to run the stack — pick one compose file:
+Two ways to run the stack — pick one compose file:
 
-| Mode | File | Shogun image size | Trade-off |
-| --- | --- | --- | --- |
-| Build | `docker-compose.yml` | ~2.7GB | Builds locally; longest first build, no network dependency after |
-| Image | `docker-compose.image.yml` | ~2.7GB | Fastest to start; pulls prebuilt images from Docker Hub |
-| Slim | `docker-compose.slim.yml` | ~300MB image + per-module install on first run | Smallest published image, modular — each heavy dependency group (torch, Playwright) is independently optional |
+| Mode | File | Trade-off |
+| --- | --- | --- |
+| Build | `docker-compose.yml` | Builds Shogun's image locally; longest first build, no network dependency after |
+| Image | `docker-compose.image.yml` | Fastest to start; pulls the prebuilt Shogun image from Docker Hub |
 
-Both non-slim Dockerfiles stay at their original locations — repo root
-and `gensui/` — because their `COPY` instructions are relative to
-those paths. Do not move a Dockerfile without re-checking every `COPY`
-line; see "History: path bugs fixed" below for what happens when this
-goes wrong.
+Both Dockerfiles stay at their original locations — repo root and
+`gensui/` — because their `COPY` instructions are relative to those
+paths. Do not move a Dockerfile without re-checking every `COPY` line;
+see "History: path bugs fixed" below for what happens when this goes
+wrong.
 
-### Slim mode details
+### The Shogun image is always modular
 
-`docker-compose.slim.yml` ships a Shogun image with **zero Python
-dependencies baked in** — only application code, the built frontend,
-and the apt system libraries Chromium needs to run (small and stable,
-so they stay in the image rather than being modularized). Three
-one-shot init services populate independent volumes on first run:
+In both modes, the Shogun image ships with **zero Python dependencies
+baked in** — only application code, the built frontend, and the apt
+system libraries Chromium needs to run (small and stable, so they
+stay in the image rather than being modularized). Three one-shot init
+services populate independent volumes on first run, in both compose
+files:
 
 | Service | Volume | Controlled by | Always runs? |
 | --- | --- | --- | --- |
@@ -50,28 +49,30 @@ one-shot init services populate independent volumes on first run:
 | `torch-init` | `shogun_afm_venv_torch` | `SHOGUN_TORCH=cpu\|gpu\|skip` (default `cpu`) | Optional — torch + sentence-transformers, for vector memory/RAG |
 | `playwright-init` | `shogun_afm_venv_playwright` | `SHOGUN_PLAYWRIGHT=on\|skip` (default `on`) | Optional — playwright + downloads the Chromium browser, for Mado browser automation |
 
-`docker/slim-entrypoint.sh` assembles `PYTHONPATH` at container start
-from whichever of `/venv_core`, `/venv_torch`, `/venv_playwright` are
-present and populated. `core` is the only hard requirement — the
-container refuses to start without it. Skipping `torch` or
-`playwright` just means those specific features are unavailable at
-runtime (RAG / Mado respectively); the rest of the app works fine.
+`docker/entrypoint.sh` (baked into the image) assembles `PYTHONPATH`
+at container start from whichever of `/venv_core`, `/venv_torch`,
+`/venv_playwright` are present and populated. `core` is the only hard
+requirement — the container refuses to start without it. Skipping
+`torch` or `playwright` just means those specific features are
+unavailable at runtime (RAG / Mado respectively); the rest of the app
+works fine.
 
 ```bash
-# Everything (default)
-docker compose -f docker-compose.slim.yml up -d --build
+# Everything (default) — works with either compose file
+docker compose up -d --build                      # build mode
+docker compose -f docker-compose.image.yml up -d   # image mode
 
 # GPU torch instead of CPU
-SHOGUN_TORCH=gpu docker compose -f docker-compose.slim.yml up -d --build
+SHOGUN_TORCH=gpu docker compose up -d --build
 
 # Skip torch and Playwright entirely (smallest runtime footprint,
 # no RAG, no browser automation)
-SHOGUN_TORCH=skip SHOGUN_PLAYWRIGHT=skip docker compose -f docker-compose.slim.yml up -d --build
+SHOGUN_TORCH=skip SHOGUN_PLAYWRIGHT=skip docker compose up -d --build
 ```
 
 GPU mode requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 on the host, and the commented-out `deploy.resources.reservations.devices`
-block under the `shogun` service in `docker-compose.slim.yml` uncommented.
+block under the `shogun` service in the compose file uncommented.
 
 Each init service skips reinstalling if its volume is already
 populated (checks for `<volume>/bin/python`). To force a reinstall of
@@ -98,8 +99,10 @@ cd docker
 docker compose up -d --build
 ```
 
-First build takes several minutes — Shogun's image installs `torch`,
-`transformers`, and Playwright's Chromium; Gensui's is lighter.
+First run takes a few minutes — the `core-init`, `torch-init`, and
+`playwright-init` services install their volumes (torch/transformers
+and Chromium are the slow parts) before the `shogun` service starts.
+Gensui builds separately and is much lighter (no modular init needed).
 
 ## Verify
 
