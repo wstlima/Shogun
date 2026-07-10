@@ -1,0 +1,20 @@
+services:
+  shogun:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shogun
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - shogun_data:/app/data
+      - shogun_logs:/app/logs
+      - shogun_configs:/app/configs
+      - shogun_vault:/app/vault
+
+volumes:
+  shogun_data:
+  shogun_logs:
+  shogun_configs:
+  shogun_vault:
